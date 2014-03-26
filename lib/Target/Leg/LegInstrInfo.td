@@ -21,18 +21,18 @@ def ADD    : InstLeg<(outs GRRegs:$dst),
 
 def ADD_ri : InstLeg<(outs GRRegs:$dst),
                      (ins GRRegs:$src1, i32imm:$src2),
-                     "add $dst, $src1, #$src2",
+                     "add $dst, $src1, $src2",
                      [(set i32:$dst, (add i32:$src1, imm:$src2))]>;
 
 def MOVWsym : InstLeg<(outs GRRegs:$dst),
                       (ins i32imm:$src),
-                      "movw $dst, #$src",
+                      "movw $dst, $src",
                       [/* No pattern */]>;
 
 let Constraints = "$src1 = $dst" in {
   def MOVTsym : InstLeg<(outs GRRegs:$dst),
                         (ins GRRegs:$src1,  i32imm:$src2),
-                        "movt $dst, #$src2",
+                        "movt $dst, $src2",
                         [/* No pattern */]>;
 }
 
