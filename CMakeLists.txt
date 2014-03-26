@@ -138,6 +138,7 @@ set(LLVM_ALL_TARGETS
   SystemZ
   X86
   XCore
+  Leg
   )
 
 # List of targets with JIT support:
