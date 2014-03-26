@@ -38,6 +38,9 @@ public:
 
   //! Stack slot size (4 bytes)
   static int stackSlotSize() { return 4; }
+
+private:
+  uint64_t computeStackSize(MachineFunction &MF) const;
 };
 }
 

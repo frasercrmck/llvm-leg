@@ -43,8 +43,42 @@ bool LegFrameLowering::hasFP(const MachineFunction &MF) const {
          MF.getFrameInfo()->hasVarSizedObjects();
 }
 
+uint64_t LegFrameLowering::computeStackSize(MachineFunction &MF) const {
+  MachineFrameInfo *MFI = MF.getFrameInfo();
+  uint64_t StackSize = MFI->getStackSize();
+  unsigned StackAlign = getStackAlignment();
+  if (StackAlign > 0)
+    StackSize = RoundUpToAlignment(StackSize, StackAlign);
+  return StackSize;
+}
+
 void LegFrameLowering::emitPrologue(MachineFunction &MF) const {
-  assert(0 && "Unimplemented");
+  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  MachineBasicBlock &MBB = MF.front();
+  MachineBasicBlock::iterator MBBI = MBB.begin();
+  DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
+  uint64_t StackSize = computeStackSize(MF);
+  unsigned StackReg = Leg::SP;
+  const uint64_t MaxSubImm = 0xfff;
+  if (StackSize <= MaxSubImm) {
+    // The stack offset fits in the SUB instruction.
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUB_ri), StackReg).addReg(StackReg)
+      .addImm(StackSize).setMIFlag(MachineInstr::FrameSetup);
+  } else {
+    // The stack offset does not fit in the SUB instruction.
+    // Materialize the offset using MOVW/MOVT.
+    unsigned OffsetReg = Leg::R4;
+    unsigned StackSizeLo = (unsigned)(StackSize & 0xffff);
+    unsigned StackSizeHi = (unsigned)((StackSize & 0xffff0000) >> 16);
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::MOVWi16), OffsetReg).addImm(StackSizeLo)
+      .setMIFlag(MachineInstr::FrameSetup);
+    if (StackSizeHi) {
+      BuildMI(MBB, MBBI, dl, TII.get(Leg::MOVTi16), OffsetReg).addReg(OffsetReg)
+        .addImm(StackSizeLo).setMIFlag(MachineInstr::FrameSetup);
+    }
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUB), StackReg).addReg(StackReg)
+      .addReg(OffsetReg).setMIFlag(MachineInstr::FrameSetup);
+  }
 }
 
 void LegFrameLowering::emitEpilogue(MachineFunction &MF,

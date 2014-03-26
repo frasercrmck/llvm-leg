@@ -19,10 +19,20 @@ def ADD    : InstLeg<(outs GRRegs:$dst),
                      "add $dst, $src1, $src2",
                      [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 
+def SUB    : InstLeg<(outs GRRegs:$dst),
+                     (ins GRRegs:$src1, GRRegs:$src2),
+                     "sub $dst, $src1, $src2",
+                     [(set i32:$dst, (sub i32:$src1, i32:$src2))]>;
+
 def ADD_ri : InstLeg<(outs GRRegs:$dst),
                      (ins GRRegs:$src1, i32imm:$src2),
                      "add $dst, $src1, $src2",
                      [(set i32:$dst, (add i32:$src1, imm:$src2))]>;
+
+def SUB_ri : InstLeg<(outs GRRegs:$dst),
+                     (ins GRRegs:$src1, i32imm:$src2),
+                     "sub $dst, $src1, $src2",
+                     [(set i32:$dst, (sub i32:$src1, imm:$src2))]>;
 
 def MOVWi16 : InstLeg<(outs GRRegs:$dst),
                       (ins i32imm:$src),
