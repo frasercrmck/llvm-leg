@@ -36,7 +36,11 @@ let Constraints = "$src1 = $dst" in {
                         [/* No pattern */]>;
 }
 
-def RET  : InstLeg<(outs), (ins), "RET",  [(LegRetFlag)]>;
+def RET : InstLeg<(outs), (ins variable_ops), "bx lr",  [(LegRetFlag)]> {
+  let isTerminator = 1;
+  let isReturn = 1;
+  let isBarrier = 1;
+}
 
 def LOAD : InstLeg<(outs GRRegs:$dst), (ins memsrc:$src),
                    "ldr $dst, [$src]",
