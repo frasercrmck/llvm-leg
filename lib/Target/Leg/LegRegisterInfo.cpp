@@ -73,7 +73,29 @@ bool LegRegisterInfo::useFPForScavengingIndex(const MachineFunction &MF) const {
 void LegRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                           int SPAdj, unsigned FIOperandNum,
                                           RegScavenger *RS) const {
-  assert(0 && "Unimplemented");
+  MachineInstr &MI = *II;
+  const MachineFunction &MF = *MI.getParent()->getParent();
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  MachineOperand &FIOp = MI.getOperand(FIOperandNum);
+  unsigned FI = FIOp.getIndex();
+
+  // Determine if we can eliminate the index from this kind of instruction.
+  unsigned ImmOpIdx = 0;
+  switch (MI.getOpcode()) {
+  default:
+      // Not supported yet.
+      return;
+  case Leg::LOAD:
+  case Leg::STORE:
+      ImmOpIdx = FIOperandNum + 1;
+      break;
+  }
+
+  // FIXME: check the size of offset.
+  MachineOperand &ImmOp = MI.getOperand(ImmOpIdx);
+  int Offset = MFI->getObjectOffset(FI) + MFI->getStackSize() + ImmOp.getImm();
+  FIOp.ChangeToRegister(Leg::SP, false);
+  ImmOp.setImm(Offset);
 }
 
 unsigned LegRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
