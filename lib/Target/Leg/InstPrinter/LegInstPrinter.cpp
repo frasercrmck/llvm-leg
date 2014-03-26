@@ -58,6 +58,20 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
   }
 }
 
+// Print a 'memsrc' operand which is a (Register, Offset) pair.
+void LegInstPrinter::printAddrModeMemSrc(const MCInst *MI, unsigned OpNum,
+                                         raw_ostream &O) {
+  const MCOperand &Op1 = MI->getOperand(OpNum);
+  const MCOperand &Op2 = MI->getOperand(OpNum + 1);
+  O << "[";
+  printRegName(O, Op1.getReg());
+
+  unsigned Offset = Op2.getImm();
+  if (Offset)
+    O << ", #" << Offset;
+  O << "]";
+}
+
 void LegInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
                                   raw_ostream &O) {
   const MCOperand &Op = MI->getOperand(OpNo);

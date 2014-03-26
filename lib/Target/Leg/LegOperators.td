@@ -28,6 +28,7 @@ def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_LegCallSeqEnd,
 
 def memsrc : Operand<i32> {
   let MIOperandInfo = (ops GRRegs, i32imm);
+  let PrintMethod = "printAddrModeMemSrc";
 }
 
 def i32imm_lo : Operand<i32>, ImmLeaf<i32, [{

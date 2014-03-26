@@ -67,11 +67,11 @@ def RET : InstLeg<(outs), (ins variable_ops), "bx lr",  [(LegRetFlag)]> {
 }
 
 def LOAD : InstLeg<(outs GRRegs:$dst), (ins memsrc:$src),
-                   "ldr $dst, [$src]",
+                   "ldr $dst, $src",
                    [(set i32:$dst, (load addr:$src))]>;
 
 def STORE : InstLeg<(outs), (ins GRRegs:$src, memsrc:$dst),
-                   "str $src, [$dst]",
+                   "str $src, $dst",
                    [(store i32:$src, addr:$dst)]>;
 
 //===----------------------------------------------------------------------===//
