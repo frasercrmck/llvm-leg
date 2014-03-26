@@ -32,6 +32,13 @@ def MOVWi16 : InstLeg<(outs GRRegs:$dst),
   let isMoveImm = 1;
 }
 
+def MOVTi16 : InstLeg<(outs GRRegs:$dst),
+                      (ins GRRegs:$src1, i32imm:$src2),
+                      "movt $dst, $src2",
+                      [/* No pattern */]> {
+  let Constraints = "$src1 = $dst";
+}
+
 def MOVWsym : InstLeg<(outs GRRegs:$dst),
                       (ins i32imm:$src),
                       "movw $dst, $src",
