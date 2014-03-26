@@ -30,6 +30,10 @@ def memsrc : Operand<i32> {
   let MIOperandInfo = (ops GRRegs, i32imm);
 }
 
+def i32imm_lo : Operand<i32>, ImmLeaf<i32, [{
+  return Imm >= 0 && Imm < 65536;
+}]>;
+
 //===----------------------------------------------------------------------===//
 // Complex Pattern Definitions.
 //===----------------------------------------------------------------------===//
