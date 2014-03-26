@@ -29,7 +29,9 @@ namespace LegISD {
 enum NodeType {
   // Start the numbering where the builtin ops and target ops leave off.
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
-  RET_FLAG
+  RET_FLAG,
+  // This loads the symbol (e.g. global address) into a register.
+  LOAD_SYM
 };
 }
 
@@ -75,6 +77,9 @@ private:
                               bool isVarArg,
                               const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
                               LLVMContext &Context) const;
+
+  // LowerGlobalAddress - Emit a constant load to the global address.
+  SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
 };
 }
 

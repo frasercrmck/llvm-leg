@@ -44,6 +44,7 @@ const char *LegTargetLowering::getTargetNodeName(unsigned Opcode) const {
   default:
     return NULL;
   case LegISD::RET_FLAG: return "RetFlag";
+  case LegISD::LOAD_SYM: return "LOAD_SYM";
   }
 }
 
@@ -59,13 +60,26 @@ LegTargetLowering::LegTargetLowering(LegTargetMachine &LegTM)
   setStackPointerRegisterToSaveRestore(Leg::SP);
 
   setSchedulingPreference(Sched::Source);
+  setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
 }
 
 SDValue LegTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Unimplemented operand");
+  case ISD::GlobalAddress:
+    return LowerGlobalAddress(Op, DAG);
   }
+}
+
+
+SDValue LegTargetLowering::LowerGlobalAddress(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  GlobalAddressSDNode *GlobalAddr = cast<GlobalAddressSDNode>(Op.getNode());
+  SDValue TargetAddr = DAG.getTargetGlobalAddress(GlobalAddr->getGlobal(), Op,
+                                                  MVT::i32);
+  return DAG.getNode(LegISD::LOAD_SYM, Op, VT, TargetAddr);
 }
 
 /// ReplaceNodeResults - Replace the results of node with an illegal result
