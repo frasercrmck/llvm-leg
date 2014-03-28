@@ -111,6 +111,18 @@ createLegMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
   return S;
 }
 
+static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
+                                    MCContext &Ctx, MCAsmBackend &MAB,
+                                    raw_ostream &OS,
+                                    MCCodeEmitter *Emitter,
+                                    const MCSubtargetInfo &STI,
+                                    bool RelaxAll,
+                                    bool NoExecStack) {
+  Triple TheTriple(TT);
+  return createELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
+}
+
+
 // Force static initialization.
 extern "C" void LLVMInitializeLegTargetMC() {
   // Register the MC asm info.
@@ -132,5 +144,15 @@ extern "C" void LLVMInitializeLegTargetMC() {
   // Register the MCInstPrinter
   TargetRegistry::RegisterMCInstPrinter(TheLegTarget, createLegMCInstPrinter);
 
+  // Register the ASM Backend.
+  TargetRegistry::RegisterMCAsmBackend(TheLegTarget, createLegAsmBackend);
+
+  // Register the MCAsmStreamer
   TargetRegistry::RegisterAsmStreamer(TheLegTarget, createLegMCAsmStreamer);
+
+  // Register the object streamer.
+  TargetRegistry::RegisterMCObjectStreamer(TheLegTarget, createMCStreamer);
+
+  // Register the MCCodeEmitter
+  TargetRegistry::RegisterMCCodeEmitter(TheLegTarget, createLegMCCodeEmitter);
 }

@@ -20,10 +20,19 @@ class InstLeg<dag outs, dag ins, string asmstr, list<dag> pattern>
   let AsmString   = asmstr;
   let Pattern = pattern;
   let Size = 32;
+
+  // Always execute - no condition flags for this example
+  let Inst{31-28} = 0b1110;
 }
 
 // Leg pseudo instructions format
 class LegPseudoInst<dag outs, dag ins, string asmstr, list<dag> pattern>
     : InstLeg<outs, ins, asmstr, pattern> {
   let isPseudo = 1;
+}
+
+class ALUInst<bits<4> opcode, dag outs, dag ins, string asmstr, list<dag> pattern>
+    : InstLeg<outs, ins, asmstr, pattern> {
+  let Inst{27-26} = 0b00;
+  let Inst{24-21} = opcode;
 }

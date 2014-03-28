@@ -94,10 +94,10 @@ void LegFrameLowering::emitPrologue(MachineFunction &MF) const {
   unsigned StackReg = Leg::SP;
   unsigned OffsetReg = materializeOffset(MF, MBB, MBBI, (unsigned)StackSize);
   if (OffsetReg) {
-    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUB), StackReg).addReg(StackReg)
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUBrr), StackReg).addReg(StackReg)
       .addReg(OffsetReg).setMIFlag(MachineInstr::FrameSetup);
   } else {
-    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUB_ri), StackReg).addReg(StackReg)
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::SUBri), StackReg).addReg(StackReg)
       .addImm(StackSize).setMIFlag(MachineInstr::FrameSetup);
   }
 }
@@ -116,10 +116,10 @@ void LegFrameLowering::emitEpilogue(MachineFunction &MF,
   unsigned StackReg = Leg::SP;
   unsigned OffsetReg = materializeOffset(MF, MBB, MBBI, (unsigned)StackSize);
   if (OffsetReg) {
-    BuildMI(MBB, MBBI, dl, TII.get(Leg::ADD), StackReg).addReg(StackReg)
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::ADDrr), StackReg).addReg(StackReg)
       .addReg(OffsetReg).setMIFlag(MachineInstr::FrameSetup);
   } else {
-    BuildMI(MBB, MBBI, dl, TII.get(Leg::ADD_ri), StackReg).addReg(StackReg)
+    BuildMI(MBB, MBBI, dl, TII.get(Leg::ADDri), StackReg).addReg(StackReg)
       .addImm(StackSize).setMIFlag(MachineInstr::FrameSetup);
   }
 }

@@ -14,59 +14,72 @@
 include "LegInstrFormats.td"
 include "LegOperators.td"
 
-def ADD    : InstLeg<(outs GRRegs:$dst),
-                     (ins GRRegs:$src1, GRRegs:$src2),
-                     "add $dst, $src1, $src2",
-                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+//===----------------------------------------------------------------------===//
+// ALU Instructions
+//===----------------------------------------------------------------------===//
 
-def SUB    : InstLeg<(outs GRRegs:$dst),
-                     (ins GRRegs:$src1, GRRegs:$src2),
-                     "sub $dst, $src1, $src2",
-                     [(set i32:$dst, (sub i32:$src1, i32:$src2))]>;
-
-def ADD_ri : InstLeg<(outs GRRegs:$dst),
-                     (ins GRRegs:$src1, i32imm:$src2),
-                     "add $dst, $src1, $src2",
-                     [(set i32:$dst, (add i32:$src1, imm:$src2))]>;
-
-def SUB_ri : InstLeg<(outs GRRegs:$dst),
-                     (ins GRRegs:$src1, i32imm:$src2),
-                     "sub $dst, $src1, $src2",
-                     [(set i32:$dst, (sub i32:$src1, imm:$src2))]>;
-
-def MOVWi16 : InstLeg<(outs GRRegs:$dst),
-                      (ins i32imm:$src),
-                      "movw $dst, $src",
-                      [(set i32:$dst, i32imm_lo:$src)]> {
-  let isMoveImm = 1;
+multiclass BinOp<bits<4> opcode, string opstr, SDNode opnode> {
+  def rr : ALUInst<opcode, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, GRRegs:$src2),
+                   !strconcat(opstr, " $dst, $src1, $src2"),
+                   [(set i32:$dst, (opnode i32:$src1, i32:$src2))]> {
+    bits<4> dst;
+    bits<4> src1;
+    bits<4> src2;
+    let Inst{25} = 0;
+    let Inst{20} = 0;  // We never update flags
+    let Inst{19-16} = src1;
+    let Inst{15-12} = dst;
+    let Inst{11-4}  = 0b00000000;
+    let Inst{3-0}   = src2;
+  }
+  def ri : ALUInst<opcode, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, i32imm:$imm),
+                   !strconcat(opstr, " $dst, $src1, $imm"),
+                   [(set i32:$dst, (opnode i32:$src1, imm:$imm))]> {
+    bits<4> dst;
+    bits<4> src1;
+    bits<12> imm;
+    let Inst{25} = 1;
+    let Inst{20} = 0;  // We never update flags
+    let Inst{19-16} = dst;
+    let Inst{15-12} = src1;
+    let Inst{11-0}  = imm;
+  }
 }
 
-def MOVTi16 : InstLeg<(outs GRRegs:$dst),
-                      (ins GRRegs:$src1, i32imm:$src2),
-                      "movt $dst, $src2",
-                      [/* No pattern */]> {
-  let Constraints = "$src1 = $dst";
+defm ADD  : BinOp<0b0100, "add", add>;
+defm SUB  : BinOp<0b0010, "sub", sub>;
+
+//===----------------------------------------------------------------------===//
+// Mov Immediate Instructions
+//===----------------------------------------------------------------------===//
+
+class MOV<bits<4> opcode, string opstr, dag ins, list<dag>pattern>
+    : ALUInst<opcode, (outs GRRegs:$dst), ins,
+              !strconcat(opstr, " $dst, $imm"), pattern> {
+  bits<4> dst;
+  bits<16> imm;
+  let Inst{15-12} = dst;
+  let Inst{11-0}  = imm{11-0};
+  let Inst{19-16} = imm{15-12};
+  let Inst{20} = 0;
+  let Inst{25} = 1;
 }
 
-def MOVWsym : InstLeg<(outs GRRegs:$dst),
-                      (ins i32imm:$src),
-                      "movw $dst, $src",
-                      [/* No pattern */]>;
+def MOVWi16 : MOV<0b1000, "movw", (ins i32imm:$imm),
+                  [(set i32:$dst, i32imm_lo:$imm)]>;
+def MOVTi16 : MOV<0b1010, "movt", (ins GRRegs:$src1, i32imm:$imm),
+                  [/* No Pattern */]>;
 
-let Constraints = "$src1 = $dst" in {
-  def MOVTsym : InstLeg<(outs GRRegs:$dst),
-                        (ins GRRegs:$src1,  i32imm:$src2),
-                        "movt $dst, $src2",
-                        [/* No pattern */]>;
-}
+def : Pattern<(i32 (load_sym tglobaladdr:$addr)),
+              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
 
-def RET : InstLeg<(outs), (ins variable_ops), "bx lr",  [(LegRetFlag)]> {
-  let isTerminator = 1;
-  let isReturn = 1;
-  let isBarrier = 1;
-}
+//===----------------------------------------------------------------------===//
+// Load/Store Instructions
+//===----------------------------------------------------------------------===//
 
-def LOAD : InstLeg<(outs GRRegs:$dst), (ins memsrc:$src),
+def LOAD  : InstLeg<(outs GRRegs:$dst), (ins memsrc:$src),
                    "ldr $dst, $src",
                    [(set i32:$dst, (load addr:$src))]>;
 
@@ -74,14 +87,18 @@ def STORE : InstLeg<(outs), (ins GRRegs:$src, memsrc:$dst),
                    "str $src, $dst",
                    [(store i32:$src, addr:$dst)]>;
 
+
 //===----------------------------------------------------------------------===//
-// Target-specific DAG nodes and patterns
+// Return Instructions
 //===----------------------------------------------------------------------===//
 
-def load_sym : SDNode<"LegISD::LOAD_SYM", SDTIntUnaryOp>;
+let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
+  def RET : InstLeg<(outs), (ins variable_ops),
+                    "bx lr",  [(LegRetFlag)]> {
+    let Inst{27-0}  = 0b0001001011111111111100011110;
+  }
+}
 
-def : Pattern<(i32 (load_sym tglobaladdr:$addr)),
-              [(MOVTsym (MOVWsym $addr), $addr)]>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions

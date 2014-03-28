@@ -11,29 +11,25 @@
 //  Declarations that describe the Leg register file 
 //===----------------------------------------------------------------------===//
 
-class LegReg<string n> : Register<n> {
-  field bits<4> Num;
+class LegReg<bits<16> Enc, string n> : Register<n> {
+  let HWEncoding = Enc;
   let Namespace = "Leg";
 }
 
-class R<bits<4> num, string n> : LegReg<n> {
-  let Num = num;
-}
-
 // CPU registers
-def R0  : R< 0, "r0">;
-def R1  : R< 1, "r1">;
-def R2  : R< 2, "r2">; 
-def R3  : R< 3, "r3">;
-def R4  : R< 4, "r4">;
-def R5  : R< 5, "r5">; 
-def R6  : R< 6, "r6">;
-def R7  : R< 7, "r7">;
-def R8  : R< 8, "r8">;
-def R9  : R< 9, "r9">; 
+def R0  : LegReg< 0, "r0">;
+def R1  : LegReg< 1, "r1">;
+def R2  : LegReg< 2, "r2">;
+def R3  : LegReg< 3, "r3">;
+def R4  : LegReg< 4, "r4">;
+def R5  : LegReg< 5, "r5">;
+def R6  : LegReg< 6, "r6">;
+def R7  : LegReg< 7, "r7">;
+def R8  : LegReg< 8, "r8">;
+def R9  : LegReg< 9, "r9">;
 
-def SP  : R<10, "sp">;
-def LR  : R<11, "lr">;
+def SP  : LegReg<13, "sp">;
+def LR  : LegReg<14, "lr">;
 
 // Register classes.
 //

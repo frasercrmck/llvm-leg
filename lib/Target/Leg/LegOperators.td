@@ -22,6 +22,8 @@ def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_LegCallSeqStart,
 def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_LegCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
+def load_sym : SDNode<"LegISD::LOAD_SYM", SDTIntUnaryOp>;
+
 //===----------------------------------------------------------------------===//
 // Operand Definitions.
 //===----------------------------------------------------------------------===//

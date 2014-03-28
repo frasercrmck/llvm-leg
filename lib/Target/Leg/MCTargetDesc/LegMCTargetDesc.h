@@ -14,10 +14,35 @@
 #ifndef LEGMCTARGETDESC_H
 #define LEGMCTARGETDESC_H
 
+#include "llvm/Support/DataTypes.h"
+
 namespace llvm {
 class Target;
+class MCInstrInfo;
+class MCRegisterInfo;
+class MCSubtargetInfo;
+class MCContext;
+class MCCodeEmitter;
+class MCAsmInfo;
+class MCCodeGenInfo;
+class MCInstPrinter;
+class MCObjectWriter;
+class MCAsmBackend;
+
+class StringRef;
+class raw_ostream;
 
 extern Target TheLegTarget;
+
+MCCodeEmitter *createLegMCCodeEmitter(const MCInstrInfo &MCII,
+                                      const MCRegisterInfo &MRI,
+                                      const MCSubtargetInfo &STI,
+                                      MCContext &Ctx);
+
+MCAsmBackend *createLegAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                  StringRef TT, StringRef CPU);
+
+MCObjectWriter *createLegELFObjectWriter(raw_ostream &OS, uint8_t OSABI);
 
 } // End llvm namespace
 

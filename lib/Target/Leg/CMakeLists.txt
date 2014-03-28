@@ -6,6 +6,7 @@ tablegen(LLVM LegGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM LegGenDAGISel.inc -gen-dag-isel)
 tablegen(LLVM LegGenCallingConv.inc -gen-callingconv)
 tablegen(LLVM LegGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM LegGenMCCodeEmitter.inc -gen-emitter -mc-emitter)
 add_public_tablegen_target(LegCommonTableGen)
 
 add_llvm_target(LegCodeGen
