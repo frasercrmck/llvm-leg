@@ -8,10 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/LegMCTargetDesc.h"
-/*
-#include "MCTargetDesc/LegAddressingModes.h"
-#include "MCTargetDesc/LegBaseInfo.h"
-*/
 #include "MCTargetDesc/LegFixupKinds.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCAsmBackend.h"
