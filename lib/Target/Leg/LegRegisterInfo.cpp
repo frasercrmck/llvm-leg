@@ -43,8 +43,7 @@ LegRegisterInfo::LegRegisterInfo() : LegGenRegisterInfo(Leg::LR) {}
 const uint16_t *
 LegRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   static const uint16_t CalleeSavedRegs[] = { Leg::R4, Leg::R5, Leg::R6,
-                                              Leg::R7, Leg::R8, Leg::R9,
-                                              0 };
+                                              Leg::R7, Leg::R8, Leg::R9, 0};
   return CalleeSavedRegs;
 }
 
@@ -54,6 +53,10 @@ BitVector LegRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(Leg::SP);
   Reserved.set(Leg::LR);
   return Reserved;
+}
+
+const uint32_t *LegRegisterInfo::getCallPreservedMask(CallingConv::ID) const {
+  return CC_Save_RegMask;
 }
 
 bool

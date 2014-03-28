@@ -129,5 +129,9 @@ void LegFrameLowering::emitEpilogue(MachineFunction &MF,
 void LegFrameLowering::eliminateCallFramePseudoInstr(
     MachineFunction &MF, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator I) const {
-  assert(0 && "Unimplemented");
+  if (I->getOpcode() == Leg::ADJCALLSTACKUP ||
+      I->getOpcode() == Leg::ADJCALLSTACKDOWN) {
+    MBB.erase(I);
+  }
+  return;
 }

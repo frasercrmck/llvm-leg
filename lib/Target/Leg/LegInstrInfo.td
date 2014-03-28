@@ -101,6 +101,22 @@ let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
 
 
 //===----------------------------------------------------------------------===//
+// Call Instructions
+//===----------------------------------------------------------------------===//
+
+let isCall = 1, Defs = [LR], Uses = [SP] in {
+  def BL : BranchInst<0b1011, (outs), (ins bl_target:$func),
+                      "bl\t$func",
+                      [(leg_call tglobaladdr:$func)]> {
+    let Inst{31-28} = 0b1110;
+    bits<24> func;
+    let Inst{23-0} = func;
+  }
+}
+
+def : Pat<(leg_call texternalsym:$func), (BL texternalsym:$func)>;
+
+//===----------------------------------------------------------------------===//
 // Pseudo Instructions
 //===----------------------------------------------------------------------===//
 

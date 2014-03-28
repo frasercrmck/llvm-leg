@@ -31,6 +31,8 @@ public:
   const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const
       override;
 
+  const uint32_t *getCallPreservedMask(CallingConv::ID) const override;
+
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
   bool requiresRegisterScavenging(const MachineFunction &MF) const override;

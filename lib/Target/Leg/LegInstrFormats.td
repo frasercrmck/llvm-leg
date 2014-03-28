@@ -36,3 +36,9 @@ class ALUInst<bits<4> opcode, dag outs, dag ins, string asmstr, list<dag> patter
   let Inst{27-26} = 0b00;
   let Inst{24-21} = opcode;
 }
+
+class BranchInst<bits<4> opcode, dag outs, dag ins,
+                 string asmstr, list<dag> pattern>
+    : InstLeg<outs, ins, asmstr, pattern> {
+  let Inst{27-24} = opcode;
+}

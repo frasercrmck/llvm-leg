@@ -22,11 +22,23 @@ def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_LegCallSeqStart,
 def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_LegCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
+def SDT_LegCall    : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
+
+//===----------------------------------------------------------------------===//
+// Custom SDNodes.
+//===----------------------------------------------------------------------===//
+
 def load_sym : SDNode<"LegISD::LOAD_SYM", SDTIntUnaryOp>;
+
+def leg_call
+    : SDNode<"LegISD::CALL", SDT_LegCall,
+             [ SDNPHasChain, SDNPOptInGlue, SDNPOutGlue, SDNPVariadic ]>;
 
 //===----------------------------------------------------------------------===//
 // Operand Definitions.
 //===----------------------------------------------------------------------===//
+
+def bl_target : Operand<i32>;
 
 def memsrc : Operand<i32> {
   let MIOperandInfo = (ops GRRegs, i32imm);
@@ -37,8 +49,10 @@ def i32imm_lo : Operand<i32>, ImmLeaf<i32, [{
   return Imm >= 0 && Imm < 65536;
 }]>;
 
+
 //===----------------------------------------------------------------------===//
 // Complex Pattern Definitions.
 //===----------------------------------------------------------------------===//
 
 def addr : ComplexPattern<iPTR, 2, "SelectAddr", [], []>;
+

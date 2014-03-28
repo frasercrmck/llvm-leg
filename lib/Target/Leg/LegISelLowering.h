@@ -31,7 +31,8 @@ enum NodeType {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   RET_FLAG,
   // This loads the symbol (e.g. global address) into a register.
-  LOAD_SYM
+  LOAD_SYM,
+  CALL,
 };
 }
 
@@ -58,25 +59,31 @@ public:
 private:
   const LegTargetMachine &TM;
   const LegSubtarget &Subtarget;
-  virtual SDValue
-  LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
-                       const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl,
-                       SelectionDAG &DAG,
-                       SmallVectorImpl<SDValue> &InVals) const override;
 
-  virtual SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                            SmallVectorImpl<SDValue> &InVals) const override;
+  SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
+                               bool isVarArg,
+                               const SmallVectorImpl<ISD::InputArg> &Ins,
+                               SDLoc dl, SelectionDAG &DAG,
+                               SmallVectorImpl<SDValue> &InVals) const override;
 
-  virtual SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv,
-                              bool isVarArg,
-                              const SmallVectorImpl<ISD::OutputArg> &Outs,
-                              const SmallVectorImpl<SDValue> &OutVals, SDLoc dl,
-                              SelectionDAG &DAG) const override;
+  SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
+                    SmallVectorImpl<SDValue> &InVals) const override;
 
-  virtual bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
-                              bool isVarArg,
-                              const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
-                              LLVMContext &Context) const;
+  SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+                      const SmallVectorImpl<ISD::OutputArg> &Outs,
+                      const SmallVectorImpl<SDValue> &OutVals, SDLoc dl,
+                      SelectionDAG &DAG) const override;
+
+  SDValue LowerCallResult(SDValue Chain, SDValue InGlue,
+                          CallingConv::ID CallConv, bool isVarArg,
+                          const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl,
+                          SelectionDAG &DAG,
+                          SmallVectorImpl<SDValue> &InVals) const;
+
+  bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
+                      bool isVarArg,
+                      const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
+                      LLVMContext &Context) const;
 
   // LowerGlobalAddress - Emit a constant load to the global address.
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
