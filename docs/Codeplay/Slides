@@ -221,3 +221,15 @@ To go further...
 * ...
 
 Q and A
+
+----
+
+Part 1
+    PA: Intro, background
+Part 2
+    FC: tablegen, functions/args/ret
+    PA: instructions
+    FC: hooks, instruction printing
+Part 3
+    FC: instruction encoding
+    PA: specific tasks
