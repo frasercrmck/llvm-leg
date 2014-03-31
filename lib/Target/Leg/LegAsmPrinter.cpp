@@ -60,8 +60,6 @@ public:
 
   virtual const char *getPassName() const { return "Leg Assembly Printer"; }
 
-  void printOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
-
   void EmitFunctionEntryLabel();
   void EmitInstruction(const MachineInstr *MI);
   void EmitFunctionBodyStart();
@@ -78,24 +76,6 @@ void LegAsmPrinter::EmitFunctionBodyStart() {
 
 void LegAsmPrinter::EmitFunctionEntryLabel() {
   OutStreamer.EmitLabel(CurrentFnSym);
-}
-
-void LegAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
-                                 raw_ostream &O) {
-  const MachineOperand &MO = MI->getOperand(opNum);
-  switch (MO.getType()) {
-  case MachineOperand::MO_Register:
-    O << LegInstPrinter::getRegisterName(MO.getReg());
-    break;
-  case MachineOperand::MO_Immediate:
-    O << MO.getImm();
-    break;
-  case MachineOperand::MO_MachineBasicBlock:
-    O << *MO.getMBB()->getSymbol();
-    break;
-  default:
-    llvm_unreachable("not implemented");
-  }
 }
 
 void LegAsmPrinter::EmitInstruction(const MachineInstr *MI) {
