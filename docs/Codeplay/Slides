@@ -1,0 +1,192 @@
+Introduction
+* Another dev meeting, another talk about creating a LLVM target?
+* Crash course to the LLVM backend.
+* Hour-long, packed with gotchas and tips.
+* Based on a very small subset of the ARM architecture.
+
+Part 1 - Background
+
+Why a backend talk?
+* Complex and vast part of LLVM.
+* Confusing at first, but doesn't need to be.
+* LLVM can do a lot for you with minimal effort.
+* "What I wished I knew when I started".
+
+Why based on ARM?
+* It's not X86.
+* Simple, RISC-like architecture.
+* Use existing tools to test the output.
+
+What you need to start
+* Know a little bit about LLVM IR (llvm.org/docs/LangRef.html).
+* xdot.py to visualize graphs when debugging (github.com/jrfonseca/xdot.py).
+* Check out and build our LLVM repo from GitHub (github.com/frasercrmck/llvm-leg).
+
+Life of a program inside the LLVM backend
+* IR -> SelectionDAG -> MachineDAG -> MachineInstr -> MCInst
+* Same program, different representations.
+* Transforms target-agnostic IR to target-specific instructions/operations.
+* Check it out (IR and MI only):
+  * llc foo.ll -print-after-all 2>&1 > foo.log
+
+A look at an IR block
+* [simple IR listing]
+* Typed values.
+* Completely target agnostic (modulo intrinsics, data layout).
+
+A look at a SelectionDAG graph
+* [picture of a DAG]
+* Target-agnostic nodes (ISD namespace).
+* Machine nodes (XxxISD namespace) after ISel only.
+* Typed values, no register (kind of).
+* Different kinds of dependencies (data, order/chain, glue)
+
+A look at a MachineInstr block
+* [simple MI listing]
+* Untyped, uses register classes.
+* Virtual registers (pre-RA) or machine registers (post-RA).
+* Operand order: def use imp-def imp-use.
+
+Part 2 - Creating your own backend
+
+Bits of your ISA you need to describe to LLVM
+* Instructions.
+* Registers and operands.
+* Calling conventions.
+* Scheduling (not part of this talk).
+* ...
+
+Describing registers with Tablegen
+* No subregisters?
+*
+*
+
+Describing calling conventions with Tablegen
+*
+*
+*
+
+Describing instructions with Tablegen
+* Simple DAG pattern (ADDrr)
+* Tablegen instruction definition syntax
+  * How the operands map with MI (outs, ins, Defs, Uses)
+* Tablegen pattern syntax
+  * Nodes, operand types/register classes.
+  
+Immediates
+* Operands and Tablegen
+* Materializing immediates
+* Matching immediate operands (ADDri)
+
+Matching multiple operations
+* More complicated DAG patterns
+*
+*
+
+Calling convention lowering (1) - LowerFormalArguments
+*
+*
+*
+
+Calling convention lowering (2) - LowerReturn
+*
+*
+*
+
+Calling convention lowering (3) - LowerCall
+*
+*
+*
+
+Frame lowering
+* Calculate the stack size.
+* emitPrologue: sub sp, sp, #offset
+* emitEpilogue: add sp, sp, #offset
+* Ommitted: aligning the stack, ...
+
+InstInfo hooks - copyPhysReg
+*
+*
+*
+
+InstInfo hooks - branch-related
+* AnalyzeBranch
+* RemoveBranch
+* InsertBranch
+
+Instruction printer
+*
+*
+*
+
+Part 3 - 'How to' for specific tasks
+
+Adding a custom SelectionDAG node
+* Why
+* How
+* ...
+
+DAG combining
+* Why
+* How
+* ...
+
+Lowering to multiple instructions (1)
+* Example: implement 32-bit immediate load with high/low pairs:
+  * MOVW: load 16-bit 'low' immediate and clear high 16 bits.
+  * MOVT: load 16-bit 'high' immediate.
+* The final value is defined by the second instruction (MOVT).
+* Different ways to implement this:
+  * At the DAG level, in ISelDAGToDAG.cpp
+  * Using a pseudo-instruction.
+
+Lowering to multiple instructions (2)
+* Constraint: the two instructions must be ordered.
+  * Achieved by having MOVT reading MOVW's output (i.e. fake use).
+* Defining instruction in Tablegen: let Constraints = "$src1 = $dst"
+  [tablegen def for MOVW/MOVT]
+* In DAGs, can use 'Glue' (return type: MVT::Glue).
+  [code to select MOVW/MOVT pair with glue]
+
+Lowering to multiple instructions (3)
+* Define a pseudo instruction, can be selected using Tablegen patterns.
+* Expanded after RA using the InstrInfo::expandPostRAPseudo hook and BuildMI.
+  [example code]
+
+Printing custom operands
+* E.g. for memory addressing
+ [tablegen operand def]
+ [tablegen instruction def]
+ [c++ printer function]
+ [assembly output]
+
+Part 4 - Troubleshooting and tips
+
+When something went wrong
+* Find which pass introduces the issue (with llc -print-after-all)
+* Find the LLVM source file for this pass and debug category:
+  * #define DEBUG_TYPE "codegen-dce"
+* Dump the log: llc foo.ll -debug -debug-only codegen-dce 2>&1 > foo.log
+* If you have a 'good' build, diff the -print-after-all/-debug-only output.
+
+Debugging LLVM
+* MIs, BBs, functions, almost anything -> call X.dump() (to the console)
+* DAGs -> call X.viewGraph() (pops up a xdot.py window)
+* Or from the terminal: llc foo.ll -view-isel-dags
+  * -view-dag1-combine-dags, -view-legalize-dags, -view-sched-dags, etc.
+* Make sure you build LLVM in debug mode.
+* Turn on LLVM_ENABLE_ASSERTIONS. NDEBUG should not be defined.
+
+Dead code elimination ate my homework
+* DCE does not touch MIs with side-effects:
+  * mayLoad, mayStore, isTerminator, hasUnmodelledSideEffects
+* DCE does not touch MIs whose value is used by other MIs:
+  * Root your use/def chains using a MI that has side-effects.
+
+To go further...
+* Sub-registers
+* Legalization
+* Intrinsics
+* ...
+
+Q and A
