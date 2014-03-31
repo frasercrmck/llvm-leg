@@ -145,10 +145,144 @@ InstInfo hooks - branch-related
 * RemoveBranch
 * InsertBranch
 
-Instruction printer
-*
-*
-*
+Instruction Printer
+* New classes
+** XXXAsmPrinter
+** XXXInstPrinter
+** An MCAsmStreamer (you can usually get away with the defaults)
+
+* TableGen provides the 'AsmString' field, used to print assembly.
+
+== XXXInstrFormats.td ==
+  class InstXXX< ..., string asmstr, ... > : Instruction {
+    let AsmString = asmstr;
+    ...
+  }
+
+* Use this field to define the assembly syntax for each instruction in TableGen.
+
+== XXXInstrInfo.td ==
+  def ADD : InstXXX<(outs GRRegs:$dst), (ins GRRegs:$src1, GRRegs:$src2),
+                    "add $dst, $src1, $src2"> {
+  }
+
+* TableGen will call XXXInstPrinter::printOperand() on any operand value it finds.
+
+== XXXInstPrinter.cpp ==
+  void XXXInstPrinter::printOperand(const MCInst *MI, unsigned OpNo, raw_ostream &O) {
+    const MCOperand &Op = MI->getOperand(OpNo);
+    if (Op.isReg()) {
+      O << getRegisterName(Op.getReg());   // TableGen generates this function for us from XXXRegisterInfo.td
+      return;
+    } else if (Op.isImm()) {
+      O << Op.getImm();
+      return;
+    } else if ...
+      ...
+    }
+  }
+
+Code Emitter
+* A few new classes
+** XXXAsmBackend
+** XXXMCCodeEmitter
+** XXXObjectWriter
+** An MCObjectStreamer (you can usually get away with the defaults)
+
+* TableGen provides the 'Inst' field, used to generate instruction encodings.
+
+== XXXInstrFormats.td ==
+  class InstXXX< ... > : Instruction {
+    field bits<32> Inst;
+    ...
+  }
+
+* Use this field to define the binary encodings of each instruction in TableGen.
+
+== XXXInstrInfo.td ==
+  def ADD : InstXXX< ... > {
+    let Inst{31-28} = 0b1100; // Opcode
+  }
+
+* For operand-based encoding, you need to define bit fields with the same name as the operands.
+
+= XXXInstrInfo.td ==
+  def ADD : InstXXX<(outs GRRegs:$dst), (ins GRRegs:$src1, GRRegs:$src2), ...> {
+    bits<6> src1;
+    bits<6> src2;
+    bits<6> dst;
+    let Inst{31-28} = 0b1100; // Opcode
+    let Inst{27-22} = src1;   // First operand
+    let Inst{21-16} = src2;   // Second operand
+    let Inst{15-10} = dst;    // Destination
+  }
+
+* TableGen will then call XXXMCCodeEmitter::getMachineOpValue() on these operands...
+
+== XXXMCCodeEmitter.cpp ==
+    unsigned XXXMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
+                                                 SmallVectorImpl<MCFixup> &Fixups,
+                                                 const MCSubtargetInfo &STI) const {
+     if (MO.isReg()) {
+       return CTX.getRegisterInfo()->getEncodingValue(MO.getReg());
+     } else if (MO.isImm()) {
+       return static_cast<unsigned>(MO.getImm());
+     } else if ...
+       ...
+     }
+   }
+
+* ... and will place, mask, and shift the returned values into the binary.
+
+
+Relocations and Fixups
+* For values that require fixing up, such as branch targets, we record the relocation
+  into Fixups and return zero.
+
+== XXXMCCodeEmitter.cpp ==
+    ...
+    } else if (MO.isImm()) {
+      return static_cast<unsigned>(MO.getImm());
+    } else if ...
+      ...
+    }
+
+    assert(MO.isExpr()); // MO must be an expression by now
+
+    const MCExpr *Expr = MO.getExpr();
+    Fixups.push_back(MCFixup::Create(0, Expr, Expr->getFixupKind()));
+    return 0;
+  }
+
+* You will likely want the Fixup Kind to be target-dependent for more control.
+
+== XXXFixupKinds.h ==
+  enum Fixups {
+    // Define a target-specific fixup
+    fixup_xxx = FirstTargetFixupKind,
+
+    // Marker
+    LastTargetFixupKind,
+    NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
+  };
+
+== XXXAsmBackend.cpp ==
+  const MCFixupKindInfo& getFixupKindInfo(MCFixupKind Kind) const override {
+    const static MCFixupKindInfo Infos[XXX::NumTargetFixupKinds] = {
+      // This table must be in the order that the fixup kinds are defined in XXXFixupKinds.h
+      // Name        Offset (bits)  Size (bits)  Flags
+      { "fixup_xxx", 0,             32,          MCFixupKindInfo::FKF_IsPCRel },
+    };
+  }
+
+* We must then implement some hooks that are called by LLVM later on,
+  after instructions have been emitted and the section layouts have been finalised.
+** XXXAsmBackend::processFixupValue()
+*** Adjusts the fixup value, e.g., splitting the value up across different bit fields.
+** XXXAsmBackend::applyFixup()
+*** Patches the fixed-up value into the binary.
+** XXXObjectWriter::RecordRelocation()
+*** Record the fixup if it could not be resolved and requires external relocation.
 
 Part 3 - 'How to' for specific tasks
 
