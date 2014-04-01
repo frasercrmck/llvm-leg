@@ -170,10 +170,10 @@ SDValue LegTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   }
 
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee))
-    Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
+    Callee = DAG.getGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
 
   if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
-    Callee = DAG.getTargetExternalSymbol(E->getSymbol(), getPointerTy());
+    Callee = DAG.getExternalSymbol(E->getSymbol(), getPointerTy());
 
   std::vector<SDValue> Ops;
   Ops.push_back(Chain);

@@ -105,16 +105,19 @@ let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
 //===----------------------------------------------------------------------===//
 
 let isCall = 1, Defs = [LR], Uses = [SP] in {
-  def BL : BranchInst<0b1011, (outs), (ins bl_target:$func),
-                      "bl\t$func",
-                      [(leg_call tglobaladdr:$func)]> {
+  def BL : BranchInst<0b1011, (outs), (ins GRRegs:$addr),
+                      "bl $addr",
+                      [(leg_call i32:$addr)]> {
+    bits<4> addr;
     let Inst{31-28} = 0b1110;
-    bits<24> func;
-    let Inst{23-0} = func;
+    let Inst{3-0} = addr;
   }
 }
 
-def : Pat<(leg_call texternalsym:$func), (BL texternalsym:$func)>;
+def : Pattern<(i32 tglobaladdr:$addr),
+              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
+def : Pattern<(i32 texternalsym:$addr),
+              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
