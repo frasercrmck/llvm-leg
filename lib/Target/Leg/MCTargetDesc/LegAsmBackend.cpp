@@ -69,11 +69,11 @@ public:
   /// if necessary.
   void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
                          const MCFixup &Fixup, const MCFragment *DF,
-                         MCValue &Target, uint64_t &Value,
+                         const MCValue &Target, uint64_t &Value,
                          bool &IsResolved) override;
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value) const override;
+                  uint64_t Value, bool IsPCRel) const override;
 
   bool mayNeedRelaxation(const MCInst &Inst) const override { return false; }
 
@@ -120,13 +120,16 @@ void LegAsmBackend::processFixupValue(const MCAssembler &Asm,
                                       const MCAsmLayout &Layout,
                                       const MCFixup &Fixup,
                                       const MCFragment *DF,
-                                      MCValue &Target, uint64_t &Value,
+                                      const MCValue &Target, uint64_t &Value,
                                       bool &IsResolved) {
+  // At this point we'll ignore the value returned by adjustFixupValue as
+  // we are only checking if the fixup can be applied correctly.
   (void)adjustFixupValue(Fixup, Value, &Asm.getContext());
 }
 
 void LegAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
-                               unsigned DataSize, uint64_t Value) const {
+                               unsigned DataSize, uint64_t Value,
+                               bool isPCRel) const {
   unsigned NumBytes = 4;
   Value = adjustFixupValue(Fixup, Value);
   if (!Value) return;           // Doesn't change encoding.
