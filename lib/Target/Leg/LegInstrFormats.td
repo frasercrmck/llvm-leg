@@ -37,6 +37,13 @@ class ALUInst<bits<4> opcode, dag outs, dag ins, string asmstr, list<dag> patter
   let Inst{24-21} = opcode;
 }
 
+class MulInst<bits<7> opcode, dag outs, dag ins, string asmstr,
+              list<dag> pattern> : InstLeg<outs, ins, asmstr, pattern> {
+  let Inst{27-21} = opcode;
+  let Inst{20}    = 0;  // We never update flags
+  let Inst{7-4}   = 0b1001;
+}
+
 class BranchInst<bits<4> opcode, dag outs, dag ins,
                  string asmstr, list<dag> pattern>
     : InstLeg<outs, ins, asmstr, pattern> {

@@ -52,6 +52,37 @@ defm ADD  : BinOp<0b0100, "add", add>;
 defm SUB  : BinOp<0b0010, "sub", sub>;
 
 //===----------------------------------------------------------------------===//
+// Multiply Instructions
+//===----------------------------------------------------------------------===//
+
+def MUL  : MulInst<0b0000000, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, GRRegs:$src2),
+                   "mul $dst, $src1, $src2",
+                   [(set i32:$dst, (mul i32:$src1, i32:$src2))]> {
+  bits<4> dst;
+  bits<4> src1;
+  bits<4> src2;
+  let Inst{19-16} = dst;
+  let Inst{15-12} = 0b0000;
+  let Inst{11-8}  = src1;
+  let Inst{3-0}   = src2;
+}
+
+def MLA  : MulInst<0b0000001, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
+                   "mla $dst, $src1, $src2, $src3",
+                   [/* No pattern */]> {
+  bits<4> dst;
+  bits<4> src1;
+  bits<4> src2;
+  bits<4> src3;
+  let Inst{19-16} = dst;
+  let Inst{15-12} = src3;
+  let Inst{11-8}  = src1;
+  let Inst{3-0}   = src2;
+}
+
+//===----------------------------------------------------------------------===//
 // Mov Instructions
 //===----------------------------------------------------------------------===//
 def MOVrr  : InstLeg<(outs GRRegs:$dst), (ins GRRegs:$src),
