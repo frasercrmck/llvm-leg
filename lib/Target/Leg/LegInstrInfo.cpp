@@ -108,7 +108,8 @@ void LegInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator I, DebugLoc DL,
                                  unsigned DestReg, unsigned SrcReg,
                                  bool KillSrc) const {
-  assert(0 && "Unimplemented");
+  BuildMI(MBB, I, I->getDebugLoc(), get(Leg::MOVrr), DestReg)
+      .addReg(SrcReg);
 }
 
 void LegInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
@@ -118,7 +119,9 @@ void LegInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          const TargetRegisterClass *RC,
                                          const TargetRegisterInfo *TRI) const
 {
-  assert(0 && "Unimplemented");
+  BuildMI(MBB, I, I->getDebugLoc(), get(Leg::STORE))
+    .addReg(SrcReg, getKillRegState(isKill))
+    .addFrameIndex(FrameIndex).addImm(0);
 }
 
 void LegInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
@@ -127,5 +130,6 @@ void LegInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                           const TargetRegisterClass *RC,
                                           const TargetRegisterInfo *TRI) const
 {
-  assert(0 && "Unimplemented");
+  BuildMI(MBB, I, I->getDebugLoc(), get(Leg::LOAD), DestReg)
+      .addFrameIndex(FrameIndex).addImm(0);
 }
