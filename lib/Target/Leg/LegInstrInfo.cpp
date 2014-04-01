@@ -109,7 +109,7 @@ void LegInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  unsigned DestReg, unsigned SrcReg,
                                  bool KillSrc) const {
   BuildMI(MBB, I, I->getDebugLoc(), get(Leg::MOVrr), DestReg)
-      .addReg(SrcReg);
+      .addReg(SrcReg, getKillRegState(KillSrc));
 }
 
 void LegInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
