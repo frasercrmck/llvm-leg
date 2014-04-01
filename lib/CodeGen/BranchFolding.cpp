@@ -82,6 +82,9 @@ INITIALIZE_PASS(BranchFolderPass, "branch-folder",
                 "Control Flow Optimizer", false, false)
 
 bool BranchFolderPass::runOnMachineFunction(MachineFunction &MF) {
+  if (skipOptnoneFunction(*MF.getFunction()))
+    return false;
+
   TargetPassConfig *PassConfig = &getAnalysis<TargetPassConfig>();
   // TailMerge can create jump into if branches that make CFG irreducible for
   // HW that requires structurized CFG.
@@ -1515,7 +1518,7 @@ MachineBasicBlock::iterator findHoistingInsertPosAndDeps(MachineBasicBlock *MBB,
   // branch from condition setting instruction.
   MachineBasicBlock::iterator PI = Loc;
   --PI;
-  while (PI != MBB->begin() && Loc->isDebugValue())
+  while (PI != MBB->begin() && PI->isDebugValue())
     --PI;
 
   bool IsDef = false;

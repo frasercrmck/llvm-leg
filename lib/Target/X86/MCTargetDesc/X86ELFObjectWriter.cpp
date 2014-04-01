@@ -25,8 +25,7 @@ namespace {
     virtual ~X86ELFObjectWriter();
   protected:
     unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                          bool IsPCRel, bool IsRelocWithSymbol,
-                          int64_t Addend) const override;
+                          bool IsPCRel) const override;
   };
 }
 
@@ -41,9 +40,7 @@ X86ELFObjectWriter::~X86ELFObjectWriter()
 
 unsigned X86ELFObjectWriter::GetRelocType(const MCValue &Target,
                                           const MCFixup &Fixup,
-                                          bool IsPCRel,
-                                          bool IsRelocWithSymbol,
-                                          int64_t Addend) const {
+                                          bool IsPCRel) const {
   // determine the type of the relocation
 
   MCSymbolRefExpr::VariantKind Modifier = Fixup.getAccessVariant();

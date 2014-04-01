@@ -281,9 +281,17 @@ def BFE_INT_eg : R600_3OP <0x4, "BFE_INT",
 // XXX: This pattern is broken, disabling for now.  See comment in
 // AMDGPUInstructions.td for more info.
 //  def : BFEPattern <BFE_UINT_eg>;
+def BFI_INT_eg : R600_3OP <0x06, "BFI_INT",
+  [(set i32:$dst, (AMDGPUbfi i32:$src0, i32:$src1, i32:$src2))],
+  VecALU
+>;
 
-def BFI_INT_eg : R600_3OP <0x06, "BFI_INT", [], VecALU>;
 defm : BFIPatterns <BFI_INT_eg>;
+
+def BFM_INT_eg : R600_2OP <0xA0, "BFM_INT",
+  [(set i32:$dst, (AMDGPUbfm i32:$src0, i32:$src1))],
+  VecALU
+>;
 
 def MULADD_UINT24_eg : R600_3OP <0x10, "MULADD_UINT24",
   [(set i32:$dst, (add (mul U24:$src0, U24:$src1), i32:$src2))], VecALU

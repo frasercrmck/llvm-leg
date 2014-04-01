@@ -26,6 +26,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetAsmParser.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Compression.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
@@ -48,6 +49,9 @@ OutputFilename("o", cl::desc("Output filename"),
 
 static cl::opt<bool>
 ShowEncoding("show-encoding", cl::desc("Show instruction encodings"));
+
+static cl::opt<bool>
+CompressDebugSections("compress-debug-sections", cl::desc("Compress DWARF debug sections"));
 
 static cl::opt<bool>
 ShowInst("show-inst", cl::desc("Show internal instruction representation"));
@@ -380,6 +384,14 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<MCAsmInfo> MAI(TheTarget->createMCAsmInfo(*MRI, TripleName));
   assert(MAI && "Unable to create target asm info!");
+
+  if (CompressDebugSections) {
+    if (!zlib::isAvailable()) {
+      errs() << ProgName << ": build tools with zlib to enable -compress-debug-sections";
+      return 1;
+    }
+    MAI->setCompressDebugSections(true);
+  }
 
   // FIXME: This is not pretty. MCContext has a ptr to MCObjectFileInfo and
   // MCObjectFileInfo needs a MCContext reference in order to initialize itself.

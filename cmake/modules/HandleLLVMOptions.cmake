@@ -205,14 +205,8 @@ if( MSVC_IDE )
     if( LLVM_COMPILER_JOBS STREQUAL "0" )
       add_llvm_definitions( /MP )
     else()
-      if (MSVC10)
-        message(FATAL_ERROR
-          "Due to a bug in CMake only 0 and 1 is supported for "
-          "LLVM_COMPILER_JOBS when generating for Visual Studio 2010")
-      else()
-        message(STATUS "Number of parallel compiler jobs set to " ${LLVM_COMPILER_JOBS})
-        add_llvm_definitions( /MP${LLVM_COMPILER_JOBS} )
-      endif()
+      message(STATUS "Number of parallel compiler jobs set to " ${LLVM_COMPILER_JOBS})
+      add_llvm_definitions( /MP${LLVM_COMPILER_JOBS} )
     endif()
   else()
     message(STATUS "Parallel compilation disabled")
@@ -231,13 +225,7 @@ if( MSVC )
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:10000000")
   endif()
 
-  if( MSVC10 )
-    # MSVC 10 will complain about headers in the STL not being exported, but
-    # will not complain in MSVC 11.
-    add_llvm_definitions(
-      -wd4275 # Suppress 'An exported class was derived from a class that was not exported.'
-    )
-  elseif( MSVC11 )
+  if( MSVC11 )
     add_llvm_definitions(-D_VARIADIC_MAX=10)
   endif()
   
@@ -256,13 +244,14 @@ if( MSVC )
     -wd4180 # Suppress 'qualifier applied to function type has no meaning; ignored'
     -wd4244 # Suppress ''argument' : conversion from 'type1' to 'type2', possible loss of data'
     -wd4267 # Suppress ''var' : conversion from 'size_t' to 'type', possible loss of data'
+    -wd4291 # Suppress ''declaration' : no matching operator delete found; memory will not be freed if initialization throws an exception'
     -wd4345 # Suppress 'behavior change: an object of POD type constructed with an initializer of the form () will be default-initialized'
     -wd4351 # Suppress 'new behavior: elements of array 'array' will be default initialized'
     -wd4355 # Suppress ''this' : used in base member initializer list'
     -wd4503 # Suppress ''identifier' : decorated name length exceeded, name was truncated'
     -wd4624 # Suppress ''derived class' : destructor could not be generated because a base class destructor is inaccessible'
+    -wd4722 # Suppress 'function' : destructor never returns, potential memory leak
     -wd4800 # Suppress ''type' : forcing value to bool 'true' or 'false' (performance warning)'
-    -wd4291 # Suppress ''declaration' : no matching operator delete found; memory will not be freed if initialization throws an exception'
     
     # Promoted warnings.
     -w14062 # Promote 'enumerator in switch of enum is not handled' to level 1 warning.

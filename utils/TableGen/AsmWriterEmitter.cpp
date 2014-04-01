@@ -547,8 +547,8 @@ emitRegisterNameString(raw_ostream &O, StringRef AltName,
           Reg.TheDef->getValueAsListOfStrings("AltNames");
         if (AltNames.size() <= Idx)
           PrintFatalError(Reg.TheDef->getLoc(),
-            (Twine("Register definition missing alt name for '") +
-             AltName + "'.").str());
+                          "Register definition missing alt name for '" +
+                          AltName + "'.");
         AsmName = AltNames[Idx];
       }
     }
@@ -603,8 +603,8 @@ void AsmWriterEmitter::EmitGetRegisterName(raw_ostream &O) {
       << "  switch(AltIdx) {\n"
       << "  default: llvm_unreachable(\"Invalid register alt name index!\");\n";
     for (unsigned i = 0, e = AltNameIndices.size(); i < e; ++i) {
-      StringRef Namespace = AltNameIndices[1]->getValueAsString("Namespace");
-      StringRef AltName(AltNameIndices[i]->getName());
+      std::string Namespace = AltNameIndices[1]->getValueAsString("Namespace");
+      std::string AltName(AltNameIndices[i]->getName());
       O << "  case " << Namespace << "::" << AltName
         << ":\n"
         << "    AsmStrs = AsmStrs" << AltName  << ";\n"

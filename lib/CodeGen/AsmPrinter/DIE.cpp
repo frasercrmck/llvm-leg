@@ -559,13 +559,13 @@ unsigned DIELocList::SizeOf(AsmPrinter *AP, dwarf::Form Form) const {
 /// EmitValue - Emit label value.
 ///
 void DIELocList::EmitValue(AsmPrinter *AP, dwarf::Form Form) const {
+  DwarfDebug *DD = AP->getDwarfDebug();
   MCSymbol *Label = AP->GetTempSymbol("debug_loc", Index);
-  MCSymbol *DwarfDebugLocSectionSym = AP->getDwarfDebug()->getDebugLocSym();
 
-  if (AP->MAI->doesDwarfUseRelocationsAcrossSections())
-    AP->EmitSectionOffset(Label, DwarfDebugLocSectionSym);
+  if (AP->MAI->doesDwarfUseRelocationsAcrossSections() && !DD->useSplitDwarf())
+    AP->EmitSectionOffset(Label, DD->getDebugLocSym());
   else
-    AP->EmitLabelDifference(Label, DwarfDebugLocSectionSym, 4);
+    AP->EmitLabelDifference(Label, DD->getDebugLocSym(), 4);
 }
 
 #ifndef NDEBUG

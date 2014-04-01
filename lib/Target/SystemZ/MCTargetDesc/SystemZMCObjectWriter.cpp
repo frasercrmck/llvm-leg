@@ -25,11 +25,7 @@ public:
 protected:
   // Override MCELFObjectTargetWriter.
   unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                        bool IsPCRel, bool IsRelocWithSymbol,
-                        int64_t Addend) const override;
-  const MCSymbol *ExplicitRelSym(const MCAssembler &Asm, const MCValue &Target,
-                                 const MCFragment &F, const MCFixup &Fixup,
-                                 bool IsPCRel) const override;
+                        bool IsPCRel) const override;
 };
 } // end anonymous namespace
 
@@ -85,9 +81,7 @@ static unsigned getPLTReloc(unsigned Kind) {
 
 unsigned SystemZObjectWriter::GetRelocType(const MCValue &Target,
                                            const MCFixup &Fixup,
-                                           bool IsPCRel,
-                                           bool IsRelocWithSymbol,
-                                           int64_t Addend) const {
+                                           bool IsPCRel) const {
   MCSymbolRefExpr::VariantKind Modifier = Fixup.getAccessVariant();
   unsigned Kind = Fixup.getKind();
   switch (Modifier) {
@@ -112,21 +106,6 @@ unsigned SystemZObjectWriter::GetRelocType(const MCValue &Target,
   default:
     llvm_unreachable("Modifier not supported");
   }
-}
-
-const MCSymbol *SystemZObjectWriter::ExplicitRelSym(const MCAssembler &Asm,
-                                                    const MCValue &Target,
-                                                    const MCFragment &F,
-                                                    const MCFixup &Fixup,
-                                                    bool IsPCRel) const {
-  // The addend in a PC-relative R_390_* relocation is always applied to
-  // the PC-relative part of the address.  If some kind of indirection
-  // is applied to the symbol first, we can't use an addend there too.
-  if (!Target.isAbsolute() &&
-      Target.getSymA()->getKind() != MCSymbolRefExpr::VK_None &&
-      IsPCRel)
-    return &Target.getSymA()->getSymbol().AliasedSymbol();
-  return NULL;
 }
 
 MCObjectWriter *llvm::createSystemZObjectWriter(raw_ostream &OS,

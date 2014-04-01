@@ -521,7 +521,7 @@ namespace llvm {
 
   //===--------------------------------------------------------------------===//
   //  X86TargetLowering - X86 Implementation of the TargetLowering interface
-  class X86TargetLowering : public TargetLowering {
+  class X86TargetLowering final : public TargetLowering {
   public:
     explicit X86TargetLowering(X86TargetMachine &TM);
 
@@ -769,6 +769,11 @@ namespace llvm {
     /// to just the constant itself.
     bool shouldConvertConstantLoadToIntImm(const APInt &Imm,
                                            Type *Ty) const override;
+
+    /// Intel processors have a unified instruction and data cache
+    const char * getClearCacheBuiltinName() const {
+      return 0; // nothing to do, move along.
+    }
 
     /// createFastISel - This method returns a target specific FastISel object,
     /// or null if the target does not support "fast" ISel.

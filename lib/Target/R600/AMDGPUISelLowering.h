@@ -87,6 +87,10 @@ public:
   virtual bool isFNegFree(EVT VT) const override;
   virtual bool isTruncateFree(EVT Src, EVT Dest) const override;
   virtual bool isTruncateFree(Type *Src, Type *Dest) const override;
+
+  virtual bool isZExtFree(Type *Src, Type *Dest) const override;
+  virtual bool isZExtFree(EVT Src, EVT Dest) const override;
+
   virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const override;
 
   virtual MVT getVectorIdxTy() const override;
@@ -103,6 +107,10 @@ public:
   }
 
   virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+  virtual void ReplaceNodeResults(SDNode * N,
+                                  SmallVectorImpl<SDValue> &Results,
+                                  SelectionDAG &DAG) const override;
+
   SDValue LowerIntrinsicIABS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerIntrinsicLRP(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMinMax(SDValue Op, SelectionDAG &DAG) const;
@@ -112,9 +120,6 @@ public:
     return N;
   }
 
-// Functions defined in AMDILISelLowering.cpp
-public:
-
   /// \brief Determine which of the bits specified in \p Mask are known to be
   /// either zero or one and return them in the \p KnownZero and \p KnownOne
   /// bitsets.
@@ -122,8 +127,10 @@ public:
                                               APInt &KnownZero,
                                               APInt &KnownOne,
                                               const SelectionDAG &DAG,
-                                              unsigned Depth = 0) const;
+                                              unsigned Depth = 0) const override;
 
+// Functions defined in AMDILISelLowering.cpp
+public:
   virtual bool getTgtMemIntrinsic(IntrinsicInfo &Info,
                                   const CallInst &I, unsigned Intrinsic) const;
 
@@ -179,6 +186,8 @@ enum {
   DOT4,
   BFE_U32, // Extract range of bits with zero extension to 32-bits.
   BFE_I32, // Extract range of bits with sign extension to 32-bits.
+  BFI, // (src0 & src1) | (~src0 & src2)
+  BFM, // Insert a range of bits into a 32-bit word.
   TEXTURE_FETCH,
   EXPORT,
   CONST_ADDRESS,

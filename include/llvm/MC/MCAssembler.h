@@ -18,6 +18,7 @@
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCLinkerOptimizationHint.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/DataTypes.h"
@@ -51,6 +52,7 @@ public:
   enum FragmentType {
     FT_Align,
     FT_Data,
+    FT_Compressed,
     FT_CompactEncodedInst,
     FT_Fill,
     FT_Relaxable,
@@ -160,6 +162,7 @@ public:
         return false;
       case MCFragment::FT_Relaxable:
       case MCFragment::FT_CompactEncodedInst:
+      case MCFragment::FT_Compressed:
       case MCFragment::FT_Data:
         return true;
     }
@@ -194,7 +197,8 @@ public:
 
   static bool classof(const MCFragment *F) {
     MCFragment::FragmentType Kind = F->getKind();
-    return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data;
+    return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data ||
+           Kind == MCFragment::FT_Compressed;
   }
 };
 
@@ -213,6 +217,11 @@ class MCDataFragment : public MCEncodedFragmentWithFixups {
 
   /// Fixups - The list of fixups in this fragment.
   SmallVector<MCFixup, 4> Fixups;
+protected:
+  MCDataFragment(MCFragment::FragmentType FType, MCSectionData *SD = 0)
+      : MCEncodedFragmentWithFixups(FType, SD), HasInstructions(false),
+        AlignToBundleEnd(false) {}
+
 public:
   MCDataFragment(MCSectionData *SD = 0)
     : MCEncodedFragmentWithFixups(FT_Data, SD),
@@ -246,8 +255,19 @@ public:
   const_fixup_iterator fixup_end() const override {return Fixups.end();}
 
   static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_Data;
+    return F->getKind() == MCFragment::FT_Data ||
+           F->getKind() == MCFragment::FT_Compressed;
   }
+};
+
+class MCCompressedFragment: public MCDataFragment {
+  mutable SmallVector<char, 32> CompressedContents;
+public:
+  MCCompressedFragment(MCSectionData *SD = nullptr)
+      : MCDataFragment(FT_Compressed, SD) {}
+  const SmallVectorImpl<char> &getCompressedContents() const;
+  using MCDataFragment::getContents;
+  SmallVectorImpl<char> &getContents() override;
 };
 
 /// This is a compact (memory-size-wise) fragment for holding an encoded
@@ -913,6 +933,10 @@ private:
   // which flags to be set.
   unsigned ELFHeaderEFlags;
 
+  /// Used to communicate Linker Optimization Hint information between
+  /// the Streamer and the .o writer
+  MCLOHContainer LOHContainer;
+
   VersionMinInfoType VersionMinInfo;
 private:
   /// Evaluate a fixup to a relocatable expression and the value which should be
@@ -960,8 +984,8 @@ private:
   /// finishLayout - Finalize a layout, including fragment lowering.
   void finishLayout(MCAsmLayout &Layout);
 
-  uint64_t handleFixup(const MCAsmLayout &Layout,
-                       MCFragment &F, const MCFixup &Fixup);
+  std::pair<uint64_t, bool> handleFixup(const MCAsmLayout &Layout,
+                                        MCFragment &F, const MCFixup &Fixup);
 
 public:
   /// Compute the effective fragment size assuming it is laid out at the given
@@ -1155,6 +1179,19 @@ public:
 
   size_t data_region_size() const { return DataRegions.size(); }
 
+  /// @}
+  /// @name Data Region List Access
+  /// @{
+
+  // FIXME: This is a total hack, this should not be here. Once things are
+  // factored so that the streamer has direct access to the .o writer, it can
+  // disappear.
+  MCLOHContainer & getLOHContainer() {
+    return LOHContainer;
+  }
+  const MCLOHContainer & getLOHContainer() const {
+    return const_cast<MCAssembler *>(this)->getLOHContainer();
+  }
   /// @}
   /// @name Backend Data Access
   /// @{

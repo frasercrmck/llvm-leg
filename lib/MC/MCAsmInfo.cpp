@@ -41,6 +41,7 @@ MCAsmInfo::MCAsmInfo() {
   LabelSuffix = ":";
   DebugLabelSuffix = ":";
   PrivateGlobalPrefix = "L";
+  LinkerPrivateGlobalPrefix = "";
   InlineAsmStart = "APP";
   InlineAsmEnd = "NO_APP";
   Code16Directive = ".code16";
@@ -100,6 +101,8 @@ MCAsmInfo::MCAsmInfo() {
   //   architecture basis.
   //   - The target subclasses for AArch64, ARM, and X86  handle these cases
   UseIntegratedAssembler = false;
+
+  CompressDebugSections = false;
 }
 
 MCAsmInfo::~MCAsmInfo() {

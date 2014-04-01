@@ -8,6 +8,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCStreamer.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -15,6 +17,7 @@
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCLinkerOptimizationHint.h"
 #include "llvm/MC/MCMachOSymbolFlags.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCObjectStreamer.h"
@@ -31,18 +34,31 @@ namespace {
 
 class MCMachOStreamer : public MCObjectStreamer {
 private:
+  /// LabelSections - true if each section change should emit a linker local
+  /// label for use in relocations for assembler local references. Obviates the
+  /// need for local relocations. False by default.
+  bool LabelSections;
+
+  /// HasSectionLabel - map of which sections have already had a non-local
+  /// label emitted to them. Used so we don't emit extraneous linker local
+  /// labels in the middle of the section.
+  DenseMap<const MCSection*, bool> HasSectionLabel;
+
   void EmitInstToData(const MCInst &Inst, const MCSubtargetInfo &STI) override;
 
   void EmitDataRegion(DataRegionData::KindTy Kind);
   void EmitDataRegionEnd();
+
 public:
   MCMachOStreamer(MCContext &Context, MCAsmBackend &MAB, raw_ostream &OS,
-                  MCCodeEmitter *Emitter)
-      : MCObjectStreamer(Context, MAB, OS, Emitter) {}
+                  MCCodeEmitter *Emitter, bool label)
+      : MCObjectStreamer(Context, MAB, OS, Emitter),
+        LabelSections(label) {}
 
   /// @name MCStreamer Interface
   /// @{
 
+  void ChangeSection(const MCSection *Sect, const MCExpr *Subsect) override;
   void EmitLabel(MCSymbol *Symbol) override;
   void EmitDebugLabel(MCSymbol *Symbol) override;
   void EmitEHSymAttributes(const MCSymbol *Symbol, MCSymbol *EHSymbol) override;
@@ -89,10 +105,27 @@ public:
     llvm_unreachable("macho doesn't support this directive");
   }
 
+  void EmitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) override {
+    getAssembler().getLOHContainer().addDirective(Kind, Args);
+  }
+
   void FinishImpl() override;
 };
 
 } // end anonymous namespace.
+
+void MCMachOStreamer::ChangeSection(const MCSection *Section,
+                                    const MCExpr *Subsection) {
+  // Change the section normally.
+  MCObjectStreamer::ChangeSection(Section, Subsection);
+  // Output a linker-local symbol so we don't need section-relative local
+  // relocations. The linker hates us when we do that.
+  if (LabelSections && !HasSectionLabel[Section]) {
+    MCSymbol *Label = getContext().CreateLinkerPrivateTempSymbol();
+    EmitLabel(Label);
+    HasSectionLabel[Section] = true;
+  }
+}
 
 void MCMachOStreamer::EmitEHSymAttributes(const MCSymbol *Symbol,
                                           MCSymbol *EHSymbol) {
@@ -425,8 +458,9 @@ void MCMachOStreamer::FinishImpl() {
 
 MCStreamer *llvm::createMachOStreamer(MCContext &Context, MCAsmBackend &MAB,
                                       raw_ostream &OS, MCCodeEmitter *CE,
-                                      bool RelaxAll) {
-  MCMachOStreamer *S = new MCMachOStreamer(Context, MAB, OS, CE);
+                                      bool RelaxAll,
+                                      bool LabelSections) {
+  MCMachOStreamer *S = new MCMachOStreamer(Context, MAB, OS, CE, LabelSections);
   if (RelaxAll)
     S->getAssembler().setRelaxAll(true);
   return S;

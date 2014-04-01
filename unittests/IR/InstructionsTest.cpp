@@ -14,11 +14,14 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "gtest/gtest.h"
+#include <memory>
 
 namespace llvm {
 namespace {
@@ -45,6 +48,58 @@ TEST(InstructionsTest, ReturnInst) {
   // clean up
   delete r0;
   delete r1;
+}
+
+// Test fixture that provides a module and a single function within it. Useful
+// for tests that need to refer to the function in some way.
+class ModuleWithFunctionTest : public testing::Test {
+protected:
+  ModuleWithFunctionTest() : M(new Module("MyModule", Ctx)) {
+    FArgTypes.push_back(Type::getInt8Ty(Ctx));
+    FArgTypes.push_back(Type::getInt32Ty(Ctx));
+    FArgTypes.push_back(Type::getInt64Ty(Ctx));
+    FunctionType *FTy =
+        FunctionType::get(Type::getVoidTy(Ctx), FArgTypes, false);
+    F = Function::Create(FTy, Function::ExternalLinkage, "", M.get());
+  }
+
+  LLVMContext Ctx;
+  std::unique_ptr<Module> M;
+  SmallVector<Type *, 3> FArgTypes;
+  Function *F;
+};
+
+TEST_F(ModuleWithFunctionTest, CallInst) {
+  Value *Args[] = {ConstantInt::get(Type::getInt8Ty(Ctx), 20),
+                   ConstantInt::get(Type::getInt32Ty(Ctx), 9999),
+                   ConstantInt::get(Type::getInt64Ty(Ctx), 42)};
+  std::unique_ptr<CallInst> Call(CallInst::Create(F, Args));
+
+  // Make sure iteration over a call's arguments works as expected.
+  unsigned Idx = 0;
+  for (Value *Arg : Call->arg_operands()) {
+    EXPECT_EQ(FArgTypes[Idx], Arg->getType());
+    EXPECT_EQ(Call->getArgOperand(Idx)->getType(), Arg->getType());
+    Idx++;
+  }
+}
+
+TEST_F(ModuleWithFunctionTest, InvokeInst) {
+  BasicBlock *BB1 = BasicBlock::Create(Ctx, "", F);
+  BasicBlock *BB2 = BasicBlock::Create(Ctx, "", F);
+
+  Value *Args[] = {ConstantInt::get(Type::getInt8Ty(Ctx), 20),
+                   ConstantInt::get(Type::getInt32Ty(Ctx), 9999),
+                   ConstantInt::get(Type::getInt64Ty(Ctx), 42)};
+  std::unique_ptr<InvokeInst> Invoke(InvokeInst::Create(F, BB1, BB2, Args));
+
+  // Make sure iteration over invoke's arguments works as expected.
+  unsigned Idx = 0;
+  for (Value *Arg : Invoke->arg_operands()) {
+    EXPECT_EQ(FArgTypes[Idx], Arg->getType());
+    EXPECT_EQ(Invoke->getArgOperand(Idx)->getType(), Arg->getType());
+    Idx++;
+  }
 }
 
 TEST(InstructionsTest, BranchInst) {

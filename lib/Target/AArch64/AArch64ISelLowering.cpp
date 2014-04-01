@@ -269,6 +269,11 @@ AArch64TargetLowering::AArch64TargetLowering(AArch64TargetMachine &TM)
   setOperationAction(ISD::FP_ROUND,  MVT::f32, Custom);
   setOperationAction(ISD::FP_ROUND,  MVT::f64, Custom);
 
+  // i128 shift operation support
+  setOperationAction(ISD::SHL_PARTS, MVT::i64, Custom);
+  setOperationAction(ISD::SRA_PARTS, MVT::i64, Custom);
+  setOperationAction(ISD::SRL_PARTS, MVT::i64, Custom);
+
   // This prevents LLVM trying to compress double constants into a floating
   // constant-pool entry and trying to load from there. It's of doubtful benefit
   // for A64: we'd need LDR followed by FCVT, I believe.
@@ -1324,8 +1329,11 @@ AArch64TargetLowering::LowerFormalArguments(SDValue Chain,
       int Size = Flags.getByValSize();
       unsigned NumRegs = (Size + 7) / 8;
 
+      uint32_t BEAlign = 0;
+      if (Size < 8 && !getSubtarget()->isLittle())
+        BEAlign = 8-Size;
       unsigned FrameIdx = MFI->CreateFixedObject(8 * NumRegs,
-                                                 VA.getLocMemOffset(),
+                                                 VA.getLocMemOffset() + BEAlign,
                                                  false);
       SDValue FrameIdxN = DAG.getFrameIndex(FrameIdx, PtrTy);
       InVals.push_back(FrameIdxN);
@@ -1634,7 +1642,13 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
       // loaded before this eventual operation. Otherwise they'll be clobbered.
       Chain = addTokenForArgument(Chain, DAG, MF.getFrameInfo(), FI);
     } else {
-      SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset());
+      uint32_t OpSize = Flags.isByVal() ? Flags.getByValSize()*8 :
+                                          VA.getLocVT().getSizeInBits();
+      OpSize = (OpSize + 7) / 8;
+      uint32_t BEAlign = 0;
+      if (OpSize < 8 && !getSubtarget()->isLittle())
+        BEAlign = 8-OpSize;
+      SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() + BEAlign);
 
       DstAddr = DAG.getNode(ISD::ADD, dl, getPointerTy(), StackPtr, PtrOff);
       DstInfo = MachinePointerInfo::getStack(VA.getLocMemOffset());
@@ -3287,6 +3301,10 @@ AArch64TargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::RETURNADDR:    return LowerRETURNADDR(Op, DAG);
   case ISD::FRAMEADDR:     return LowerFRAMEADDR(Op, DAG);
 
+  case ISD::SHL_PARTS:     return LowerShiftLeftParts(Op, DAG);
+  case ISD::SRL_PARTS:
+  case ISD::SRA_PARTS:     return LowerShiftRightParts(Op, DAG);
+
   case ISD::BlockAddress: return LowerBlockAddress(Op, DAG);
   case ISD::BRCOND: return LowerBRCOND(Op, DAG);
   case ISD::BR_CC: return LowerBR_CC(Op, DAG);
@@ -4513,6 +4531,85 @@ bool AArch64TargetLowering::isKnownShuffleVector(SDValue Op, SelectionDAG &DAG,
     }
   }
   return true;
+}
+
+// LowerShiftRightParts - Lower SRL_PARTS and SRA_PARTS, which returns two
+/// i64 values and take a 2 x i64 value to shift plus a shift amount.
+SDValue AArch64TargetLowering::LowerShiftRightParts(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  assert(Op.getNumOperands() == 3 && "Not a quad-shift!");
+  EVT VT = Op.getValueType();
+  unsigned VTBits = VT.getSizeInBits();
+  SDLoc dl(Op);
+  SDValue ShOpLo = Op.getOperand(0);
+  SDValue ShOpHi = Op.getOperand(1);
+  SDValue ShAmt  = Op.getOperand(2);
+  unsigned Opc = (Op.getOpcode() == ISD::SRA_PARTS) ? ISD::SRA : ISD::SRL;
+
+  assert(Op.getOpcode() == ISD::SRA_PARTS || Op.getOpcode() == ISD::SRL_PARTS);
+  SDValue RevShAmt = DAG.getNode(ISD::SUB, dl, MVT::i64,
+                                 DAG.getConstant(VTBits, MVT::i64), ShAmt);
+  SDValue Tmp1 = DAG.getNode(ISD::SRL, dl, VT, ShOpLo, ShAmt);
+  SDValue ExtraShAmt = DAG.getNode(ISD::SUB, dl, MVT::i64, ShAmt,
+                                   DAG.getConstant(VTBits, MVT::i64));
+  SDValue Tmp2 = DAG.getNode(ISD::SHL, dl, VT, ShOpHi, RevShAmt);
+  SDValue FalseVal = DAG.getNode(ISD::OR, dl, VT, Tmp1, Tmp2);
+  SDValue TrueVal = DAG.getNode(Opc, dl, VT, ShOpHi, ExtraShAmt);
+  SDValue Tmp3 = DAG.getNode(Opc, dl, VT, ShOpHi, ShAmt);
+
+  SDValue A64cc;
+  SDValue CmpOp = getSelectableIntSetCC(ExtraShAmt,
+                                        DAG.getConstant(0, MVT::i64),
+                                        ISD::SETGE, A64cc,
+                                        DAG, dl);
+
+  SDValue Hi = DAG.getNode(AArch64ISD::SELECT_CC, dl, VT, CmpOp,
+                           DAG.getConstant(0, Tmp3.getValueType()), Tmp3,
+                           A64cc);
+  SDValue Lo = DAG.getNode(AArch64ISD::SELECT_CC, dl, VT, CmpOp,
+                           TrueVal, FalseVal, A64cc);
+
+  SDValue Ops[2] = { Lo, Hi };
+  return DAG.getMergeValues(Ops, 2, dl);
+}
+
+/// LowerShiftLeftParts - Lower SHL_PARTS, which returns two
+/// i64 values and take a 2 x i64 value to shift plus a shift amount.
+SDValue AArch64TargetLowering::LowerShiftLeftParts(SDValue Op,
+                                               SelectionDAG &DAG) const {
+  assert(Op.getNumOperands() == 3 && "Not a quad-shift!");
+  EVT VT = Op.getValueType();
+  unsigned VTBits = VT.getSizeInBits();
+  SDLoc dl(Op);
+  SDValue ShOpLo = Op.getOperand(0);
+  SDValue ShOpHi = Op.getOperand(1);
+  SDValue ShAmt  = Op.getOperand(2);
+
+  assert(Op.getOpcode() == ISD::SHL_PARTS);
+  SDValue RevShAmt = DAG.getNode(ISD::SUB, dl, MVT::i64,
+                                 DAG.getConstant(VTBits, MVT::i64), ShAmt);
+  SDValue Tmp1 = DAG.getNode(ISD::SRL, dl, VT, ShOpLo, RevShAmt);
+  SDValue ExtraShAmt = DAG.getNode(ISD::SUB, dl, MVT::i64, ShAmt,
+                                   DAG.getConstant(VTBits, MVT::i64));
+  SDValue Tmp2 = DAG.getNode(ISD::SHL, dl, VT, ShOpHi, ShAmt);
+  SDValue Tmp3 = DAG.getNode(ISD::SHL, dl, VT, ShOpLo, ExtraShAmt);
+  SDValue FalseVal = DAG.getNode(ISD::OR, dl, VT, Tmp1, Tmp2);
+  SDValue Tmp4 = DAG.getNode(ISD::SHL, dl, VT, ShOpLo, ShAmt);
+
+  SDValue A64cc;
+  SDValue CmpOp = getSelectableIntSetCC(ExtraShAmt,
+                                        DAG.getConstant(0, MVT::i64),
+                                        ISD::SETGE, A64cc,
+                                        DAG, dl);
+
+  SDValue Lo = DAG.getNode(AArch64ISD::SELECT_CC, dl, VT, CmpOp,
+                           DAG.getConstant(0, Tmp4.getValueType()), Tmp4,
+                           A64cc);
+  SDValue Hi = DAG.getNode(AArch64ISD::SELECT_CC, dl, VT, CmpOp,
+                           Tmp3, FalseVal, A64cc);
+
+  SDValue Ops[2] = { Lo, Hi };
+  return DAG.getMergeValues(Ops, 2, dl);
 }
 
 // If this is a case we can't handle, return null and let the default

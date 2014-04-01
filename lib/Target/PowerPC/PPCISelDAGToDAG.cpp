@@ -831,7 +831,9 @@ SDNode *PPCDAGToDAGISel::SelectSETCC(SDNode *N) {
       case ISD::SETONE:
       case ISD::SETUNE: {
         SDValue VCmp(CurDAG->getMachineNode(VCmpInst, dl, VecVT, LHS, RHS), 0);
-        return CurDAG->SelectNodeTo(N, PPC::VNOR, VecVT, VCmp, VCmp);
+        return CurDAG->SelectNodeTo(N, PPCSubTarget.hasVSX() ? PPC::XXLNOR :
+                                                               PPC::VNOR,
+                                    VecVT, VCmp, VCmp);
       } 
       case ISD::SETLT:
       case ISD::SETOLT:
@@ -853,7 +855,9 @@ SDNode *PPCDAGToDAGISel::SelectSETCC(SDNode *N) {
           SDValue VCmpGT(CurDAG->getMachineNode(VCmpInst, dl, VecVT, LHS, RHS), 0);
           unsigned int VCmpEQInst = getVCmpEQInst(VT, PPCSubTarget.hasVSX());
           SDValue VCmpEQ(CurDAG->getMachineNode(VCmpEQInst, dl, VecVT, LHS, RHS), 0);
-          return CurDAG->SelectNodeTo(N, PPC::VOR, VecVT, VCmpGT, VCmpEQ);
+          return CurDAG->SelectNodeTo(N, PPCSubTarget.hasVSX() ? PPC::XXLOR :
+                                                                 PPC::VOR,
+                                      VecVT, VCmpGT, VCmpEQ);
         }
       }
       case ISD::SETLE:
@@ -862,7 +866,9 @@ SDNode *PPCDAGToDAGISel::SelectSETCC(SDNode *N) {
         SDValue VCmpLE(CurDAG->getMachineNode(VCmpInst, dl, VecVT, RHS, LHS), 0);
         unsigned int VCmpEQInst = getVCmpEQInst(VT, PPCSubTarget.hasVSX());
         SDValue VCmpEQ(CurDAG->getMachineNode(VCmpEQInst, dl, VecVT, LHS, RHS), 0);
-        return CurDAG->SelectNodeTo(N, PPC::VOR, VecVT, VCmpLE, VCmpEQ);
+        return CurDAG->SelectNodeTo(N, PPCSubTarget.hasVSX() ? PPC::XXLOR :
+                                                               PPC::VOR,
+                                    VecVT, VCmpLE, VCmpEQ);
       }
       default:
         llvm_unreachable("Invalid vector compare type: should be expanded by legalize");
@@ -1323,6 +1329,50 @@ SDNode *PPCDAGToDAGISel::Select(SDNode *N) {
                         getI32Imm(BROpc) };
     return CurDAG->SelectNodeTo(N, SelectCCOp, N->getValueType(0), Ops, 4);
   }
+  case ISD::VSELECT:
+    if (PPCSubTarget.hasVSX()) {
+      SDValue Ops[] = { N->getOperand(2), N->getOperand(1), N->getOperand(0) };
+      return CurDAG->SelectNodeTo(N, PPC::XXSEL, N->getValueType(0), Ops, 3);
+    }
+
+    break;
+  case ISD::VECTOR_SHUFFLE:
+    if (PPCSubTarget.hasVSX() && (N->getValueType(0) == MVT::v2f64 ||
+                                  N->getValueType(0) == MVT::v2i64)) {
+      ShuffleVectorSDNode *SVN = cast<ShuffleVectorSDNode>(N);
+      
+      SDValue Op1 = N->getOperand(SVN->getMaskElt(0) < 2 ? 0 : 1),
+              Op2 = N->getOperand(SVN->getMaskElt(1) < 2 ? 0 : 1);
+      unsigned DM[2];
+
+      for (int i = 0; i < 2; ++i)
+        if (SVN->getMaskElt(i) <= 0 || SVN->getMaskElt(i) == 2)
+          DM[i] = 0;
+        else
+          DM[i] = 1;
+
+      SDValue DMV = CurDAG->getTargetConstant(DM[1] | (DM[0] << 1), MVT::i32);
+
+      if (Op1 == Op2 && DM[0] == 0 && DM[1] == 0 &&
+          Op1.getOpcode() == ISD::SCALAR_TO_VECTOR &&
+          isa<LoadSDNode>(Op1.getOperand(0))) {
+        LoadSDNode *LD = cast<LoadSDNode>(Op1.getOperand(0));
+        SDValue Base, Offset;
+
+        if (LD->isUnindexed() &&
+            SelectAddrIdxOnly(LD->getBasePtr(), Base, Offset)) {
+          SDValue Chain = LD->getChain();
+          SDValue Ops[] = { Base, Offset, Chain };
+          return CurDAG->SelectNodeTo(N, PPC::LXVDSX,
+                                      N->getValueType(0), Ops, 3);
+        }
+      }
+
+      SDValue Ops[] = { Op1, Op2, DMV };
+      return CurDAG->SelectNodeTo(N, PPC::XXPERMDI, N->getValueType(0), Ops, 3);
+    }
+
+    break;
   case PPCISD::BDNZ:
   case PPCISD::BDZ: {
     bool IsPPC64 = PPCSubTarget.isPPC64();
@@ -1413,8 +1463,8 @@ SDNode *PPCDAGToDAGISel::Select(SDNode *N) {
     if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(GA)) {
       const GlobalValue *GValue = G->getGlobal();
       const GlobalAlias *GAlias = dyn_cast<GlobalAlias>(GValue);
-      const GlobalValue *RealGValue = GAlias ?
-        GAlias->resolveAliasedGlobal(false) : GValue;
+      const GlobalValue *RealGValue =
+          GAlias ? GAlias->getAliasedGlobal() : GValue;
       const GlobalVariable *GVar = dyn_cast<GlobalVariable>(RealGValue);
       assert((GVar || isa<Function>(RealGValue)) &&
              "Unexpected global value subclass!");

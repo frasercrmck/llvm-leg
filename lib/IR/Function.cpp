@@ -466,11 +466,12 @@ enum IIT_Info {
   IIT_STRUCT3 = 20,
   IIT_STRUCT4 = 21,
   IIT_STRUCT5 = 22,
-  IIT_EXTEND_VEC_ARG = 23,
-  IIT_TRUNC_VEC_ARG = 24,
+  IIT_EXTEND_ARG = 23,
+  IIT_TRUNC_ARG = 24,
   IIT_ANYPTR = 25,
   IIT_V1   = 26,
-  IIT_VARARG = 27
+  IIT_VARARG = 27,
+  IIT_HALF_VEC_ARG = 28
 };
 
 
@@ -556,15 +557,21 @@ static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::Argument, ArgInfo));
     return;
   }
-  case IIT_EXTEND_VEC_ARG: {
+  case IIT_EXTEND_ARG: {
     unsigned ArgInfo = (NextElt == Infos.size() ? 0 : Infos[NextElt++]);
-    OutputTable.push_back(IITDescriptor::get(IITDescriptor::ExtendVecArgument,
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::ExtendArgument,
                                              ArgInfo));
     return;
   }
-  case IIT_TRUNC_VEC_ARG: {
+  case IIT_TRUNC_ARG: {
     unsigned ArgInfo = (NextElt == Infos.size() ? 0 : Infos[NextElt++]);
-    OutputTable.push_back(IITDescriptor::get(IITDescriptor::TruncVecArgument,
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::TruncArgument,
+                                             ArgInfo));
+    return;
+  }
+  case IIT_HALF_VEC_ARG: {
+    unsigned ArgInfo = (NextElt == Infos.size() ? 0 : Infos[NextElt++]);
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::HalfVecArgument,
                                              ArgInfo));
     return;
   }
@@ -656,12 +663,24 @@ static Type *DecodeFixedType(ArrayRef<Intrinsic::IITDescriptor> &Infos,
 
   case IITDescriptor::Argument:
     return Tys[D.getArgumentNumber()];
-  case IITDescriptor::ExtendVecArgument:
-    return VectorType::getExtendedElementVectorType(cast<VectorType>(
-                                                  Tys[D.getArgumentNumber()]));
+  case IITDescriptor::ExtendArgument: {
+    Type *Ty = Tys[D.getArgumentNumber()];
+    if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+      return VectorType::getExtendedElementVectorType(VTy);
 
-  case IITDescriptor::TruncVecArgument:
-    return VectorType::getTruncatedElementVectorType(cast<VectorType>(
+    return IntegerType::get(Context, 2 * cast<IntegerType>(Ty)->getBitWidth());
+  }
+  case IITDescriptor::TruncArgument: {
+    Type *Ty = Tys[D.getArgumentNumber()];
+    if (VectorType *VTy = dyn_cast<VectorType>(Ty))
+      return VectorType::getTruncatedElementVectorType(VTy);
+
+    IntegerType *ITy = cast<IntegerType>(Ty);
+    assert(ITy->getBitWidth() % 2 == 0);
+    return IntegerType::get(Context, ITy->getBitWidth() / 2);
+  }
+  case IITDescriptor::HalfVecArgument:
+    return VectorType::getHalfElementsVectorType(cast<VectorType>(
                                                   Tys[D.getArgumentNumber()]));
   }
   llvm_unreachable("unhandled");

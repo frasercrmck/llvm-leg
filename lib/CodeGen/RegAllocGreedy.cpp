@@ -71,6 +71,12 @@ static cl::opt<unsigned> LastChanceRecoloringMaxInterference(
              " interference at a time"),
     cl::init(8));
 
+// FIXME: Find a good default for this flag and remove the flag.
+static cl::opt<unsigned>
+CSRFirstTimeCost("regalloc-csr-first-time-cost",
+              cl::desc("Cost for first time use of callee-saved register."),
+              cl::init(0), cl::Hidden);
+
 static RegisterRegAlloc greedyRegAlloc("greedy", "greedy register allocator",
                                        createGreedyRegisterAllocator);
 
@@ -306,6 +312,20 @@ private:
                     SmallVectorImpl<unsigned>&, unsigned = ~0u);
   unsigned tryRegionSplit(LiveInterval&, AllocationOrder&,
                           SmallVectorImpl<unsigned>&);
+  /// Calculate cost of region splitting.
+  unsigned calculateRegionSplitCost(LiveInterval &VirtReg,
+                                    AllocationOrder &Order,
+                                    BlockFrequency &BestCost,
+                                    unsigned &NumCands, bool IgnoreCSR);
+  /// Perform region splitting.
+  unsigned doRegionSplit(LiveInterval &VirtReg, unsigned BestCand,
+                         bool HasCompact,
+                         SmallVectorImpl<unsigned> &NewVRegs);
+  /// Check other options before using a callee-saved register for the first
+  /// time.
+  unsigned tryAssignCSRFirstTime(LiveInterval &VirtReg, AllocationOrder &Order,
+                                 unsigned PhysReg, unsigned &CostPerUseLimit,
+                                 SmallVectorImpl<unsigned> &NewVRegs);
   unsigned tryBlockSplit(LiveInterval&, AllocationOrder&,
                          SmallVectorImpl<unsigned>&);
   unsigned tryInstructionSplit(LiveInterval&, AllocationOrder&,
@@ -1231,9 +1251,7 @@ void RAGreedy::splitAroundRegion(LiveRangeEdit &LREdit,
 unsigned RAGreedy::tryRegionSplit(LiveInterval &VirtReg, AllocationOrder &Order,
                                   SmallVectorImpl<unsigned> &NewVRegs) {
   unsigned NumCands = 0;
-  unsigned BestCand = NoCand;
   BlockFrequency BestCost;
-  SmallVector<unsigned, 8> UsedCands;
 
   // Check if we can split this live range around a compact region.
   bool HasCompact = calcCompactRegion(GlobalCand.front());
@@ -1249,8 +1267,29 @@ unsigned RAGreedy::tryRegionSplit(LiveInterval &VirtReg, AllocationOrder &Order,
                  MBFI->printBlockFreq(dbgs(), BestCost) << '\n');
   }
 
+  unsigned BestCand =
+      calculateRegionSplitCost(VirtReg, Order, BestCost, NumCands,
+                               false/*IgnoreCSR*/);
+
+  // No solutions found, fall back to single block splitting.
+  if (!HasCompact && BestCand == NoCand)
+    return 0;
+
+  return doRegionSplit(VirtReg, BestCand, HasCompact, NewVRegs);
+}
+
+unsigned RAGreedy::calculateRegionSplitCost(LiveInterval &VirtReg,
+                                            AllocationOrder &Order,
+                                            BlockFrequency &BestCost,
+                                            unsigned &NumCands,
+                                            bool IgnoreCSR) {
+  unsigned BestCand = NoCand;
   Order.rewind();
   while (unsigned PhysReg = Order.next()) {
+   if (unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg))
+     if (IgnoreCSR && !MRI->isPhysRegUsed(CSR))
+       continue;
+
     // Discard bad candidates before we run out of interference cache cursors.
     // This will only affect register classes with a lot of registers (>32).
     if (NumCands == IntfCache.getMaxCursors()) {
@@ -1317,11 +1356,13 @@ unsigned RAGreedy::tryRegionSplit(LiveInterval &VirtReg, AllocationOrder &Order,
     }
     ++NumCands;
   }
+  return BestCand;
+}
 
-  // No solutions found, fall back to single block splitting.
-  if (!HasCompact && BestCand == NoCand)
-    return 0;
-
+unsigned RAGreedy::doRegionSplit(LiveInterval &VirtReg, unsigned BestCand,
+                                 bool HasCompact,
+                                 SmallVectorImpl<unsigned> &NewVRegs) {
+  SmallVector<unsigned, 8> UsedCands;
   // Prepare split editor.
   LiveRangeEdit LREdit(&VirtReg, NewVRegs, *MF, *LIS, VRM, this);
   SE->reset(LREdit, SplitSpillMode);
@@ -2071,14 +2112,80 @@ unsigned RAGreedy::selectOrSplit(LiveInterval &VirtReg,
   return selectOrSplitImpl(VirtReg, NewVRegs, FixedRegisters);
 }
 
+/// Using a CSR for the first time has a cost because it causes push|pop
+/// to be added to prologue|epilogue. Splitting a cold section of the live
+/// range can have lower cost than using the CSR for the first time;
+/// Spilling a live range in the cold path can have lower cost than using
+/// the CSR for the first time. Returns the physical register if we decide
+/// to use the CSR; otherwise return 0.
+unsigned RAGreedy::tryAssignCSRFirstTime(LiveInterval &VirtReg,
+                                         AllocationOrder &Order,
+                                         unsigned PhysReg,
+                                         unsigned &CostPerUseLimit,
+                                         SmallVectorImpl<unsigned> &NewVRegs) {
+  // We use the larger one out of the command-line option and the value report
+  // by TRI.
+  BlockFrequency CSRCost(std::max((unsigned)CSRFirstTimeCost,
+                                  TRI->getCSRFirstUseCost()));
+  if (getStage(VirtReg) == RS_Spill && VirtReg.isSpillable()) {
+    // We choose spill over using the CSR for the first time if the spill cost
+    // is lower than CSRCost.
+    SA->analyze(&VirtReg);
+    if (calcSpillCost() >= CSRCost)
+      return PhysReg;
+
+    // We are going to spill, set CostPerUseLimit to 1 to make sure that
+    // we will not use a callee-saved register in tryEvict.
+    CostPerUseLimit = 1;
+    return 0;
+  }
+  if (getStage(VirtReg) < RS_Split) {
+    // We choose pre-splitting over using the CSR for the first time if
+    // the cost of splitting is lower than CSRCost.
+    SA->analyze(&VirtReg);
+    unsigned NumCands = 0;
+    unsigned BestCand =
+      calculateRegionSplitCost(VirtReg, Order, CSRCost, NumCands,
+                               true/*IgnoreCSR*/);
+    if (BestCand == NoCand)
+      // Use the CSR if we can't find a region split below CSRCost.
+      return PhysReg;
+
+    // Perform the actual pre-splitting.
+    doRegionSplit(VirtReg, BestCand, false/*HasCompact*/, NewVRegs);
+    return 0;
+  }
+  return PhysReg;
+}
+
 unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
                                      SmallVectorImpl<unsigned> &NewVRegs,
                                      SmallVirtRegSet &FixedRegisters,
                                      unsigned Depth) {
+  unsigned CostPerUseLimit = ~0u;
   // First try assigning a free register.
   AllocationOrder Order(VirtReg.reg, *VRM, RegClassInfo);
-  if (unsigned PhysReg = tryAssign(VirtReg, Order, NewVRegs))
-    return PhysReg;
+  if (unsigned PhysReg = tryAssign(VirtReg, Order, NewVRegs)) {
+    // We check other options if we are using a CSR for the first time.
+    bool CSRFirstUse = false;
+    if (unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg))
+      if (!MRI->isPhysRegUsed(CSR))
+        CSRFirstUse = true;
+
+    // When NewVRegs is not empty, we may have made decisions such as evicting
+    // a virtual register, go with the earlier decisions and use the physical
+    // register.
+    if ((CSRFirstTimeCost || TRI->getCSRFirstUseCost()) &&
+        CSRFirstUse && NewVRegs.empty()) {
+      unsigned CSRReg = tryAssignCSRFirstTime(VirtReg, Order, PhysReg,
+                                              CostPerUseLimit, NewVRegs);
+      if (CSRReg || !NewVRegs.empty())
+        // Return now if we decide to use a CSR or create new vregs due to
+        // pre-splitting.
+        return CSRReg;
+    } else
+      return PhysReg;
+  }
 
   LiveRangeStage Stage = getStage(VirtReg);
   DEBUG(dbgs() << StageName[Stage]
@@ -2088,7 +2195,7 @@ unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
   // queue. The RS_Split ranges already failed to do this, and they should not
   // get a second chance until they have been split.
   if (Stage != RS_Split)
-    if (unsigned PhysReg = tryEvict(VirtReg, Order, NewVRegs))
+    if (unsigned PhysReg = tryEvict(VirtReg, Order, NewVRegs, CostPerUseLimit))
       return PhysReg;
 
   assert(NewVRegs.empty() && "Cannot append to existing NewVRegs");

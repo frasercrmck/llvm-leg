@@ -177,6 +177,10 @@ protected:
   /// HasCRC - if true, processor supports CRC instructions
   bool HasCRC;
 
+  /// If true, the instructions "vmov.i32 d0, #0" and "vmov.i32 q0, #0" are
+  /// particularly effective at zeroing a VFP register.
+  bool HasZeroCycleZeroing;
+
   /// AllowsUnalignedMem - If true, the subtarget allows unaligned memory
   /// accesses for some types.  For details, see
   /// ARMTargetLowering::allowsUnalignedMemoryAccesses().
@@ -203,6 +207,9 @@ protected:
   /// CPUString - String name of used CPU.
   std::string CPUString;
 
+  /// IsLittle - The target is Little Endian
+  bool IsLittle;
+
   /// TargetTriple - What processor and OS we're targeting.
   Triple TargetTriple;
 
@@ -226,7 +233,8 @@ protected:
   /// of the specified triple.
   ///
   ARMSubtarget(const std::string &TT, const std::string &CPU,
-               const std::string &FS, const TargetOptions &Options);
+               const std::string &FS, bool IsLittle,
+               const TargetOptions &Options);
 
   /// getMaxInlineSizeThreshold - Returns the maximum memset / memcpy size
   /// that still makes it profitable to inline the call.
@@ -257,6 +265,7 @@ public:
   bool hasV8Ops()   const { return HasV8Ops;  }
 
   bool isCortexA5() const { return ARMProcFamily == CortexA5; }
+  bool isCortexA7() const { return ARMProcFamily == CortexA7; }
   bool isCortexA8() const { return ARMProcFamily == CortexA8; }
   bool isCortexA9() const { return ARMProcFamily == CortexA9; }
   bool isCortexA15() const { return ARMProcFamily == CortexA15; }
@@ -294,6 +303,7 @@ public:
   bool isFPOnlySP() const { return FPOnlySP; }
   bool hasPerfMon() const { return HasPerfMon; }
   bool hasTrustZone() const { return HasTrustZone; }
+  bool hasZeroCycleZeroing() const { return HasZeroCycleZeroing; }
   bool prefers32BitThumb() const { return Pref32BitThumb; }
   bool avoidCPSRPartialUpdate() const { return AvoidCPSRPartialUpdate; }
   bool avoidMOVsShifterOperand() const { return AvoidMOVsShifterOperand; }
@@ -374,6 +384,8 @@ public:
   bool restrictIT() const { return RestrictIT; }
 
   const std::string & getCPUString() const { return CPUString; }
+
+  bool isLittle() const { return IsLittle; }
 
   unsigned getMispredictionPenalty() const;
   

@@ -512,9 +512,23 @@ unsigned X86TTI::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src) const {
     { ISD::UINT_TO_FP,  MVT::v4f64, MVT::v4i8,  2 },
     { ISD::UINT_TO_FP,  MVT::v4f64, MVT::v4i16, 2 },
     { ISD::UINT_TO_FP,  MVT::v4f64, MVT::v4i32, 6 },
+    // The generic code to compute the scalar overhead is currently broken.
+    // Workaround this limitation by estimating the scalarization overhead
+    // here. We have roughly 10 instructions per scalar element.
+    // Multiply that by the vector width.
+    // FIXME: remove that when PR19268 is fixed.
+    { ISD::UINT_TO_FP,  MVT::v2f64, MVT::v2i64, 2*10 },
+    { ISD::UINT_TO_FP,  MVT::v4f64, MVT::v4i64, 4*10 },
 
-    { ISD::FP_TO_SINT,  MVT::v8i8,  MVT::v8f32, 1 },
+    { ISD::FP_TO_SINT,  MVT::v8i8,  MVT::v8f32, 7 },
     { ISD::FP_TO_SINT,  MVT::v4i8,  MVT::v4f32, 1 },
+    // This node is expanded into scalarized operations but BasicTTI is overly
+    // optimistic estimating its cost.  It computes 3 per element (one
+    // vector-extract, one scalar conversion and one vector-insert).  The
+    // problem is that the inserts form a read-modify-write chain so latency
+    // should be factored in too.  Inflating the cost per element by 1.
+    { ISD::FP_TO_UINT,  MVT::v8i32, MVT::v8f32, 8*4 },
+    { ISD::FP_TO_UINT,  MVT::v4i32, MVT::v4f64, 4*4 },
   };
 
   if (ST->hasAVX2()) {
@@ -798,8 +812,9 @@ unsigned X86TTI::getIntImmCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
   switch (Opcode) {
   default: return TCC_Free;
   case Instruction::GetElementPtr:
-    if (Idx != 0)
-      return TCC_Free;
+    if (Idx == 0)
+      return 2 * TCC_Basic;
+    return TCC_Free;
   case Instruction::Store:
     ImmIdx = 0;
     break;
@@ -858,17 +873,16 @@ unsigned X86TTI::getIntImmCost(Intrinsic::ID IID, unsigned Idx,
   case Intrinsic::umul_with_overflow:
     if ((Idx == 1) && Imm.getBitWidth() <= 64 && isInt<32>(Imm.getSExtValue()))
       return TCC_Free;
-    else
-      return X86TTI::getIntImmCost(Imm, Ty);
+    break;
   case Intrinsic::experimental_stackmap:
-    if (Idx < 2)
+    if ((Idx < 2) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
       return TCC_Free;
+    break;
   case Intrinsic::experimental_patchpoint_void:
   case Intrinsic::experimental_patchpoint_i64:
-    if ((Idx < 4 ) ||
-        (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
+    if ((Idx < 4) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
       return TCC_Free;
-    else
-      return X86TTI::getIntImmCost(Imm, Ty);
+    break;
   }
+  return X86TTI::getIntImmCost(Imm, Ty);
 }

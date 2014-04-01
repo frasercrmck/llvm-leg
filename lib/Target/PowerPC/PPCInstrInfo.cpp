@@ -20,14 +20,17 @@
 #include "PPCTargetMachine.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
@@ -44,6 +47,13 @@ opt<bool> DisableCTRLoopAnal("disable-ppc-ctrloop-analysis", cl::Hidden,
 
 static cl::opt<bool> DisableCmpOpt("disable-ppc-cmp-opt",
 cl::desc("Disable compare instruction optimization"), cl::Hidden);
+
+static cl::opt<bool> DisableVSXFMAMutate("disable-ppc-vsx-fma-mutation",
+cl::desc("Disable VSX FMA instruction mutation"), cl::Hidden);
+
+static cl::opt<bool> VSXSelfCopyCrash("crash-on-ppc-vsx-self-copy",
+cl::desc("Causes the backend to crash instead of generating a nop VSX copy"),
+cl::Hidden);
 
 // Pin the vtable to this file.
 void PPCInstrInfo::anchor() {}
@@ -280,6 +290,21 @@ PPCInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI) const {
   MI->getOperand(4).setImm((ME+1) & 31);
   MI->getOperand(5).setImm((MB-1) & 31);
   return MI;
+}
+
+bool PPCInstrInfo::findCommutedOpIndices(MachineInstr *MI, unsigned &SrcOpIdx1,
+                                         unsigned &SrcOpIdx2) const {
+  // For VSX A-Type FMA instructions, it is the first two operands that can be
+  // commuted, however, because the non-encoded tied input operand is listed
+  // first, the operands to swap are actually the second and third.
+
+  int AltOpc = PPC::getAltVSXFMAOpcode(MI->getOpcode());
+  if (AltOpc == -1)
+    return TargetInstrInfo::findCommutedOpIndices(MI, SrcOpIdx1, SrcOpIdx2);
+
+  SrcOpIdx1 = 2;
+  SrcOpIdx2 = 3;
+  return true;
 }
 
 void PPCInstrInfo::insertNoop(MachineBasicBlock &MBB,
@@ -658,15 +683,15 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                unsigned DestReg, unsigned SrcReg,
                                bool KillSrc) const {
   // We can end up with self copies and similar things as a result of VSX copy
-  // legalization. Promote (or just ignore) them here.
+  // legalization. Promote them here.
   const TargetRegisterInfo *TRI = &getRegisterInfo();
   if (PPC::F8RCRegClass.contains(DestReg) &&
       PPC::VSLRCRegClass.contains(SrcReg)) {
     unsigned SuperReg =
       TRI->getMatchingSuperReg(DestReg, PPC::sub_64, &PPC::VSRCRegClass);
 
-    if (SrcReg == SuperReg)
-      return;
+    if (VSXSelfCopyCrash && SrcReg == SuperReg)
+      llvm_unreachable("nop VSX copy");
 
     DestReg = SuperReg;
   } else if (PPC::VRRCRegClass.contains(DestReg) &&
@@ -674,8 +699,8 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned SuperReg =
       TRI->getMatchingSuperReg(DestReg, PPC::sub_128, &PPC::VSRCRegClass);
 
-    if (SrcReg == SuperReg)
-      return;
+    if (VSXSelfCopyCrash && SrcReg == SuperReg)
+      llvm_unreachable("nop VSX copy");
 
     DestReg = SuperReg;
   } else if (PPC::F8RCRegClass.contains(SrcReg) &&
@@ -683,8 +708,8 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned SuperReg =
       TRI->getMatchingSuperReg(SrcReg, PPC::sub_64, &PPC::VSRCRegClass);
 
-    if (DestReg == SuperReg)
-      return;
+    if (VSXSelfCopyCrash && DestReg == SuperReg)
+      llvm_unreachable("nop VSX copy");
 
     SrcReg = SuperReg;
   } else if (PPC::VRRCRegClass.contains(SrcReg) &&
@@ -692,8 +717,8 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned SuperReg =
       TRI->getMatchingSuperReg(SrcReg, PPC::sub_128, &PPC::VSRCRegClass);
 
-    if (DestReg == SuperReg)
-      return;
+    if (VSXSelfCopyCrash && DestReg == SuperReg)
+      llvm_unreachable("nop VSX copy");
 
     SrcReg = SuperReg;
   }
@@ -719,6 +744,8 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // copies are generated, they are close enough to some use that the
     // lower-latency form is preferable.
     Opc = PPC::XXLOR;
+  else if (PPC::VSFRCRegClass.contains(DestReg, SrcReg))
+    Opc = PPC::XXLORf;
   else if (PPC::CRBITRCRegClass.contains(DestReg, SrcReg))
     Opc = PPC::CROR;
   else
@@ -786,6 +813,12 @@ PPCInstrInfo::StoreRegToStackSlot(MachineFunction &MF,
     NonRI = true;
   } else if (PPC::VSRCRegClass.hasSubClassEq(RC)) {
     NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::STXVD2X))
+                                       .addReg(SrcReg,
+                                               getKillRegState(isKill)),
+                                       FrameIdx));
+    NonRI = true;
+  } else if (PPC::VSFRCRegClass.hasSubClassEq(RC)) {
+    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::STXSDX))
                                        .addReg(SrcReg,
                                                getKillRegState(isKill)),
                                        FrameIdx));
@@ -879,6 +912,10 @@ PPCInstrInfo::LoadRegFromStackSlot(MachineFunction &MF, DebugLoc DL,
     NonRI = true;
   } else if (PPC::VSRCRegClass.hasSubClassEq(RC)) {
     NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::LXVD2X), DestReg),
+                                       FrameIdx));
+    NonRI = true;
+  } else if (PPC::VSFRCRegClass.hasSubClassEq(RC)) {
+    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::LXSDX), DestReg),
                                        FrameIdx));
     NonRI = true;
   } else if (PPC::VRSAVERCRegClass.hasSubClassEq(RC)) {
@@ -1549,6 +1586,272 @@ unsigned PPCInstrInfo::GetInstSizeInBytes(const MachineInstr *MI) const {
   }
 }
 
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "ppc-vsx-fma-mutate"
+
+namespace {
+  // PPCVSXFMAMutate pass - For copies between VSX registers and non-VSX registers
+  // (Altivec and scalar floating-point registers), we need to transform the
+  // copies into subregister copies with other restrictions.
+  struct PPCVSXFMAMutate : public MachineFunctionPass {
+    static char ID;
+    PPCVSXFMAMutate() : MachineFunctionPass(ID) {
+      initializePPCVSXFMAMutatePass(*PassRegistry::getPassRegistry());
+    }
+
+    LiveIntervals *LIS;
+
+    const PPCTargetMachine *TM;
+    const PPCInstrInfo *TII;
+
+protected:
+    bool processBlock(MachineBasicBlock &MBB) {
+      bool Changed = false;
+
+      MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+      for (MachineBasicBlock::iterator I = MBB.begin(), IE = MBB.end();
+           I != IE; ++I) {
+        MachineInstr *MI = I;
+
+        // The default (A-type) VSX FMA form kills the addend (it is taken from
+        // the target register, which is then updated to reflect the result of
+        // the FMA). If the instruction, however, kills one of the registers
+        // used for the product, then we can use the M-form instruction (which
+        // will take that value from the to-be-defined register).
+
+        int AltOpc = PPC::getAltVSXFMAOpcode(MI->getOpcode());
+        if (AltOpc == -1)
+          continue;
+
+        // This pass is run after register coalescing, and so we're looking for
+        // a situation like this:
+        //   ...
+        //   %vreg5<def> = COPY %vreg9; VSLRC:%vreg5,%vreg9
+        //   %vreg5<def,tied1> = XSMADDADP %vreg5<tied0>, %vreg17, %vreg16,
+        //                         %RM<imp-use>; VSLRC:%vreg5,%vreg17,%vreg16
+        //   ...
+        //   %vreg9<def,tied1> = XSMADDADP %vreg9<tied0>, %vreg17, %vreg19,
+        //                         %RM<imp-use>; VSLRC:%vreg9,%vreg17,%vreg19
+        //   ...
+        // Where we can eliminate the copy by changing from the A-type to the
+        // M-type instruction. Specifically, for this example, this means:
+        //   %vreg5<def,tied1> = XSMADDADP %vreg5<tied0>, %vreg17, %vreg16,
+        //                         %RM<imp-use>; VSLRC:%vreg5,%vreg17,%vreg16
+        // is replaced by:
+        //   %vreg16<def,tied1> = XSMADDMDP %vreg16<tied0>, %vreg18, %vreg9,
+        //                         %RM<imp-use>; VSLRC:%vreg16,%vreg18,%vreg9
+        // and we remove: %vreg5<def> = COPY %vreg9; VSLRC:%vreg5,%vreg9
+
+        SlotIndex FMAIdx = LIS->getInstructionIndex(MI);
+
+        VNInfo *AddendValNo =
+          LIS->getInterval(MI->getOperand(1).getReg()).Query(FMAIdx).valueIn();
+        MachineInstr *AddendMI = LIS->getInstructionFromIndex(AddendValNo->def);
+
+        // The addend and this instruction must be in the same block.
+
+        if (!AddendMI || AddendMI->getParent() != MI->getParent())
+          continue;
+
+        // The addend must be a full copy within the same register class.
+
+        if (!AddendMI->isFullCopy())
+          continue;
+
+        unsigned AddendSrcReg = AddendMI->getOperand(1).getReg();
+        if (TargetRegisterInfo::isVirtualRegister(AddendSrcReg)) {
+          if (MRI.getRegClass(AddendMI->getOperand(0).getReg()) !=
+              MRI.getRegClass(AddendSrcReg))
+            continue;
+        } else {
+          // If AddendSrcReg is a physical register, make sure the destination
+          // register class contains it.
+          if (!MRI.getRegClass(AddendMI->getOperand(0).getReg())
+                ->contains(AddendSrcReg))
+            continue;
+        }
+
+        // In theory, there could be other uses of the addend copy before this
+        // fma.  We could deal with this, but that would require additional
+        // logic below and I suspect it will not occur in any relevant
+        // situations.
+        bool OtherUsers = false;
+        for (auto J = std::prev(I), JE = MachineBasicBlock::iterator(AddendMI);
+             J != JE; --J)
+          if (J->readsVirtualRegister(AddendMI->getOperand(0).getReg())) {
+            OtherUsers = true;
+            break;
+          }
+
+        if (OtherUsers)
+          continue;
+
+        // Find one of the product operands that is killed by this instruction.
+
+        unsigned KilledProdOp = 0, OtherProdOp = 0;
+        if (LIS->getInterval(MI->getOperand(2).getReg())
+                     .Query(FMAIdx).isKill()) {
+          KilledProdOp = 2;
+          OtherProdOp  = 3;
+        } else if (LIS->getInterval(MI->getOperand(3).getReg())
+                     .Query(FMAIdx).isKill()) {
+          KilledProdOp = 3;
+          OtherProdOp  = 2;
+        }
+
+        // If there are no killed product operands, then this transformation is
+        // likely not profitable.
+        if (!KilledProdOp)
+          continue;
+
+        // In order to replace the addend here with the source of the copy,
+        // it must still be live here.
+        if (!LIS->getInterval(AddendMI->getOperand(1).getReg()).liveAt(FMAIdx))
+          continue;
+
+        // Transform: (O2 * O3) + O1 -> (O2 * O1) + O3.
+
+        unsigned AddReg = AddendMI->getOperand(1).getReg();
+        unsigned KilledProdReg = MI->getOperand(KilledProdOp).getReg();
+        unsigned OtherProdReg  = MI->getOperand(OtherProdOp).getReg();
+
+        unsigned AddSubReg = AddendMI->getOperand(1).getSubReg();
+        unsigned KilledProdSubReg = MI->getOperand(KilledProdOp).getSubReg();
+        unsigned OtherProdSubReg  = MI->getOperand(OtherProdOp).getSubReg();
+
+        bool AddRegKill = AddendMI->getOperand(1).isKill();
+        bool KilledProdRegKill = MI->getOperand(KilledProdOp).isKill();
+        bool OtherProdRegKill  = MI->getOperand(OtherProdOp).isKill();
+
+        bool AddRegUndef = AddendMI->getOperand(1).isUndef();
+        bool KilledProdRegUndef = MI->getOperand(KilledProdOp).isUndef();
+        bool OtherProdRegUndef  = MI->getOperand(OtherProdOp).isUndef();
+
+        unsigned OldFMAReg = MI->getOperand(0).getReg();
+
+        assert(OldFMAReg == AddendMI->getOperand(0).getReg() &&
+               "Addend copy not tied to old FMA output!");
+
+        DEBUG(dbgs() << "VSX FMA Mutation:\n    " << *MI;);
+
+        MI->getOperand(0).setReg(KilledProdReg);
+        MI->getOperand(1).setReg(KilledProdReg);
+        MI->getOperand(3).setReg(AddReg);
+        MI->getOperand(2).setReg(OtherProdReg);
+
+        MI->getOperand(0).setSubReg(KilledProdSubReg);
+        MI->getOperand(1).setSubReg(KilledProdSubReg);
+        MI->getOperand(3).setSubReg(AddSubReg);
+        MI->getOperand(2).setSubReg(OtherProdSubReg);
+
+        MI->getOperand(1).setIsKill(KilledProdRegKill);
+        MI->getOperand(3).setIsKill(AddRegKill);
+        MI->getOperand(2).setIsKill(OtherProdRegKill);
+
+        MI->getOperand(1).setIsUndef(KilledProdRegUndef);
+        MI->getOperand(3).setIsUndef(AddRegUndef);
+        MI->getOperand(2).setIsUndef(OtherProdRegUndef);
+
+        MI->setDesc(TII->get(AltOpc));
+
+        DEBUG(dbgs() << " -> " << *MI);
+
+        // The killed product operand was killed here, so we can reuse it now
+        // for the result of the fma.
+
+        LiveInterval &FMAInt = LIS->getInterval(OldFMAReg);
+        VNInfo *FMAValNo = FMAInt.getVNInfoAt(FMAIdx.getRegSlot());
+        for (auto UI = MRI.reg_nodbg_begin(OldFMAReg), UE = MRI.reg_nodbg_end();
+             UI != UE;) {
+          MachineOperand &UseMO = *UI;
+          MachineInstr *UseMI = UseMO.getParent();
+          ++UI;
+
+          // Don't replace the result register of the copy we're about to erase.
+          if (UseMI == AddendMI)
+            continue;
+
+          UseMO.setReg(KilledProdReg);
+          UseMO.setSubReg(KilledProdSubReg);
+        }
+
+        // Extend the live intervals of the killed product operand to hold the
+        // fma result.
+
+        LiveInterval &NewFMAInt = LIS->getInterval(KilledProdReg);
+        for (LiveInterval::iterator AI = FMAInt.begin(), AE = FMAInt.end();
+             AI != AE; ++AI) {
+          // Don't add the segment that corresponds to the original copy.
+          if (AI->valno == AddendValNo)
+            continue;
+
+          VNInfo *NewFMAValNo =
+            NewFMAInt.getNextValue(AI->start,
+                                   LIS->getVNInfoAllocator());
+
+          NewFMAInt.addSegment(LiveInterval::Segment(AI->start, AI->end,
+                                                     NewFMAValNo));
+        }
+        DEBUG(dbgs() << "  extended: " << NewFMAInt << '\n');
+
+        FMAInt.removeValNo(FMAValNo);
+        DEBUG(dbgs() << "  trimmed:  " << FMAInt << '\n');
+
+        // Remove the (now unused) copy.
+
+        DEBUG(dbgs() << "  removing: " << *AddendMI << '\n');
+        LIS->RemoveMachineInstrFromMaps(AddendMI);
+        AddendMI->eraseFromParent();
+
+        Changed = true;
+      }
+
+      return Changed;
+    }
+
+public:
+    virtual bool runOnMachineFunction(MachineFunction &MF) {
+      LIS = &getAnalysis<LiveIntervals>();
+
+      TM = static_cast<const PPCTargetMachine *>(&MF.getTarget());
+      TII = TM->getInstrInfo();
+
+      bool Changed = false;
+
+      if (DisableVSXFMAMutate)
+        return Changed;
+
+      for (MachineFunction::iterator I = MF.begin(); I != MF.end();) {
+        MachineBasicBlock &B = *I++;
+        if (processBlock(B))
+          Changed = true;
+      }
+
+      return Changed;
+    }
+
+    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+      AU.addRequired<LiveIntervals>();
+      AU.addPreserved<LiveIntervals>();
+      AU.addRequired<SlotIndexes>();
+      AU.addPreserved<SlotIndexes>();
+      MachineFunctionPass::getAnalysisUsage(AU);
+    }
+  };
+}
+
+INITIALIZE_PASS_BEGIN(PPCVSXFMAMutate, DEBUG_TYPE,
+                      "PowerPC VSX FMA Mutation", false, false)
+INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
+INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
+INITIALIZE_PASS_END(PPCVSXFMAMutate, DEBUG_TYPE,
+                    "PowerPC VSX FMA Mutation", false, false)
+
+char &llvm::PPCVSXFMAMutateID = PPCVSXFMAMutate::ID;
+
+char PPCVSXFMAMutate::ID = 0;
+FunctionPass*
+llvm::createPPCVSXFMAMutatePass() { return new PPCVSXFMAMutate(); }
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "ppc-vsx-copy"
@@ -1686,6 +1989,80 @@ INITIALIZE_PASS(PPCVSXCopy, DEBUG_TYPE,
 char PPCVSXCopy::ID = 0;
 FunctionPass*
 llvm::createPPCVSXCopyPass() { return new PPCVSXCopy(); }
+
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "ppc-vsx-copy-cleanup"
+
+namespace llvm {
+  void initializePPCVSXCopyCleanupPass(PassRegistry&);
+}
+
+namespace {
+  // PPCVSXCopyCleanup pass - We sometimes end up generating self copies of VSX
+  // registers (mostly because the ABI code still places all values into the
+  // "traditional" floating-point and vector registers). Remove them here.
+  struct PPCVSXCopyCleanup : public MachineFunctionPass {
+    static char ID;
+    PPCVSXCopyCleanup() : MachineFunctionPass(ID) {
+      initializePPCVSXCopyCleanupPass(*PassRegistry::getPassRegistry());
+    }
+
+    const PPCTargetMachine *TM;
+    const PPCInstrInfo *TII;
+
+protected:
+    bool processBlock(MachineBasicBlock &MBB) {
+      bool Changed = false;
+
+      SmallVector<MachineInstr *, 4> ToDelete;
+      for (MachineBasicBlock::iterator I = MBB.begin(), IE = MBB.end();
+           I != IE; ++I) {
+        MachineInstr *MI = I;
+        if (MI->getOpcode() == PPC::XXLOR &&
+            MI->getOperand(0).getReg() == MI->getOperand(1).getReg() &&
+            MI->getOperand(0).getReg() == MI->getOperand(2).getReg())
+          ToDelete.push_back(MI);
+      }
+
+      if (!ToDelete.empty())
+        Changed = true;
+
+      for (unsigned i = 0, ie = ToDelete.size(); i != ie; ++i) {
+        DEBUG(dbgs() << "Removing VSX self-copy: " << *ToDelete[i]);
+        ToDelete[i]->eraseFromParent();
+      }
+
+      return Changed;
+    }
+
+public:
+    virtual bool runOnMachineFunction(MachineFunction &MF) {
+      TM = static_cast<const PPCTargetMachine *>(&MF.getTarget());
+      TII = TM->getInstrInfo();
+
+      bool Changed = false;
+
+      for (MachineFunction::iterator I = MF.begin(); I != MF.end();) {
+        MachineBasicBlock &B = *I++;
+        if (processBlock(B))
+          Changed = true;
+      }
+
+      return Changed;
+    }
+
+    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+      MachineFunctionPass::getAnalysisUsage(AU);
+    }
+  };
+}
+
+INITIALIZE_PASS(PPCVSXCopyCleanup, DEBUG_TYPE,
+                "PowerPC VSX Copy Cleanup", false, false)
+
+char PPCVSXCopyCleanup::ID = 0;
+FunctionPass*
+llvm::createPPCVSXCopyCleanupPass() { return new PPCVSXCopyCleanup(); }
 
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "ppc-early-ret"

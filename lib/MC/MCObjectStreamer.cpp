@@ -20,6 +20,7 @@
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/MC/MCSectionELF.h"
 using namespace llvm;
 
 MCObjectStreamer::MCObjectStreamer(MCContext &Context, MCAsmBackend &TAB,
@@ -63,7 +64,11 @@ MCDataFragment *MCObjectStreamer::getOrCreateDataFragment() const {
   // When bundling is enabled, we don't want to add data to a fragment that
   // already has instructions (see MCELFStreamer::EmitInstToData for details)
   if (!F || (Assembler->isBundlingEnabled() && F->hasInstructions())) {
-    F = new MCDataFragment();
+    const auto *Sec = dyn_cast<MCSectionELF>(&getCurrentSectionData()->getSection());
+    if (Sec && Sec->getSectionName().startswith(".zdebug_"))
+      F = new MCCompressedFragment();
+    else
+      F = new MCDataFragment();
     insert(F);
   }
   return F;
@@ -378,14 +383,12 @@ void MCObjectStreamer::EmitZeros(uint64_t NumBytes) {
 }
 
 void MCObjectStreamer::FinishImpl() {
-  // Dump out the dwarf file & directory tables and line tables.
-  const MCSymbol *LineSectionSymbol = NULL;
-  if (getContext().hasMCLineSections())
-    LineSectionSymbol = MCDwarfLineTable::Emit(this);
-
   // If we are generating dwarf for assembly source files dump out the sections.
   if (getContext().getGenDwarfForAssembly())
-    MCGenDwarfInfo::Emit(this, LineSectionSymbol);
+    MCGenDwarfInfo::Emit(this);
+
+  // Dump out the dwarf file & directory tables and line tables.
+  MCDwarfLineTable::Emit(this);
 
   getAssembler().Finish();
 }

@@ -224,6 +224,8 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(TargetMachine &TM) :
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i16, Custom);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v4i16, Custom);
 
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i32, Custom);
+
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::Other, Custom);
 }
 
@@ -271,6 +273,22 @@ bool AMDGPUTargetLowering::isTruncateFree(Type *Source, Type *Dest) const {
   // Truncate is just accessing a subregister.
   return Dest->getPrimitiveSizeInBits() < Source->getPrimitiveSizeInBits() &&
          (Dest->getPrimitiveSizeInBits() % 32 == 0);
+}
+
+bool AMDGPUTargetLowering::isZExtFree(Type *Src, Type *Dest) const {
+  const DataLayout *DL = getDataLayout();
+  unsigned SrcSize = DL->getTypeSizeInBits(Src->getScalarType());
+  unsigned DestSize = DL->getTypeSizeInBits(Dest->getScalarType());
+
+  return SrcSize == 32 && DestSize == 64;
+}
+
+bool AMDGPUTargetLowering::isZExtFree(EVT Src, EVT Dest) const {
+  // Any register load of a 64-bit value really requires 2 32-bit moves. For all
+  // practical purposes, the extra mov 0 to load a 64-bit is free.  As used,
+  // this will enable reducing 64-bit operations the 32-bit, which is always
+  // good.
+  return Src == MVT::i32 && Dest == MVT::i64;
 }
 
 bool AMDGPUTargetLowering::isNarrowingProfitable(EVT SrcVT, EVT DestVT) const {
@@ -329,6 +347,24 @@ SDValue AMDGPUTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG)
   case ISD::UINT_TO_FP: return LowerUINT_TO_FP(Op, DAG);
   }
   return Op;
+}
+
+void AMDGPUTargetLowering::ReplaceNodeResults(SDNode *N,
+                                              SmallVectorImpl<SDValue> &Results,
+                                              SelectionDAG &DAG) const {
+  switch (N->getOpcode()) {
+  case ISD::SIGN_EXTEND_INREG:
+    // Different parts of legalization seem to interpret which type of
+    // sign_extend_inreg is the one to check for custom lowering. The extended
+    // from type is what really matters, but some places check for custom
+    // lowering of the result type. This results in trying to use
+    // ReplaceNodeResults to sext_in_reg to an illegal type, so we'll just do
+    // nothing here and let the illegal result integer be handled normally.
+    return;
+
+  default:
+    return;
+  }
 }
 
 SDValue AMDGPUTargetLowering::LowerConstantInitializer(const Constant* Init,
@@ -523,6 +559,30 @@ SDValue AMDGPUTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     case AMDGPUIntrinsic::AMDGPU_umin:
       return DAG.getNode(AMDGPUISD::UMIN, DL, VT, Op.getOperand(1),
                                                   Op.getOperand(2));
+
+    case AMDGPUIntrinsic::AMDGPU_bfe_i32:
+      return DAG.getNode(AMDGPUISD::BFE_I32, DL, VT,
+                         Op.getOperand(1),
+                         Op.getOperand(2),
+                         Op.getOperand(3));
+
+    case AMDGPUIntrinsic::AMDGPU_bfe_u32:
+      return DAG.getNode(AMDGPUISD::BFE_U32, DL, VT,
+                         Op.getOperand(1),
+                         Op.getOperand(2),
+                         Op.getOperand(3));
+
+    case AMDGPUIntrinsic::AMDGPU_bfi:
+      return DAG.getNode(AMDGPUISD::BFI, DL, VT,
+                         Op.getOperand(1),
+                         Op.getOperand(2),
+                         Op.getOperand(3));
+
+    case AMDGPUIntrinsic::AMDGPU_bfm:
+      return DAG.getNode(AMDGPUISD::BFM, DL, VT,
+                         Op.getOperand(1),
+                         Op.getOperand(2));
+
     case AMDGPUIntrinsic::AMDIL_round_nearest:
       return DAG.getNode(ISD::FRINT, DL, VT, Op.getOperand(1));
   }
@@ -1140,6 +1200,8 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(UMIN)
   NODE_NAME_CASE(BFE_U32)
   NODE_NAME_CASE(BFE_I32)
+  NODE_NAME_CASE(BFI)
+  NODE_NAME_CASE(BFM)
   NODE_NAME_CASE(URECIP)
   NODE_NAME_CASE(DOT4)
   NODE_NAME_CASE(EXPORT)
@@ -1154,5 +1216,58 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(SAMPLEL)
   NODE_NAME_CASE(STORE_MSKOR)
   NODE_NAME_CASE(TBUFFER_STORE_FORMAT)
+  }
+}
+
+static void computeMaskedBitsForMinMax(const SDValue Op0,
+                                       const SDValue Op1,
+                                       APInt &KnownZero,
+                                       APInt &KnownOne,
+                                       const SelectionDAG &DAG,
+                                       unsigned Depth) {
+  APInt Op0Zero, Op0One;
+  APInt Op1Zero, Op1One;
+  DAG.ComputeMaskedBits(Op0, Op0Zero, Op0One, Depth);
+  DAG.ComputeMaskedBits(Op1, Op1Zero, Op1One, Depth);
+
+  KnownZero = Op0Zero & Op1Zero;
+  KnownOne = Op0One & Op1One;
+}
+
+void AMDGPUTargetLowering::computeMaskedBitsForTargetNode(
+  const SDValue Op,
+  APInt &KnownZero,
+  APInt &KnownOne,
+  const SelectionDAG &DAG,
+  unsigned Depth) const {
+
+  KnownZero = KnownOne = APInt(KnownOne.getBitWidth(), 0); // Don't know anything.
+  unsigned Opc = Op.getOpcode();
+  switch (Opc) {
+  case ISD::INTRINSIC_WO_CHAIN: {
+    // FIXME: The intrinsic should just use the node.
+    switch (cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue()) {
+    case AMDGPUIntrinsic::AMDGPU_imax:
+    case AMDGPUIntrinsic::AMDGPU_umax:
+    case AMDGPUIntrinsic::AMDGPU_imin:
+    case AMDGPUIntrinsic::AMDGPU_umin:
+      computeMaskedBitsForMinMax(Op.getOperand(1), Op.getOperand(2),
+                                 KnownZero, KnownOne, DAG, Depth);
+      break;
+    default:
+      break;
+    }
+
+    break;
+  }
+  case AMDGPUISD::SMAX:
+  case AMDGPUISD::UMAX:
+  case AMDGPUISD::SMIN:
+  case AMDGPUISD::UMIN:
+    computeMaskedBitsForMinMax(Op.getOperand(0), Op.getOperand(1),
+                               KnownZero, KnownOne, DAG, Depth);
+    break;
+  default:
+    break;
   }
 }

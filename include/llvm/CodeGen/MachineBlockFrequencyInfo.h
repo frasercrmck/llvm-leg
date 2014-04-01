@@ -28,9 +28,9 @@ class BlockFrequencyImpl;
 /// MachineBlockFrequencyInfo pass uses BlockFrequencyImpl implementation to estimate
 /// machine basic block frequencies.
 class MachineBlockFrequencyInfo : public MachineFunctionPass {
-
-  BlockFrequencyImpl<MachineBasicBlock, MachineFunction,
-                     MachineBranchProbabilityInfo> *MBFI;
+  typedef BlockFrequencyImpl<MachineBasicBlock, MachineFunction,
+                             MachineBranchProbabilityInfo> ImplType;
+  std::unique_ptr<ImplType> MBFI;
 
 public:
   static char ID;
@@ -43,6 +43,8 @@ public:
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
+  void releaseMemory() override;
+
   /// getblockFreq - Return block frequency. Return 0 if we don't have the
   /// information. Please note that initial frequency is equal to 1024. It means
   /// that we should not rely on the value itself, but only on the comparison to
@@ -50,7 +52,7 @@ public:
   ///
   BlockFrequency getBlockFreq(const MachineBasicBlock *MBB) const;
 
-  MachineFunction *getFunction() const;
+  const MachineFunction *getFunction() const;
   void view() const;
 
   // Print the block frequency Freq to OS using the current functions entry

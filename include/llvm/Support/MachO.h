@@ -128,7 +128,8 @@ namespace llvm {
       LC_SOURCE_VERSION       = 0x0000002Au,
       LC_DYLIB_CODE_SIGN_DRS  = 0x0000002Bu,
       //                        0x0000002Cu,
-      LC_LINKER_OPTIONS       = 0x0000002Du
+      LC_LINKER_OPTIONS       = 0x0000002Du,
+      LC_LINKER_OPTIMIZATION_HINT = 0x0000002Eu
     };
 
     enum : uint32_t {
@@ -406,6 +407,34 @@ namespace llvm {
       ARM_THUMB_32BIT_BRANCH       = 7, // obsolete
       ARM_RELOC_HALF               = 8,
       ARM_RELOC_HALF_SECTDIFF      = 9,
+
+      // Constant values for the r_type field in an ARM64 architecture
+      // llvm::MachO::relocation_info or llvm::MachO::scattered_relocation_info
+      // structure.
+
+      // For pointers.
+      ARM64_RELOC_UNSIGNED            = 0,
+      // Must be followed by an ARM64_RELOC_UNSIGNED
+      ARM64_RELOC_SUBTRACTOR          = 1,
+      // A B/BL instruction with 26-bit displacement.
+      ARM64_RELOC_BRANCH26            = 2,
+      // PC-rel distance to page of target.
+      ARM64_RELOC_PAGE21              = 3,
+      // Offset within page, scaled by r_length.
+      ARM64_RELOC_PAGEOFF12           = 4,
+      // PC-rel distance to page of GOT slot.
+      ARM64_RELOC_GOT_LOAD_PAGE21     = 5,
+      // Offset within page of GOT slot, scaled by r_length.
+      ARM64_RELOC_GOT_LOAD_PAGEOFF12  = 6,
+      // For pointers to GOT slots.
+      ARM64_RELOC_POINTER_TO_GOT      = 7,
+      // PC-rel distance to page of TLVP slot.
+      ARM64_RELOC_TLVP_LOAD_PAGE21    = 8,
+      // Offset within page of TLVP slot, scaled by r_length.
+      ARM64_RELOC_TLVP_LOAD_PAGEOFF12 = 9,
+      // Must be followed by ARM64_RELOC_PAGE21 or ARM64_RELOC_PAGEOFF12.
+      ARM64_RELOC_ADDEND              = 10,
+
 
       // Constant values for the r_type field in an x86_64 architecture
       // llvm::MachO::relocation_info or llvm::MachO::scattered_relocation_info
@@ -913,6 +942,7 @@ namespace llvm {
    /* CPU_TYPE_MIPS      = 8, */
       CPU_TYPE_MC98000   = 10, // Old Motorola PowerPC
       CPU_TYPE_ARM       = 12,
+      CPU_TYPE_ARM64     = CPU_TYPE_ARM | CPU_ARCH_ABI64,
       CPU_TYPE_SPARC     = 14,
       CPU_TYPE_POWERPC   = 18,
       CPU_TYPE_POWERPC64 = CPU_TYPE_POWERPC | CPU_ARCH_ABI64
@@ -984,6 +1014,10 @@ namespace llvm {
       CPU_SUBTYPE_ARM_V6M     = 14,
       CPU_SUBTYPE_ARM_V7M     = 15,
       CPU_SUBTYPE_ARM_V7EM    = 16
+    };
+
+    enum CPUSubTypeARM64 {
+      CPU_SUBTYPE_ARM64_ALL   = 0
     };
 
     enum CPUSubTypeSPARC {

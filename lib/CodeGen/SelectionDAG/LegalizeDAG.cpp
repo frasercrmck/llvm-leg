@@ -13,6 +13,7 @@
 
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/Analysis.h"
@@ -1394,10 +1395,39 @@ SDValue SelectionDAGLegalize::ExpandExtractFromVectorThroughStack(SDValue Op) {
   SDValue Vec = Op.getOperand(0);
   SDValue Idx = Op.getOperand(1);
   SDLoc dl(Op);
-  // Store the value to a temporary stack slot, then LOAD the returned part.
-  SDValue StackPtr = DAG.CreateStackTemporary(Vec.getValueType());
-  SDValue Ch = DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr,
-                            MachinePointerInfo(), false, false, 0);
+
+  // Before we generate a new store to a temporary stack slot, see if there is
+  // already one that we can use. There often is because when we scalarize
+  // vector operations (using SelectionDAG::UnrollVectorOp for example) a whole
+  // series of EXTRACT_VECTOR_ELT nodes are generated, one for each element in
+  // the vector. If all are expanded here, we don't want one store per vector
+  // element.
+  SDValue StackPtr, Ch;
+  for (SDNode::use_iterator UI = Vec.getNode()->use_begin(),
+       UE = Vec.getNode()->use_end(); UI != UE; ++UI) {
+    SDNode *User = *UI;
+    if (StoreSDNode *ST = dyn_cast<StoreSDNode>(User)) {
+      if (ST->isIndexed() || ST->isTruncatingStore() ||
+          ST->getValue() != Vec)
+        continue;
+
+      // Make sure that nothing else could have stored into the destination of
+      // this store.
+      if (!ST->getChain().reachesChainWithoutSideEffects(DAG.getEntryNode()))
+        continue;
+
+      StackPtr = ST->getBasePtr();
+      Ch = SDValue(ST, 0);
+      break;
+    }
+  }
+
+  if (!Ch.getNode()) {
+    // Store the value to a temporary stack slot, then LOAD the returned part.
+    StackPtr = DAG.CreateStackTemporary(Vec.getValueType());
+    Ch = DAG.getStore(DAG.getEntryNode(), dl, Vec, StackPtr,
+                      MachinePointerInfo(), false, false, 0);
+  }
 
   // Add the offset to the index.
   unsigned EltSize =
@@ -1786,6 +1816,98 @@ SDValue SelectionDAGLegalize::ExpandSCALAR_TO_VECTOR(SDNode *Node) {
                      false, false, false, 0);
 }
 
+static bool
+ExpandBVWithShuffles(SDNode *Node, SelectionDAG &DAG,
+                     const TargetLowering &TLI, SDValue &Res) {
+  unsigned NumElems = Node->getNumOperands();
+  SDLoc dl(Node);
+  EVT VT = Node->getValueType(0);
+
+  // Try to group the scalars into pairs, shuffle the pairs together, then
+  // shuffle the pairs of pairs together, etc. until the vector has
+  // been built. This will work only if all of the necessary shuffle masks
+  // are legal.
+
+  // We do this in two phases; first to check the legality of the shuffles,
+  // and next, assuming that all shuffles are legal, to create the new nodes.
+  for (int Phase = 0; Phase < 2; ++Phase) {
+    SmallVector<std::pair<SDValue, SmallVector<int, 16> >, 16> IntermedVals,
+                                                               NewIntermedVals;
+    for (unsigned i = 0; i < NumElems; ++i) {
+      SDValue V = Node->getOperand(i);
+      if (V.getOpcode() == ISD::UNDEF)
+        continue;
+
+      SDValue Vec;
+      if (Phase)
+        Vec = DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, VT, V);
+      IntermedVals.push_back(std::make_pair(Vec, SmallVector<int, 16>(1, i)));
+    }
+
+    while (IntermedVals.size() > 2) {
+      NewIntermedVals.clear();
+      for (unsigned i = 0, e = (IntermedVals.size() & ~1u); i < e; i += 2) {
+        // This vector and the next vector are shuffled together (simply to
+        // append the one to the other).
+        SmallVector<int, 16> ShuffleVec(NumElems, -1);
+
+        SmallVector<int, 16> FinalIndices;
+        FinalIndices.reserve(IntermedVals[i].second.size() +
+                             IntermedVals[i+1].second.size());
+        
+        int k = 0;
+        for (unsigned j = 0, f = IntermedVals[i].second.size(); j != f;
+             ++j, ++k) {
+          ShuffleVec[k] = j;
+          FinalIndices.push_back(IntermedVals[i].second[j]);
+        }
+        for (unsigned j = 0, f = IntermedVals[i+1].second.size(); j != f;
+             ++j, ++k) {
+          ShuffleVec[k] = NumElems + j;
+          FinalIndices.push_back(IntermedVals[i+1].second[j]);
+        }
+
+        SDValue Shuffle;
+        if (Phase)
+          Shuffle = DAG.getVectorShuffle(VT, dl, IntermedVals[i].first,
+                                         IntermedVals[i+1].first,
+                                         ShuffleVec.data());
+        else if (!TLI.isShuffleMaskLegal(ShuffleVec, VT))
+          return false;
+        NewIntermedVals.push_back(std::make_pair(Shuffle, FinalIndices));
+      }
+
+      // If we had an odd number of defined values, then append the last
+      // element to the array of new vectors.
+      if ((IntermedVals.size() & 1) != 0)
+        NewIntermedVals.push_back(IntermedVals.back());
+
+      IntermedVals.swap(NewIntermedVals);
+    }
+
+    assert(IntermedVals.size() <= 2 && IntermedVals.size() > 0 &&
+           "Invalid number of intermediate vectors");
+    SDValue Vec1 = IntermedVals[0].first;
+    SDValue Vec2;
+    if (IntermedVals.size() > 1)
+      Vec2 = IntermedVals[1].first;
+    else if (Phase)
+      Vec2 = DAG.getUNDEF(VT);
+
+    SmallVector<int, 16> ShuffleVec(NumElems, -1);
+    for (unsigned i = 0, e = IntermedVals[0].second.size(); i != e; ++i)
+      ShuffleVec[IntermedVals[0].second[i]] = i;
+    for (unsigned i = 0, e = IntermedVals[1].second.size(); i != e; ++i)
+      ShuffleVec[IntermedVals[1].second[i]] = NumElems + i;
+
+    if (Phase)
+      Res = DAG.getVectorShuffle(VT, dl, Vec1, Vec2, ShuffleVec.data());
+    else if (!TLI.isShuffleMaskLegal(ShuffleVec, VT))
+      return false;
+  }
+
+  return true;
+}
 
 /// ExpandBUILD_VECTOR - Expand a BUILD_VECTOR node on targets that don't
 /// support the operation, but do support the resultant vector type.
@@ -1860,25 +1982,38 @@ SDValue SelectionDAGLegalize::ExpandBUILD_VECTOR(SDNode *Node) {
                        false, false, false, Alignment);
   }
 
-  if (!MoreThanTwoValues) {
-    SmallVector<int, 8> ShuffleVec(NumElems, -1);
-    for (unsigned i = 0; i < NumElems; ++i) {
-      SDValue V = Node->getOperand(i);
-      if (V.getOpcode() == ISD::UNDEF)
-        continue;
-      ShuffleVec[i] = V == Value1 ? 0 : NumElems;
-    }
-    if (TLI.isShuffleMaskLegal(ShuffleVec, Node->getValueType(0))) {
-      // Get the splatted value into the low element of a vector register.
-      SDValue Vec1 = DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, VT, Value1);
-      SDValue Vec2;
-      if (Value2.getNode())
-        Vec2 = DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, VT, Value2);
-      else
-        Vec2 = DAG.getUNDEF(VT);
+  SmallSet<SDValue, 16> DefinedValues;
+  for (unsigned i = 0; i < NumElems; ++i) {
+    if (Node->getOperand(i).getOpcode() == ISD::UNDEF)
+      continue;
+    DefinedValues.insert(Node->getOperand(i));
+  }
 
-      // Return shuffle(LowValVec, undef, <0,0,0,0>)
-      return DAG.getVectorShuffle(VT, dl, Vec1, Vec2, ShuffleVec.data());
+  if (TLI.shouldExpandBuildVectorWithShuffles(VT, DefinedValues.size())) {
+    if (!MoreThanTwoValues) {
+      SmallVector<int, 8> ShuffleVec(NumElems, -1);
+      for (unsigned i = 0; i < NumElems; ++i) {
+        SDValue V = Node->getOperand(i);
+        if (V.getOpcode() == ISD::UNDEF)
+          continue;
+        ShuffleVec[i] = V == Value1 ? 0 : NumElems;
+      }
+      if (TLI.isShuffleMaskLegal(ShuffleVec, Node->getValueType(0))) {
+        // Get the splatted value into the low element of a vector register.
+        SDValue Vec1 = DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, VT, Value1);
+        SDValue Vec2;
+        if (Value2.getNode())
+          Vec2 = DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, VT, Value2);
+        else
+          Vec2 = DAG.getUNDEF(VT);
+
+        // Return shuffle(LowValVec, undef, <0,0,0,0>)
+        return DAG.getVectorShuffle(VT, dl, Vec1, Vec2, ShuffleVec.data());
+      }
+    } else {
+      SDValue Res;
+      if (ExpandBVWithShuffles(Node, DAG, TLI, Res))
+        return Res;
     }
   }
 

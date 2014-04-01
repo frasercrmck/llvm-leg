@@ -19,6 +19,7 @@
 #include "llvm/MC/MCRelocationInfo.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/DataTypes.h"
+#include <cassert>
 #include <memory>
 
 namespace llvm {
@@ -46,7 +47,10 @@ protected:
 
 public:
   /// \brief Construct an MCSymbolizer, taking ownership of \p RelInfo.
-  MCSymbolizer(MCContext &Ctx, std::unique_ptr<MCRelocationInfo> &RelInfo);
+  MCSymbolizer(MCContext &Ctx, std::unique_ptr<MCRelocationInfo> RelInfo)
+    : Ctx(Ctx), RelInfo(std::move(RelInfo)) {
+  }
+
   virtual ~MCSymbolizer();
 
   /// \brief Try to add a symbolic operand instead of \p Value to the MCInst.

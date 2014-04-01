@@ -84,34 +84,31 @@ class DebugLocEntry {
   // The compile unit to which this location entry is referenced by.
   const DwarfCompileUnit *Unit;
 
-  // Whether this location has been merged.
-  bool Merged;
-
 public:
-  DebugLocEntry() : Begin(0), End(0), Variable(0), Unit(0), Merged(false) {
+  DebugLocEntry() : Begin(0), End(0), Variable(0), Unit(0) {
     Constants.Int = 0;
   }
   DebugLocEntry(const MCSymbol *B, const MCSymbol *E, MachineLocation &L,
                 const MDNode *V, const DwarfCompileUnit *U)
-      : Begin(B), End(E), Loc(L), Variable(V), Unit(U), Merged(false) {
+      : Begin(B), End(E), Loc(L), Variable(V), Unit(U) {
     Constants.Int = 0;
     EntryKind = E_Location;
   }
   DebugLocEntry(const MCSymbol *B, const MCSymbol *E, int64_t i,
                 const DwarfCompileUnit *U)
-      : Begin(B), End(E), Variable(0), Unit(U), Merged(false) {
+      : Begin(B), End(E), Variable(0), Unit(U) {
     Constants.Int = i;
     EntryKind = E_Integer;
   }
   DebugLocEntry(const MCSymbol *B, const MCSymbol *E, const ConstantFP *FPtr,
                 const DwarfCompileUnit *U)
-      : Begin(B), End(E), Variable(0), Unit(U), Merged(false) {
+      : Begin(B), End(E), Variable(0), Unit(U) {
     Constants.CFP = FPtr;
     EntryKind = E_ConstantFP;
   }
   DebugLocEntry(const MCSymbol *B, const MCSymbol *E, const ConstantInt *IPtr,
                 const DwarfCompileUnit *U)
-      : Begin(B), End(E), Variable(0), Unit(U), Merged(false) {
+      : Begin(B), End(E), Variable(0), Unit(U) {
     Constants.CIP = IPtr;
     EntryKind = E_ConstantInt;
   }
@@ -119,12 +116,11 @@ public:
   /// \brief Empty entries are also used as a trigger to emit temp label. Such
   /// labels are referenced is used to find debug_loc offset for a given DIE.
   bool isEmpty() const { return Begin == 0 && End == 0; }
-  bool isMerged() const { return Merged; }
-  void Merge(DebugLocEntry *Next) {
-    if (!(Begin && Loc == Next->Loc && End == Next->Begin))
-      return;
-    Next->Begin = Begin;
-    Merged = true;
+  bool Merge(const DebugLocEntry &Next) {
+    if (!(Begin && Loc == Next.Loc && End == Next.Begin))
+      return false;
+    End = Next.End;
+    return true;
   }
   bool isLocation() const { return EntryKind == E_Location; }
   bool isInt() const { return EntryKind == E_Integer; }
@@ -271,8 +267,7 @@ public:
 
   /// \brief Emit all of the units to the section listed with the given
   /// abbreviation section.
-  void emitUnits(DwarfDebug *DD, const MCSection *ASection,
-                 const MCSymbol *ASectionSym);
+  void emitUnits(DwarfDebug *DD, const MCSymbol *ASectionSym);
 
   /// \brief Emit a set of abbreviations to the specific section.
   void emitAbbrevs(const MCSection *);
@@ -371,7 +366,7 @@ class DwarfDebug : public AsmPrinterHandler {
   DenseMap<const MDNode *, DbgVariable *> AbstractVariables;
 
   // Collection of DebugLocEntry.
-  SmallVector<DebugLocEntry, 4> DotDebugLocEntries;
+  SmallVector<SmallVector<DebugLocEntry, 4>, 4> DotDebugLocEntries;
 
   // Collection of subprogram DIEs that are marked (at the end of the module)
   // as DW_AT_inline.
@@ -768,13 +763,17 @@ public:
   const DwarfCompileUnit *getPrevCU() const { return PrevCU; }
 
   /// Returns the entries for the .debug_loc section.
-  const SmallVectorImpl<DebugLocEntry> &getDebugLocEntries() const {
+  const SmallVectorImpl<SmallVector<DebugLocEntry, 4>> &
+  getDebugLocEntries() const {
     return DotDebugLocEntries;
   }
 
   /// \brief Emit an entry for the debug loc section. This can be used to
   /// handle an entry that's going to be emitted into the debug loc section.
   void emitDebugLocEntry(ByteStreamer &Streamer, const DebugLocEntry &Entry);
+
+  /// Emit the location for a debug loc entry, including the size header.
+  void emitDebugLocEntryLocation(const DebugLocEntry &Entry);
 
   /// Find the MDNode for the given reference.
   template <typename T> T resolve(DIRef<T> Ref) const {

@@ -28,9 +28,9 @@ public:
   virtual ~AArch64ELFObjectWriter();
 
 protected:
-  virtual unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                                bool IsPCRel, bool IsRelocWithSymbol,
-                                int64_t Addend) const;
+  unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
+                        bool IsPCRel) const override;
+
 private:
 };
 }
@@ -45,9 +45,7 @@ AArch64ELFObjectWriter::~AArch64ELFObjectWriter()
 
 unsigned AArch64ELFObjectWriter::GetRelocType(const MCValue &Target,
                                               const MCFixup &Fixup,
-                                              bool IsPCRel,
-                                              bool IsRelocWithSymbol,
-                                              int64_t Addend) const {
+                                              bool IsPCRel) const {
   unsigned Type;
   if (IsPCRel) {
     switch ((unsigned)Fixup.getKind()) {

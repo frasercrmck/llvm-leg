@@ -22,6 +22,9 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
   IsFunctionEHFrameSymbolPrivate = false;
   SupportsWeakOmittedEHFrame = false;
 
+  if (T.isOSDarwin() && T.getArch() == Triple::arm64)
+    SupportsCompactUnwindWithoutEHFrame = true;
+
   PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel
     | dwarf::DW_EH_PE_sdata4;
   LSDAEncoding = FDEEncoding = FDECFIEncoding = dwarf::DW_EH_PE_pcrel;
@@ -146,7 +149,8 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
 
   COFFDebugSymbolsSection = 0;
 
-  if (T.isMacOSX() && !T.isMacOSXVersionLT(10, 6)) {
+  if ((T.isMacOSX() && !T.isMacOSXVersionLT(10, 6)) ||
+      (T.isOSDarwin() && T.getArch() == Triple::arm64)) {
     CompactUnwindSection =
       Ctx->getMachOSection("__LD", "__compact_unwind",
                            MachO::S_ATTR_DEBUG,
@@ -154,6 +158,8 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
 
     if (T.getArch() == Triple::x86_64 || T.getArch() == Triple::x86)
       CompactUnwindDwarfEHFrameOnly = 0x04000000;
+    else if (T.getArch() == Triple::arm64)
+      CompactUnwindDwarfEHFrameOnly = 0x03000000;
   }
 
   // Debug Information.
@@ -283,7 +289,8 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
       TTypeEncoding = (CMModel == CodeModel::Small)
         ? dwarf::DW_EH_PE_udata4 : dwarf::DW_EH_PE_absptr;
     }
-  }  else if (T.getArch() ==  Triple::aarch64) {
+  }  else if (T.getArch() == Triple::aarch64 ||
+              T.getArch() == Triple::aarch64_be ) {
     // The small model guarantees static code/data size < 4GB, but not where it
     // will be in memory. Most of these could end up >2GB away so even a signed
     // pc-relative 32-bit address is insufficient, theoretically.
@@ -565,7 +572,7 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                         COFF::IMAGE_SCN_MEM_READ,
                         SectionKind::getReadOnly());
-  if (T.getOS() == Triple::Win32) {
+  if (T.isKnownWindowsMSVCEnvironment()) {
     StaticCtorSection =
       Ctx->getCOFFSection(".CRT$XCU",
                           COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
@@ -581,7 +588,7 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
   }
 
 
-  if (T.getOS() == Triple::Win32) {
+  if (T.isKnownWindowsMSVCEnvironment()) {
     StaticDtorSection =
       Ctx->getCOFFSection(".CRT$XTX",
                           COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
@@ -679,6 +686,33 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         COFF::IMAGE_SCN_MEM_DISCARDABLE |
                         COFF::IMAGE_SCN_MEM_READ,
                         SectionKind::getMetadata());
+  DwarfInfoDWOSection =
+      Ctx->getCOFFSection(".debug_info.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                                COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfAbbrevDWOSection =
+      Ctx->getCOFFSection(".debug_abbrev.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                                  COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfStrDWOSection =
+      Ctx->getCOFFSection(".debug_str.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                               COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfLineDWOSection =
+      Ctx->getCOFFSection(".debug_line.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                                COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfLocDWOSection =
+      Ctx->getCOFFSection(".debug_loc.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                               COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfStrOffDWOSection =
+      Ctx->getCOFFSection(".debug_str_offsets.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                                  COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfAddrSection = Ctx->getCOFFSection(
+      ".debug_addr", COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
 
   DrectveSection =
     Ctx->getCOFFSection(".drectve",
@@ -715,6 +749,7 @@ void MCObjectFileInfo::InitMCObjectFileInfo(StringRef TT, Reloc::Model relocm,
   CommDirectiveSupportsAlignment = true;
   SupportsWeakOmittedEHFrame = true;
   IsFunctionEHFrameSymbolPrivate = true;
+  SupportsCompactUnwindWithoutEHFrame = false;
 
   PersonalityEncoding = LSDAEncoding = FDEEncoding = FDECFIEncoding =
     TTypeEncoding = dwarf::DW_EH_PE_absptr;
@@ -734,6 +769,7 @@ void MCObjectFileInfo::InitMCObjectFileInfo(StringRef TT, Reloc::Model relocm,
   // cellspu-apple-darwin. Perhaps we should fix in Triple?
   if ((Arch == Triple::x86 || Arch == Triple::x86_64 ||
        Arch == Triple::arm || Arch == Triple::thumb ||
+       Arch == Triple::arm64 ||
        Arch == Triple::ppc || Arch == Triple::ppc64 ||
        Arch == Triple::UnknownArch) &&
       (T.isOSDarwin() || T.isOSBinFormatMachO())) {
