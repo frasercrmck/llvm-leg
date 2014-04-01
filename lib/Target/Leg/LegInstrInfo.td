@@ -71,7 +71,8 @@ def MUL  : MulInst<0b0000000, (outs GRRegs:$dst),
 def MLA  : MulInst<0b0000001, (outs GRRegs:$dst),
                    (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
                    "mla $dst, $src1, $src2, $src3",
-                   [/* No pattern */]> {
+                   [(set i32:$dst, (add (mul i32:$src1, i32:$src2),
+                                         i32:$src3))]> {
   bits<4> dst;
   bits<4> src1;
   bits<4> src2;
