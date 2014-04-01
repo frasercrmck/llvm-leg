@@ -56,14 +56,12 @@ unsigned LegELFObjectWriter::GetRelocType(const MCValue &Target,
 }
 
 LegELFObjectWriter::LegELFObjectWriter(uint8_t OSABI)
-  : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI,
-                            ELF::EM_LEG,
-                            /*HasRelocationAddend*/ false) {}
+    : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI, ELF::EM_LEG,
+                              /*HasRelocationAddend*/ false) {}
 
 LegELFObjectWriter::~LegELFObjectWriter() {}
 
-MCObjectWriter *llvm::createLegELFObjectWriter(raw_ostream &OS,
-                                               uint8_t OSABI) {
+MCObjectWriter *llvm::createLegELFObjectWriter(raw_ostream &OS, uint8_t OSABI) {
   MCELFObjectTargetWriter *MOTW = new LegELFObjectWriter(OSABI);
-  return createELFObjectWriter(MOTW, OS,  /*IsLittleEndian=*/true);
+  return createELFObjectWriter(MOTW, OS, /*IsLittleEndian=*/true);
 }

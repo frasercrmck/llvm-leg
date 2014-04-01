@@ -16,7 +16,6 @@
 
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include <vector>
 
 namespace llvm {
 
@@ -28,9 +27,8 @@ class Function;
 class LegFunctionInfo : public MachineFunctionInfo {
 public:
   LegFunctionInfo() {}
-  
+
   ~LegFunctionInfo() {}
-  
 };
 } // End llvm namespace
 

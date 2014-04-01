@@ -14,11 +14,11 @@
 #include "LegMCTargetDesc.h"
 #include "InstPrinter/LegInstPrinter.h"
 #include "LegMCAsmInfo.h"
-#include "LegTargetStreamer.h"
 #include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -82,33 +82,13 @@ createLegMCInstPrinter(const Target &T, unsigned SyntaxVariant,
   return new LegInstPrinter(MAI, MII, MRI);
 }
 
-LegTargetStreamer::LegTargetStreamer(MCStreamer &S) : MCTargetStreamer(S) {}
-LegTargetStreamer::~LegTargetStreamer() {}
-
-namespace {
-
-class LegTargetAsmStreamer : public LegTargetStreamer {
-  formatted_raw_ostream &OS;
-
-public:
-  LegTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
-};
-
-LegTargetAsmStreamer::LegTargetAsmStreamer(MCStreamer &S,
-                                           formatted_raw_ostream &OS)
-    : LegTargetStreamer(S), OS(OS) {}
-}
-
 static MCStreamer *
-createLegMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
+createMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
                        bool isVerboseAsm, bool useCFI, bool useDwarfDirectory,
                        MCInstPrinter *InstPrint, MCCodeEmitter *CE,
                        MCAsmBackend *TAB, bool ShowInst) {
-  MCStreamer *S =
-      llvm::createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI, useDwarfDirectory,
-                              InstPrint, CE, TAB, ShowInst);
-  new LegTargetAsmStreamer(*S, OS);
-  return S;
+  return createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI, useDwarfDirectory,
+                           InstPrint, CE, TAB, ShowInst);
 }
 
 static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
@@ -118,7 +98,6 @@ static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
                                     const MCSubtargetInfo &STI,
                                     bool RelaxAll,
                                     bool NoExecStack) {
-  Triple TheTriple(TT);
   return createELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
 }
 
@@ -147,8 +126,8 @@ extern "C" void LLVMInitializeLegTargetMC() {
   // Register the ASM Backend.
   TargetRegistry::RegisterMCAsmBackend(TheLegTarget, createLegAsmBackend);
 
-  // Register the MCAsmStreamer
-  TargetRegistry::RegisterAsmStreamer(TheLegTarget, createLegMCAsmStreamer);
+  // Register the assembly streamer.
+  TargetRegistry::RegisterAsmStreamer(TheLegTarget, createMCAsmStreamer);
 
   // Register the object streamer.
   TargetRegistry::RegisterMCObjectStreamer(TheLegTarget, createMCStreamer);

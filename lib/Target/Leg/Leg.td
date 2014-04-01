@@ -32,9 +32,9 @@ def LegInstrInfo : InstrInfo;
 //===----------------------------------------------------------------------===//
 
 class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, NoItineraries, Features>;
+    : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"generic",      []>;
+def : Proc<"generic", []>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing

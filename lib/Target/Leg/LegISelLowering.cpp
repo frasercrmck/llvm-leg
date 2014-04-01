@@ -45,6 +45,7 @@ const char *LegTargetLowering::getTargetNodeName(unsigned Opcode) const {
     return NULL;
   case LegISD::RET_FLAG: return "RetFlag";
   case LegISD::LOAD_SYM: return "LOAD_SYM";
+  case LegISD::CALL:     return "CALL";
   }
 }
 
@@ -60,6 +61,8 @@ LegTargetLowering::LegTargetLowering(LegTargetMachine &LegTM)
   setStackPointerRegisterToSaveRestore(Leg::SP);
 
   setSchedulingPreference(Sched::Source);
+
+  // Nodes that require custom lowering
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
 }
 
@@ -72,13 +75,12 @@ SDValue LegTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-
 SDValue LegTargetLowering::LowerGlobalAddress(SDValue Op,
                                               SelectionDAG &DAG) const {
   EVT VT = Op.getValueType();
   GlobalAddressSDNode *GlobalAddr = cast<GlobalAddressSDNode>(Op.getNode());
-  SDValue TargetAddr = DAG.getTargetGlobalAddress(GlobalAddr->getGlobal(), Op,
-                                                  MVT::i32);
+  SDValue TargetAddr =
+      DAG.getTargetGlobalAddress(GlobalAddr->getGlobal(), Op, MVT::i32);
   return DAG.getNode(LegISD::LOAD_SYM, Op, VT, TargetAddr);
 }
 
@@ -106,24 +108,24 @@ void LegTargetLowering::ReplaceNodeResults(SDNode *N,
 /// Leg call implementation
 SDValue LegTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                      SmallVectorImpl<SDValue> &InVals) const {
-  SelectionDAG &DAG                     = CLI.DAG;
-  SDLoc &dl                             = CLI.DL;
+  SelectionDAG &DAG = CLI.DAG;
+  SDLoc &dl = CLI.DL;
   SmallVectorImpl<ISD::OutputArg> &Outs = CLI.Outs;
-  SmallVectorImpl<SDValue> &OutVals     = CLI.OutVals;
-  SmallVectorImpl<ISD::InputArg> &Ins   = CLI.Ins;
-  SDValue Chain                         = CLI.Chain;
-  SDValue Callee                        = CLI.Callee;
-  bool &isTailCall                      = CLI.IsTailCall;
-  CallingConv::ID CallConv              = CLI.CallConv;
-  bool isVarArg                         = CLI.IsVarArg;
+  SmallVectorImpl<SDValue> &OutVals = CLI.OutVals;
+  SmallVectorImpl<ISD::InputArg> &Ins = CLI.Ins;
+  SDValue Chain = CLI.Chain;
+  SDValue Callee = CLI.Callee;
+  bool &isTailCall = CLI.IsTailCall;
+  CallingConv::ID CallConv = CLI.CallConv;
+  bool isVarArg = CLI.IsVarArg;
 
   if (isVarArg || isTailCall)
     llvm_unreachable("Unimplemented");
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 DAG.getTarget(), ArgLocs, *DAG.getContext());
+  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), DAG.getTarget(),
+                 ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_Leg);
 
   // Get the size of the outgoing arguments stack space requirement.
@@ -186,7 +188,7 @@ SDValue LegTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Add a register mask operand representing the call-preserved registers.
   const uint32_t *Mask;
   const TargetRegisterInfo *TRI = getTargetMachine().getRegisterInfo();
-  const LegRegisterInfo *LRI = static_cast<const LegRegisterInfo*>(TRI);
+  const LegRegisterInfo *LRI = static_cast<const LegRegisterInfo *>(TRI);
   Mask = LRI->getCallPreservedMask(CallConv);
 
   assert(Mask && "Missing call preserved mask for calling convention");
@@ -325,18 +327,18 @@ LegTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     CCValAssign &VA = RVLocs[i];
     assert(VA.isRegLoc() && "Can only return in registers!");
 
-    Chain = DAG.getCopyToReg(Chain, dl, VA.getLocReg(),
-                             OutVals[i], Flag);
+    Chain = DAG.getCopyToReg(Chain, dl, VA.getLocReg(), OutVals[i], Flag);
 
     Flag = Chain.getValue(1);
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  RetOps[0] = Chain;  // Update chain.
+  RetOps[0] = Chain; // Update chain.
 
   // Add the flag if we have it.
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  return DAG.getNode(LegISD::RET_FLAG, dl, MVT::Other, &RetOps[0], RetOps.size());
+  return DAG.getNode(LegISD::RET_FLAG, dl, MVT::Other, &RetOps[0],
+                     RetOps.size());
 }

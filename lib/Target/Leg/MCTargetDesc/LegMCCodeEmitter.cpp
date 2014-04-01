@@ -121,7 +121,6 @@ unsigned LegMCCodeEmitter::getMachineOpValue(const MCInst &MI,
   }
 
   Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
-
   return 0;
 }
 

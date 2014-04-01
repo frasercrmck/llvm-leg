@@ -33,16 +33,15 @@ namespace {
 class LegELFObjectWriter : public MCELFObjectTargetWriter {
 public:
   LegELFObjectWriter(uint8_t OSABI)
-    : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI, ELF::EM_LEG,
-                              /*HasRelocationAddend*/ false) {}
+      : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI, ELF::EM_LEG,
+                                /*HasRelocationAddend*/ false) {}
 };
 
 class LegAsmBackend : public MCAsmBackend {
-  bool isThumbMode;  // Currently emitting Thumb code.
 public:
   LegAsmBackend(const Target &T, const StringRef TT) : MCAsmBackend() {}
 
-  ~LegAsmBackend() { } 
+  ~LegAsmBackend() {}
 
   unsigned getNumFixupKinds() const override {
     return Leg::NumTargetFixupKinds;
@@ -54,8 +53,8 @@ public:
       // LegFixupKinds.h.
       //
       // Name                      Offset (bits) Size (bits)     Flags
-      { "fixup_leg_movt_hi16_pcrel",     0, 32, MCFixupKindInfo::FKF_IsPCRel },
-      { "fixup_leg_movw_lo16_pcrel",     0, 32, MCFixupKindInfo::FKF_IsPCRel },
+      { "fixup_leg_movt_hi16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
+      { "fixup_leg_movw_lo16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
     };
 
     if (Kind < FirstTargetFixupKind)
@@ -73,37 +72,29 @@ public:
                          MCValue &Target, uint64_t &Value,
                          bool &IsResolved) override;
 
-
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
                   uint64_t Value) const override;
 
-  bool mayNeedRelaxation(const MCInst &Inst) const override;
+  bool mayNeedRelaxation(const MCInst &Inst) const override { return false; }
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const override;
+                            const MCAsmLayout &Layout) const override {
+    return false;
+  }
 
   void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {}
 
   bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override {
-    if (Count == 0)
+    if (Count == 0) {
       return true;
+    }
     return false;
   }
 
   unsigned getPointerSize() const { return 4; }
 };
 } // end anonymous namespace
-
-bool LegAsmBackend::mayNeedRelaxation(const MCInst &Inst) const {
-  return false;
-}
-
-bool LegAsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
-                                         const MCRelaxableFragment *DF,
-                                         const MCAsmLayout &Layout) const {
-  return false;
-}
 
 static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
                                  MCContext *Ctx = NULL) {
@@ -169,6 +160,6 @@ MCAsmBackend *llvm::createLegAsmBackend(const Target &T,
                                         const MCRegisterInfo &MRI,
                                         StringRef TT, StringRef CPU) {
   Triple TheTriple(TT);
-  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(Triple(TT).getOS());
-  return new ELFLegAsmBackend(T, TT, OSABI);
+  const uint8_t ABI = MCELFObjectTargetWriter::getOSABI(Triple(TT).getOS());
+  return new ELFLegAsmBackend(T, TT, ABI);
 }

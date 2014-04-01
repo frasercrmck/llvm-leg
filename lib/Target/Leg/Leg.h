@@ -19,11 +19,11 @@
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
-  class TargetMachine;
-  class LegTargetMachine;
+class TargetMachine;
+class LegTargetMachine;
 
-  FunctionPass *createLegISelDag(LegTargetMachine &TM,
-                                 CodeGenOpt::Level OptLevel);
+FunctionPass *createLegISelDag(LegTargetMachine &TM,
+                               CodeGenOpt::Level OptLevel);
 } // end namespace llvm;
 
 #endif

@@ -13,13 +13,13 @@
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
-  class MCContext;
-  class MCInst;
-  class MCOperand;
-  class MachineInstr;
-  class MachineFunction;
-  class Mangler;
-  class AsmPrinter;
+class MCContext;
+class MCInst;
+class MCOperand;
+class MachineInstr;
+class MachineFunction;
+class Mangler;
+class AsmPrinter;
 
 /// \brief This class is used to lower an MachineInstr into an MCInst.
 class LLVM_LIBRARY_VISIBILITY LegMCInstLower {
@@ -27,11 +27,12 @@ class LLVM_LIBRARY_VISIBILITY LegMCInstLower {
   MCContext *Ctx;
   Mangler *Mang;
   AsmPrinter &Printer;
+
 public:
   LegMCInstLower(class AsmPrinter &asmprinter);
   void Initialize(Mangler *mang, MCContext *C);
   void Lower(const MachineInstr *MI, MCInst &OutMI) const;
-  MCOperand LowerOperand(const MachineOperand& MO, unsigned offset = 0) const;
+  MCOperand LowerOperand(const MachineOperand &MO, unsigned offset = 0) const;
 
 private:
   MCOperand LowerSymbolOperand(const MachineOperand &MO,

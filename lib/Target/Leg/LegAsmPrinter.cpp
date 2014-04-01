@@ -19,7 +19,6 @@
 #include "LegMCInstLower.h"
 #include "LegSubtarget.h"
 #include "LegTargetMachine.h"
-#include "LegTargetStreamer.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/AsmPrinter.h"
@@ -51,7 +50,6 @@ namespace {
 class LegAsmPrinter : public AsmPrinter {
   const LegSubtarget &Subtarget;
   LegMCInstLower MCInstLowering;
-  LegTargetStreamer &getTargetStreamer();
 
 public:
   explicit LegAsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
@@ -65,10 +63,6 @@ public:
   void EmitFunctionBodyStart();
 };
 } // end of anonymous namespace
-
-LegTargetStreamer &LegAsmPrinter::getTargetStreamer() {
-  return static_cast<LegTargetStreamer &>(*OutStreamer.getTargetStreamer());
-}
 
 void LegAsmPrinter::EmitFunctionBodyStart() {
   MCInstLowering.Initialize(Mang, &MF->getContext());
