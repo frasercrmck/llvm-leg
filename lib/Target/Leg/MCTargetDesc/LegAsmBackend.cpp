@@ -122,6 +122,8 @@ void LegAsmBackend::processFixupValue(const MCAssembler &Asm,
                                       const MCFragment *DF,
                                       const MCValue &Target, uint64_t &Value,
                                       bool &IsResolved) {
+  // We always have resolved fixups for now.
+  IsResolved = true;
   // At this point we'll ignore the value returned by adjustFixupValue as
   // we are only checking if the fixup can be applied correctly.
   (void)adjustFixupValue(Fixup, Value, &Asm.getContext());
