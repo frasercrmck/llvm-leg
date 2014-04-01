@@ -133,3 +133,8 @@ void LegInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   BuildMI(MBB, I, I->getDebugLoc(), get(Leg::LOAD), DestReg)
       .addFrameIndex(FrameIndex).addImm(0);
 }
+
+bool LegInstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const {
+  assert(0 && "Unimplemented");
+  return false;
+}

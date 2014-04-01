@@ -45,6 +45,7 @@ const char *LegTargetLowering::getTargetNodeName(unsigned Opcode) const {
     return NULL;
   case LegISD::RET_FLAG: return "RetFlag";
   case LegISD::LOAD_SYM: return "LOAD_SYM";
+  case LegISD::MOVEi32: return "MOVEi32";
   case LegISD::CALL:     return "CALL";
   }
 }

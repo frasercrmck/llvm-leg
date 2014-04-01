@@ -32,6 +32,8 @@ enum NodeType {
   RET_FLAG,
   // This loads the symbol (e.g. global address) into a register.
   LOAD_SYM,
+  // This loads a 32-bit immediate into a register.
+  MOVEi32,
   CALL,
 };
 }

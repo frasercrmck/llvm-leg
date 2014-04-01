@@ -111,6 +111,17 @@ def MOVWi16 : MOV<0b1000, "movw", (ins i32imm:$imm),
 def MOVTi16 : MOV<0b1010, "movt", (ins GRRegs:$src1, i32imm:$imm),
                   [/* No Pattern */]>;
 
+def MoveImm32Ty : SDTypeProfile<1, 1, [
+  SDTCisSameAs<0, 1>, SDTCisInt<0>
+]>;
+
+def movei32 : SDNode<"LegISD::MOVEi32", MoveImm32Ty>;
+
+def MOVi32 : InstLeg<(outs GRRegs:$dst), (ins i32imm:$src), "",
+                     [(set i32:$dst, (movei32 imm:$src))]> {
+  let isPseudo = 1;
+}
+
 def : Pattern<(i32 (load_sym tglobaladdr:$addr)),
               [(MOVTi16 (MOVWi16 $addr), $addr)]>;
 
