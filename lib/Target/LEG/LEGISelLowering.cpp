@@ -133,13 +133,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     CCValAssign &VA = ArgLocs[i];
     SDValue Arg = OutVals[realArgIdx];
 
-    // Promote the value if needed.
-    switch (VA.getLocInfo()) {
-    default:
-      llvm_unreachable("Unknown loc info!");
-    case CCValAssign::Full:
-      break;
-    }
+    // We only handle fully promoted arguments.
+    assert(VA.getLocInfo() == CCValAssign::Full && "Unhandled loc info");
 
     if (!VA.isRegLoc()) {
       llvm_unreachable("Only passing paramters via registers");
