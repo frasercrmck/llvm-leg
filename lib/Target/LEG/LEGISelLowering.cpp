@@ -85,17 +85,6 @@ SDValue LEGTargetLowering::LowerGlobalAddress(SDValue Op, SelectionDAG& DAG) con
   return DAG.getNode(LEGISD::LOAD_SYM, Op, VT, TargetAddr);
 }
 
-/// ReplaceNodeResults - Replace the results of node with an illegal result
-/// type with new values built out of custom code.
-void LEGTargetLowering::ReplaceNodeResults(SDNode *N,
-                                           SmallVectorImpl<SDValue> &Results,
-                                           SelectionDAG &DAG) const {
-  switch (N->getOpcode()) {
-  default:
-    llvm_unreachable("Don't know how to custom expand this!");
-  }
-}
-
 //===----------------------------------------------------------------------===//
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//
