@@ -171,7 +171,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   }
 
   // We only support calling global addresses.
-  assert(GlobalAddressSDNode *G == dyn_cast<GlobalAddressSDNode>(Callee));
+  GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
+  assert(G && "We only support the calling of global addresses");
 
   Callee = DAG.getGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
 
