@@ -42,11 +42,10 @@ MCOperand LEGMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
   case MachineOperand::MO_MachineBasicBlock:
     Symbol = MO.getMBB()->getSymbol();
     break;
-  case MachineOperand::MO_GlobalAddress: {
+  case MachineOperand::MO_GlobalAddress:
     Symbol = Printer.getSymbol(MO.getGlobal());
     Offset += MO.getOffset();
     break;
-  }
   case MachineOperand::MO_BlockAddress:
     Symbol = Printer.GetBlockAddressSymbol(MO.getBlockAddress());
     Offset += MO.getOffset();
