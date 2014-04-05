@@ -127,8 +127,7 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<std::pair<unsigned, SDValue>, 8> RegsToPass;
   SmallVector<SDValue, 8> MemOpChains;
 
-  // Walk the register/memloc assignments, inserting copies/loads.  In the case
-  // of tail call optimization, arguments are handled later.
+  // Walk the register/memloc assignments, inserting copies/loads.
   for (unsigned i = 0, realArgIdx = 0, e = ArgLocs.size(); i != e;
        ++i, ++realArgIdx) {
     CCValAssign &VA = ArgLocs[i];
