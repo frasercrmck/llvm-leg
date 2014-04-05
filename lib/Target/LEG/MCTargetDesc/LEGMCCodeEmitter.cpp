@@ -86,10 +86,10 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
                                              SmallVectorImpl<MCFixup> &Fixups,
                                              const MCSubtargetInfo &STI) const {
   if (MO.isReg()) {
-    unsigned Reg = MO.getReg();
-    unsigned RegNo = CTX.getRegisterInfo()->getEncodingValue(Reg);
-    return RegNo;
-  } else if (MO.isImm()) {
+    return CTX.getRegisterInfo()->getEncodingValue(MO.getReg());
+  }
+
+  if (MO.isImm()) {
     return static_cast<unsigned>(MO.getImm());
   }
 
