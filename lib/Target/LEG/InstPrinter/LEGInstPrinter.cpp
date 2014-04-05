@@ -47,7 +47,8 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
     SRE = dyn_cast<MCSymbolRefExpr>(Expr);
     assert(SRE && "Unexpected MCExpr type.");
   }
-  assert(SRE->getKind() == MCSymbolRefExpr::VK_None);
+  const MCSymbolRefExpr::VariantKind Kind = SRE->getKind();
+  assert(Kind == MCSymbolRefExpr::VK_LEG_LO || Kind == MCSymbolRefExpr::VK_LEG_HI);
 
   OS << SRE->getSymbol();
 

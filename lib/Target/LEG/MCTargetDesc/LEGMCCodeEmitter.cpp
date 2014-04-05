@@ -109,13 +109,12 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
   switch (cast<MCSymbolRefExpr>(Expr)->getKind()) {
   default:
     llvm_unreachable("Unknown fixup kind!");
-  case MCSymbolRefExpr::VK_None: {
-    // TODO: Hacky & not very clever - move this elsewhere
-    const unsigned Opc = MI.getOpcode();
-    assert((Opc == LEG::MOVTi16 || Opc == LEG::MOVWi16) &&
-           "Unhandled instruction");
-    FixupKind = Opc == LEG::MOVTi16 ? LEG::fixup_leg_movt_hi16_pcrel
-                                    : LEG::fixup_leg_movw_lo16_pcrel;
+  case MCSymbolRefExpr::VK_LEG_LO: {
+    FixupKind = LEG::fixup_leg_movw_lo16_pcrel;
+    break;
+  }
+  case MCSymbolRefExpr::VK_LEG_HI: {
+    FixupKind = LEG::fixup_leg_movt_hi16_pcrel;
     break;
   }
   }

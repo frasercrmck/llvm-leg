@@ -116,8 +116,6 @@ def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
   let isPseudo = 1;
 }
 
-def : Pattern<(i32 (load_sym tglobaladdr:$addr)),
-              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
 
 //===----------------------------------------------------------------------===//
 // Load/Store Instructions
@@ -158,10 +156,7 @@ let isCall = 1, Defs = [LR], Uses = [SP] in {
   }
 }
 
-def : Pattern<(i32 tglobaladdr:$addr),
-              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
-def : Pattern<(i32 texternalsym:$addr),
-              [(MOVTi16 (MOVWi16 $addr), $addr)]>;
+def : Pattern<(i32 (load_sym tglobaladdr:$addr)),  [(MOVi32 $addr)]>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions

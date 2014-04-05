@@ -76,8 +76,8 @@ SDValue LEGTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-SDValue LEGTargetLowering::LowerGlobalAddress(SDValue Op,
-                                              SelectionDAG &DAG) const {
+SDValue LEGTargetLowering::LowerGlobalAddress(SDValue Op, SelectionDAG& DAG) const
+{
   EVT VT = Op.getValueType();
   GlobalAddressSDNode *GlobalAddr = cast<GlobalAddressSDNode>(Op.getNode());
   SDValue TargetAddr =
@@ -170,11 +170,10 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     InFlag = Chain.getValue(1);
   }
 
-  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee))
-    Callee = DAG.getGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
+  // We only support calling global addresses.
+  assert(GlobalAddressSDNode *G == dyn_cast<GlobalAddressSDNode>(Callee));
 
-  if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee))
-    Callee = DAG.getExternalSymbol(E->getSymbol(), getPointerTy());
+  Callee = DAG.getGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
 
   std::vector<SDValue> Ops;
   Ops.push_back(Chain);

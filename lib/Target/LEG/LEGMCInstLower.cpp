@@ -13,6 +13,7 @@
 ///
 //===----------------------------------------------------------------------===//
 #include "LEGMCInstLower.h"
+#include "MCTargetDesc/LEGBaseInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -35,17 +36,17 @@ void LEGMCInstLower::Initialize(Mangler *M, MCContext *C) {
 MCOperand LEGMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
                                              MachineOperandType MOTy,
                                              unsigned Offset) const {
-  MCSymbolRefExpr::VariantKind Kind = MCSymbolRefExpr::VK_None;
   const MCSymbol *Symbol;
 
   switch (MOTy) {
   case MachineOperand::MO_MachineBasicBlock:
     Symbol = MO.getMBB()->getSymbol();
     break;
-  case MachineOperand::MO_GlobalAddress:
+  case MachineOperand::MO_GlobalAddress: {
     Symbol = Printer.getSymbol(MO.getGlobal());
     Offset += MO.getOffset();
     break;
+  }
   case MachineOperand::MO_BlockAddress:
     Symbol = Printer.GetBlockAddressSymbol(MO.getBlockAddress());
     Offset += MO.getOffset();
@@ -65,6 +66,19 @@ MCOperand LEGMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
     llvm_unreachable("<unknown operand type>");
   }
 
+  const unsigned Option = MO.getTargetFlags() & LEGII::MO_OPTION_MASK;
+  MCSymbolRefExpr::VariantKind Kind = MCSymbolRefExpr::VK_None;
+
+  switch (Option) {
+    default:
+      break;
+    case LEGII::MO_LO16:
+      Kind = MCSymbolRefExpr::VK_LEG_LO;
+      break;
+    case LEGII::MO_HI16:
+      Kind = MCSymbolRefExpr::VK_LEG_HI;
+      break;
+  }
   const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, Kind, *Ctx);
 
   if (!Offset)
