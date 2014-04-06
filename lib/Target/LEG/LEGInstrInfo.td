@@ -136,7 +136,7 @@ def STORE : InstLEG<(outs), (ins GRRegs:$src, memsrc:$dst),
 
 let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
   def RET : InstLEG<(outs), (ins variable_ops),
-                    "bx lr",  [(LEGRetFlag)]> {
+                    "b lr",  [(LEGRetFlag)]> {
     let Inst{27-0}  = 0b0001001011111111111100011110;
   }
 }
