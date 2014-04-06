@@ -3,8 +3,9 @@
 	.globl	foo
 	.type	foo,@function
 foo:                                    # @foo
-# BB#0:
+# BB#0:                                 # %entry
 	mla r0, r0, r1, r2
+# BB#1:                                 # %exit
 	b lr
 .Ltmp0:
 	.size	foo, .Ltmp0-foo
