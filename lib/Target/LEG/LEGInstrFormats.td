@@ -19,7 +19,7 @@ class InstLEG<dag outs, dag ins, string asmstr, list<dag> pattern>
   dag InOperandList = ins;
   let AsmString   = asmstr;
   let Pattern = pattern;
-  let Size = 32;
+  let Size = 4;
 
   // Always execute - no condition flags for this example
   let Inst{31-28} = 0b1110;

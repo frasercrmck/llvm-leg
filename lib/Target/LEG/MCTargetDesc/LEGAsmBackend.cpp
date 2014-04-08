@@ -33,7 +33,7 @@ namespace {
 class LEGELFObjectWriter : public MCELFObjectTargetWriter {
 public:
   LEGELFObjectWriter(uint8_t OSABI)
-      : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI, ELF::EM_LEG,
+      : MCELFObjectTargetWriter(/*Is64Bit*/ false, OSABI, /*ELF::EM_LEG*/ ELF::EM_ARM,
                                 /*HasRelocationAddend*/ false) {}
 };
 

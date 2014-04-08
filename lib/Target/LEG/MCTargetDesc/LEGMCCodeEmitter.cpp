@@ -127,7 +127,7 @@ void LEGMCCodeEmitter::EncodeInstruction(const MCInst &MI, raw_ostream &OS,
                                          SmallVectorImpl<MCFixup> &Fixups,
                                          const MCSubtargetInfo &STI) const {
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
-  if (Desc.getSize() != 32)
+  if (Desc.getSize() != 4)
     llvm_unreachable("Unexpected instruction size!");
 
   uint32_t Binary = getBinaryCodeForInstr(MI, Fixups, STI);
