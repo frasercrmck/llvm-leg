@@ -64,8 +64,8 @@ def MUL  : MulInst<0b0000000, (outs GRRegs:$dst),
   bits<4> src2;
   let Inst{19-16} = dst;
   let Inst{15-12} = 0b0000;
-  let Inst{11-8}  = src1;
-  let Inst{3-0}   = src2;
+  let Inst{11-8}  = src2;
+  let Inst{3-0}   = src1;
 }
 
 def MLA  : MulInst<0b0000001, (outs GRRegs:$dst),
@@ -79,8 +79,8 @@ def MLA  : MulInst<0b0000001, (outs GRRegs:$dst),
   bits<4> src3;
   let Inst{19-16} = dst;
   let Inst{15-12} = src3;
-  let Inst{11-8}  = src1;
-  let Inst{3-0}   = src2;
+  let Inst{11-8}  = src2;
+  let Inst{3-0}   = src1;
 }
 
 //===----------------------------------------------------------------------===//
