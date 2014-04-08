@@ -86,9 +86,18 @@ def MLA  : MulInst<0b0000001, (outs GRRegs:$dst),
 //===----------------------------------------------------------------------===//
 // Mov Instructions
 //===----------------------------------------------------------------------===//
-def MOVrr  : InstLEG<(outs GRRegs:$dst), (ins GRRegs:$src),
-                      "mov $dst, $src",
-                      [/* No pattern */]>;
+def MOVrr  : ALUInst<0b1101, (outs GRRegs:$dst), (ins GRRegs:$src),
+                     "mov $dst, $src",
+                     [/* No pattern */]> {
+  bits<4> dst;
+  bits<4> src;
+  let Inst{25-27} = 0b000;  
+  let Inst{20} = 0;
+  let Inst{19-16} = 0b0000;
+  let Inst{15-12} = dst;
+  let Inst{11-4}  = 0b00000000;
+  let Inst{3-0} = src;
+}
 
 //===----------------------------------------------------------------------===//
 // Mov Immediate Instructions
@@ -136,7 +145,7 @@ def STORE : InstLEG<(outs), (ins GRRegs:$src, memsrc:$dst),
 
 let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
   def RET : InstLEG<(outs), (ins variable_ops),
-                    "b lr",  [(LEGRetFlag)]> {
+                    "bx lr",  [(LEGRetFlag)]> {
     let Inst{27-0}  = 0b0001001011111111111100011110;
   }
 }
