@@ -9,7 +9,7 @@ foo:                                    # @foo
 	movw r1, #1  ; Write 0x00000001 (write low bits, clear high bits)
 	movt r1, #1  ; Write 0x0001XXXX (write high bits, don't touch low bits)
 	add r0, r0, r1
-	b lr
+	bx lr
 .Ltmp0:
 	.size	foo, .Ltmp0-foo
 

@@ -9,7 +9,7 @@ foo:                                    # @foo
 	str r1, [sp]
 	add r0, r0, #2
 	add sp, sp, #4 ; epilogue
-	b lr
+	bx lr
 .Ltmp0:
 	.size	foo, .Ltmp0-foo
 
