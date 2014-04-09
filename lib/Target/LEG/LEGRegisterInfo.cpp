@@ -89,8 +89,8 @@ void LEGRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   default:
     // Not supported yet.
     return;
-  case LEG::LOAD:
-  case LEG::STORE:
+  case LEG::LDR:
+  case LEG::STR:
     ImmOpIdx = FIOperandNum + 1;
     break;
   }

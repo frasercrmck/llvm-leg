@@ -130,14 +130,37 @@ def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
 // Load/Store Instructions
 //===----------------------------------------------------------------------===//
 
-def LOAD  : InstLEG<(outs GRRegs:$dst), (ins memsrc:$src),
-                   "ldr $dst, $src",
-                   [(set i32:$dst, (load addr:$src))]>;
+def LDR  : InstLEG<(outs GRRegs:$val), (ins memsrc:$addr),
+                   "ldr $val, $addr",
+                   [(set i32:$val, (load addr:$addr))]> {
+  bits<4> val;
+  bits<16> addr;
+  let Inst{27-25} = 0b010;
+  let Inst{24} = 1; // not indexed
+  let Inst{23} = 1; // add ofset
+  let Inst{22} = 0;
+  let Inst{21} = 0; // no writeback
+  let Inst{20} = 1; // load
+  let Inst{19-16} = addr{15-12};
+  let Inst{15-12} = val;
+  let Inst{11-0} = addr{11-0};
+}
 
-def STORE : InstLEG<(outs), (ins GRRegs:$src, memsrc:$dst),
-                   "str $src, $dst",
-                   [(store i32:$src, addr:$dst)]>;
-
+def STR : InstLEG<(outs), (ins GRRegs:$val, memsrc:$addr),
+                  "str $val, $addr",
+                  [(store i32:$val, addr:$addr)]> {
+  bits<16> addr;
+  bits<4> val;
+  let Inst{27-25} = 0b010;
+  let Inst{24} = 1; // not indexed
+  let Inst{23} = 1; // add ofset
+  let Inst{22} = 0;
+  let Inst{21} = 0; // no writeback
+  let Inst{20} = 0; // store
+  let Inst{19-16} = addr{15-12};
+  let Inst{15-12} = val;
+  let Inst{11-0} = addr{11-0};
+}
 
 //===----------------------------------------------------------------------===//
 // Return Instructions

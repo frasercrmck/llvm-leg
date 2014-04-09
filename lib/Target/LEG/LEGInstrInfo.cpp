@@ -120,7 +120,7 @@ void LEGInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                          const TargetRegisterClass *RC,
                                          const TargetRegisterInfo *TRI) const
 {
-  BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STORE))
+  BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STR))
     .addReg(SrcReg, getKillRegState(isKill))
     .addFrameIndex(FrameIndex).addImm(0);
 }
@@ -131,7 +131,7 @@ void LEGInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                           const TargetRegisterClass *RC,
                                           const TargetRegisterInfo *TRI) const
 {
-  BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LOAD), DestReg)
+  BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
       .addFrameIndex(FrameIndex).addImm(0);
 }
 

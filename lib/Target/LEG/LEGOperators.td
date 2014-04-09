@@ -51,6 +51,7 @@ def bl_target : Operand<i32>;
 def memsrc : Operand<i32> {
   let MIOperandInfo = (ops GRRegs, i32imm);
   let PrintMethod = "printAddrModeMemSrc";
+  let EncoderMethod = "getMemSrcValue";
 }
 
 def i32imm_lo : Operand<i32>, ImmLeaf<i32, [{

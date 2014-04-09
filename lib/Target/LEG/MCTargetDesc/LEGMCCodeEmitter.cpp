@@ -55,6 +55,10 @@ public:
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
 
+  unsigned getMemSrcValue(const MCInst &MI, unsigned OpIdx,
+                          SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
+
   void EmitByte(unsigned char C, raw_ostream &OS) const { OS << (char)C; }
 
   void EmitConstant(uint64_t Val, unsigned Size, raw_ostream &OS) const {
@@ -121,6 +125,18 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
 
   Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
   return 0;
+}
+
+unsigned LEGMCCodeEmitter::getMemSrcValue(const MCInst &MI, unsigned OpIdx,
+                                          SmallVectorImpl<MCFixup> &Fixups,
+                                          const MCSubtargetInfo &STI) const {
+  unsigned Bits = 0;
+  const MCOperand &RegMO = MI.getOperand(OpIdx);
+  const MCOperand &ImmMO = MI.getOperand(OpIdx + 1);
+  assert(ImmMO.getImm() >= 0);
+  Bits |= (getMachineOpValue(MI, RegMO, Fixups, STI) << 12);
+  Bits |= (unsigned)ImmMO.getImm() & 0xfff;
+  return Bits;
 }
 
 void LEGMCCodeEmitter::EncodeInstruction(const MCInst &MI, raw_ostream &OS,
