@@ -195,7 +195,7 @@ define i32 @foo(i32 %a, i32 %b) {
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{A look at an IR module}
+\begin{frame}{A look at an IR module}
 
 \begin{itemize}
     \item Untyped, uses register classes instead
@@ -206,14 +206,7 @@ define i32 @foo(i32 %a, i32 %b) {
 \end{itemize}
 
 \begin{block}{ex1-mi.txt}
-\begin{lstlisting}
-BB#0: derived from LLVM BB %entry
-    Live Ins: %R0 %R1
-
-	%R0<def> = ADDrr %R0<kill>, %R1<kill>  ; %R0, %R1, %R2: GRRegs
-
-    Successors according to CFG: BB#1
-\end{lstlisting}
+\lstinputlisting{examples/ex1-mi.txt}
 \end{block}
 
 \end{frame}
