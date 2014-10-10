@@ -343,3 +343,34 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \end{block}
 
 \end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item Compiling this IR produces the following error:
+\end{itemize}
+
+\begin{block}{ex2.ll}
+\begin{lstlisting}
+%2 = add nsw i32 %1, 2
+\end{lstlisting}
+\end{block}
+
+\begin{block}{}
+\begin{lstlisting}
+LLVM ERROR: Cannot select: 0x29d4350: i32 = Constant<2> [ID=2]
+In function: main
+\end{lstlisting}
+\end{block}
+
+\begin{itemize}
+    \item Specify how to generate ('materialize') constants
+    \item For example, with a 'move' instruction
+    \begin{itemize}
+        \item E.g. MOVW on ARM for 16-bit constants
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
