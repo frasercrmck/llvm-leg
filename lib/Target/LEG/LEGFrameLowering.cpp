@@ -47,8 +47,9 @@ uint64_t LEGFrameLowering::computeStackSize(MachineFunction &MF) const {
   MachineFrameInfo *MFI = MF.getFrameInfo();
   uint64_t StackSize = MFI->getStackSize();
   unsigned StackAlign = getStackAlignment();
-  if (StackAlign > 0)
+  if (StackAlign > 0) {
     StackSize = RoundUpToAlignment(StackSize, StackAlign);
+  }
   return StackSize;
 }
 
@@ -90,8 +91,9 @@ void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   uint64_t StackSize = computeStackSize(MF);
-  if (!StackSize)
+  if (!StackSize) {
     return;
+  }
 
   // Adjust the stack pointer.
   unsigned StackReg = LEG::SP;
@@ -116,8 +118,9 @@ void LEGFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   DebugLoc dl = MBBI->getDebugLoc();
   uint64_t StackSize = computeStackSize(MF);
-  if (!StackSize)
+  if (!StackSize) {
     return;
+  }
 
   // Restore the stack pointer to what it was at the beginning of the function.
   unsigned StackReg = LEG::SP;

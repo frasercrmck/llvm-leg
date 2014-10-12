@@ -80,8 +80,9 @@ MCOperand LEGMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
   }
   const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, Kind, *Ctx);
 
-  if (!Offset)
+  if (!Offset) {
     return MCOperand::CreateExpr(MCSym);
+  }
 
   // Assume offset is never negative.
   assert(Offset > 0);
@@ -100,8 +101,9 @@ MCOperand LEGMCInstLower::LowerOperand(const MachineOperand &MO,
     llvm_unreachable("unknown operand type");
   case MachineOperand::MO_Register:
     // Ignore all implicit register operands.
-    if (MO.isImplicit())
+    if (MO.isImplicit()) {
       break;
+    }
     return MCOperand::CreateReg(MO.getReg());
   case MachineOperand::MO_Immediate:
     return MCOperand::CreateImm(MO.getImm() + offset);
@@ -122,11 +124,11 @@ MCOperand LEGMCInstLower::LowerOperand(const MachineOperand &MO,
 void LEGMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
 
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = MI->getOperand(i);
-    MCOperand MCOp = LowerOperand(MO);
+  for (auto &MO : MI->operands()) {
+    const MCOperand MCOp = LowerOperand(MO);
 
-    if (MCOp.isValid())
+    if (MCOp.isValid()) {
       OutMI.addOperand(MCOp);
+    }
   }
 }

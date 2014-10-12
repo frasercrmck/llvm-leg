@@ -68,8 +68,9 @@ static MCCodeGenInfo *createLEGMCCodeGenInfo(StringRef TT, Reloc::Model RM,
   if (CM == CodeModel::Default) {
     CM = CodeModel::Small;
   }
-  if (CM != CodeModel::Small && CM != CodeModel::Large)
+  if (CM != CodeModel::Small && CM != CodeModel::Large) {
     report_fatal_error("Target only supports CodeModel Small or Large");
+  }
 
   X->InitMCCodeGenInfo(RM, CM, OL);
   return X;

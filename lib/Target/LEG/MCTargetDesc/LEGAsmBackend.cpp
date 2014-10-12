@@ -57,8 +57,9 @@ public:
       { "fixup_leg_movw_lo16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
     };
 
-    if (Kind < FirstTargetFixupKind)
+    if (Kind < FirstTargetFixupKind) {
       return MCAsmBackend::getFixupKindInfo(Kind);
+    }
 
     assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
            "Invalid kind!");
@@ -104,7 +105,7 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     llvm_unreachable("Unknown fixup kind!");
   case LEG::fixup_leg_movt_hi16_pcrel:
     Value >>= 16;
-    // Fallthrough
+  // Intentional fall-through
   case LEG::fixup_leg_movw_lo16_pcrel:
     unsigned Hi4  = (Value & 0xF000) >> 12;
     unsigned Lo12 = Value & 0x0FFF;
@@ -134,7 +135,9 @@ void LEGAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
                                bool isPCRel) const {
   unsigned NumBytes = 4;
   Value = adjustFixupValue(Fixup, Value);
-  if (!Value) return;           // Doesn't change encoding.
+  if (!Value) {
+    return; // Doesn't change encoding.
+  }
 
   unsigned Offset = Fixup.getOffset();
   assert(Offset + NumBytes <= DataSize && "Invalid fixup offset!");
@@ -142,8 +145,9 @@ void LEGAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
   // For each byte of the fragment that the fixup touches, mask in the bits from
   // the fixup value. The Value has been "split up" into the appropriate
   // bitfields above.
-  for (unsigned i = 0; i != NumBytes; ++i)
+  for (unsigned i = 0; i != NumBytes; ++i) {
     Data[Offset + i] |= uint8_t((Value >> (i * 8)) & 0xff);
+  }
 }
 
 namespace {

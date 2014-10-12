@@ -36,8 +36,9 @@ namespace {
 unsigned LEGELFObjectWriter::GetRelocType(const MCValue &Target,
                                           const MCFixup &Fixup,
                                           bool IsPCRel) const {
-  if (!IsPCRel)
+  if (!IsPCRel) {
     llvm_unreachable("Only dealying with PC-relative fixups for now");
+  }
 
   unsigned Type = 0;
   switch ((unsigned)Fixup.getKind()) {
