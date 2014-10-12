@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "codegen-dce"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -21,7 +20,11 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
+
 using namespace llvm;
+
+#define DEBUG_TYPE "codegen-dce"
 
 STATISTIC(NumDeletes,          "Number of dead instructions deleted");
 
@@ -59,7 +62,7 @@ bool DeadMachineInstructionElim::isDead(const MachineInstr *MI) const {
 
   // Don't delete instructions with side effects.
   bool SawStore = false;
-  if (!MI->isSafeToMove(TII, 0, SawStore) && !MI->isPHI())
+  if (!MI->isSafeToMove(TII, nullptr, SawStore) && !MI->isPHI())
     return false;
 
   // Examine each operand.
@@ -89,8 +92,8 @@ bool DeadMachineInstructionElim::runOnMachineFunction(MachineFunction &MF) {
 
   bool AnyChanges = false;
   MRI = &MF.getRegInfo();
-  TRI = MF.getTarget().getRegisterInfo();
-  TII = MF.getTarget().getInstrInfo();
+  TRI = MF.getSubtarget().getRegisterInfo();
+  TII = MF.getSubtarget().getInstrInfo();
 
   // Loop over all instructions in all blocks, from bottom to top, so that it's
   // more likely that chains of dependent but ultimately dead instructions will
@@ -121,19 +124,10 @@ bool DeadMachineInstructionElim::runOnMachineFunction(MachineFunction &MF) {
       if (isDead(MI)) {
         DEBUG(dbgs() << "DeadMachineInstructionElim: DELETING: " << *MI);
         // It is possible that some DBG_VALUE instructions refer to this
-        // instruction.  Examine each def operand for such references;
-        // if found, mark the DBG_VALUE as undef (but don't delete it).
-        for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-          const MachineOperand &MO = MI->getOperand(i);
-          if (!MO.isReg() || !MO.isDef())
-            continue;
-          unsigned Reg = MO.getReg();
-          if (!TargetRegisterInfo::isVirtualRegister(Reg))
-            continue;
-          MRI->markUsesInDebugValueAsUndef(Reg);
-        }
+        // instruction.  They get marked as undef and will be deleted
+        // in the live debug variable analysis.
+        MI->eraseFromParentAndMarkDBGValuesForRemoval();
         AnyChanges = true;
-        MI->eraseFromParent();
         ++NumDeletes;
         MIE = MBB->rend();
         // MII is now pointing to the next instruction to process,

@@ -43,6 +43,7 @@ protected:
   typedef std::pair<KeyT, ValueT> BucketT;
 
 public:
+  typedef unsigned size_type;
   typedef KeyT key_type;
   typedef ValueT mapped_type;
   typedef BucketT value_type;
@@ -70,7 +71,7 @@ public:
   unsigned size() const { return getNumEntries(); }
 
   /// Grow the densemap so that it has at least Size buckets. Does not shrink
-  void resize(size_t Size) {
+  void resize(size_type Size) {
     if (Size > getNumBuckets())
       grow(Size);
   }
@@ -99,10 +100,10 @@ public:
     setNumTombstones(0);
   }
 
-  /// count - Return true if the specified key is in the map.
-  bool count(const KeyT &Val) const {
+  /// Return 1 if the specified key is in the map, 0 otherwise.
+  size_type count(const KeyT &Val) const {
     const BucketT *TheBucket;
-    return LookupBucketFor(Val, TheBucket);
+    return LookupBucketFor(Val, TheBucket) ? 1 : 0;
   }
 
   iterator find(const KeyT &Val) {
@@ -304,6 +305,7 @@ protected:
 
   template <typename OtherBaseT>
   void copyFrom(const DenseMapBase<OtherBaseT, KeyT, ValueT, KeyInfoT>& other) {
+    assert(&other != this);
     assert(getNumBuckets() == other.getNumBuckets());
 
     setNumEntries(other.getNumEntries());
@@ -461,12 +463,12 @@ private:
     const unsigned NumBuckets = getNumBuckets();
 
     if (NumBuckets == 0) {
-      FoundBucket = 0;
+      FoundBucket = nullptr;
       return false;
     }
 
     // FoundTombstone - Keep track of whether we find a tombstone while probing.
-    const BucketT *FoundTombstone = 0;
+    const BucketT *FoundTombstone = nullptr;
     const KeyT EmptyKey = getEmptyKey();
     const KeyT TombstoneKey = getTombstoneKey();
     assert(!KeyInfoT::isEqual(Val, EmptyKey) &&
@@ -573,7 +575,8 @@ public:
   }
 
   DenseMap& operator=(const DenseMap& other) {
-    copyFrom(other);
+    if (&other != this)
+      copyFrom(other);
     return *this;
   }
 
@@ -665,7 +668,7 @@ private:
   bool allocateBuckets(unsigned Num) {
     NumBuckets = Num;
     if (NumBuckets == 0) {
-      Buckets = 0;
+      Buckets = nullptr;
       return false;
     }
 
@@ -798,7 +801,8 @@ public:
   }
 
   SmallDenseMap& operator=(const SmallDenseMap& other) {
-    copyFrom(other);
+    if (&other != this)
+      copyFrom(other);
     return *this;
   }
 
@@ -985,7 +989,7 @@ public:
 private:
   pointer Ptr, End;
 public:
-  DenseMapIterator() : Ptr(0), End(0) {}
+  DenseMapIterator() : Ptr(nullptr), End(nullptr) {}
 
   DenseMapIterator(pointer Pos, pointer E, bool NoAdvance = false)
     : Ptr(Pos), End(E) {

@@ -15,7 +15,7 @@
 #define LLVM_OBJECT_COFFYAML_H
 
 #include "llvm/ADT/Optional.h"
-#include "llvm/Object/YAML.h"
+#include "llvm/MC/YAML.h"
 #include "llvm/Support/COFF.h"
 
 namespace llvm {
@@ -49,7 +49,7 @@ namespace COFFYAML {
   struct Section {
     COFF::section Header;
     unsigned Alignment;
-    object::yaml::BinaryRef SectionData;
+    yaml::BinaryRef SectionData;
     std::vector<Relocation> Relocations;
     StringRef Name;
     Section();
@@ -121,8 +121,13 @@ struct ScalarEnumerationTraits<COFF::SymbolComplexType> {
 };
 
 template <>
-struct ScalarEnumerationTraits<COFF::RelocationTypeX86> {
-  static void enumeration(IO &IO, COFF::RelocationTypeX86 &Value);
+struct ScalarEnumerationTraits<COFF::RelocationTypeI386> {
+  static void enumeration(IO &IO, COFF::RelocationTypeI386 &Value);
+};
+
+template <>
+struct ScalarEnumerationTraits<COFF::RelocationTypeAMD64> {
+  static void enumeration(IO &IO, COFF::RelocationTypeAMD64 &Value);
 };
 
 template <>

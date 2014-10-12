@@ -16,6 +16,7 @@
 #include "XCore.h"
 #include "XCoreInstrInfo.h"
 #include "XCoreMachineFunctionInfo.h"
+#include "XCoreSubtarget.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -64,7 +65,8 @@ static void EmitDefCfaRegister(MachineBasicBlock &MBB,
                                MachineModuleInfo *MMI, unsigned DRegNum) {
   unsigned CFIIndex = MMI->addFrameInst(
       MCCFIInstruction::createDefCfaRegister(nullptr, DRegNum));
-  BuildMI(MBB, MBBI, dl, TII.get(XCore::CFI_INSTRUCTION)).addCFIIndex(CFIIndex);
+  BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex);
 }
 
 static void EmitDefCfaOffset(MachineBasicBlock &MBB,
@@ -73,7 +75,8 @@ static void EmitDefCfaOffset(MachineBasicBlock &MBB,
                              MachineModuleInfo *MMI, int Offset) {
   unsigned CFIIndex =
       MMI->addFrameInst(MCCFIInstruction::createDefCfaOffset(nullptr, -Offset));
-  BuildMI(MBB, MBBI, dl, TII.get(XCore::CFI_INSTRUCTION)).addCFIIndex(CFIIndex);
+  BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex);
 }
 
 static void EmitCfiOffset(MachineBasicBlock &MBB,
@@ -82,7 +85,8 @@ static void EmitCfiOffset(MachineBasicBlock &MBB,
                           unsigned DRegNum, int Offset) {
   unsigned CFIIndex = MMI->addFrameInst(
       MCCFIInstruction::createOffset(nullptr, DRegNum, Offset));
-  BuildMI(MBB, MBBI, dl, TII.get(XCore::CFI_INSTRUCTION)).addCFIIndex(CFIIndex);
+  BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex);
 }
 
 /// The SP register is moved in steps of 'MaxImmU16' towards the bottom of the
@@ -113,7 +117,8 @@ static void IfNeededExtSP(MachineBasicBlock &MBB,
 /// IfNeededLDAWSP emits the necessary LDAWSP instructions to move the SP only
 /// as far as to make 'OffsetFromTop' reachable using an LDAWSP_lru6.
 /// \param OffsetFromTop the spill offset from the top of the frame.
-/// \param [in,out] RemainingAdj the current SP offset from the top of the frame.
+/// \param [in,out] RemainingAdj the current SP offset from the top of the
+/// frame.
 static void IfNeededLDAWSP(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI, DebugLoc dl,
                            const TargetInstrInfo &TII, int OffsetFromTop,
@@ -222,9 +227,11 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF) const {
   MachineModuleInfo *MMI = &MF.getMMI();
   const MCRegisterInfo *MRI = MMI->getContext().getRegisterInfo();
   const XCoreInstrInfo &TII =
-    *static_cast<const XCoreInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
   XCoreFunctionInfo *XFI = MF.getInfo<XCoreFunctionInfo>();
-  DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
+  // Debug location must be unknown since the first debug location is used
+  // to determine the end of the prologue.
+  DebugLoc dl;
 
   if (MFI->getMaxAlignment() > getStackAlignment())
     report_fatal_error("emitPrologue unsupported alignment: "
@@ -256,7 +263,8 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF) const {
     MBB.addLiveIn(XCore::LR);
     MachineInstrBuilder MIB = BuildMI(MBB, MBBI, dl, TII.get(Opcode));
     MIB.addImm(Adjusted);
-    MIB->addRegisterKilled(XCore::LR, MF.getTarget().getRegisterInfo(), true);
+    MIB->addRegisterKilled(XCore::LR, MF.getSubtarget().getRegisterInfo(),
+                           true);
     if (emitFrameMoves) {
       EmitDefCfaOffset(MBB, MBBI, dl, TII, MMI, Adjusted*4);
       unsigned DRegNum = MRI->getDwarfRegNum(XCore::LR, true);
@@ -304,11 +312,10 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF) const {
 
   if (emitFrameMoves) {
     // Frame moves for callee saved.
-    auto SpillLabels = XFI->getSpillLabels();
-    for (unsigned I = 0, E = SpillLabels.size(); I != E; ++I) {
-      MachineBasicBlock::iterator Pos = SpillLabels[I].first;
+    for (const auto &SpillLabel : XFI->getSpillLabels()) {
+      MachineBasicBlock::iterator Pos = SpillLabel.first;
       ++Pos;
-      CalleeSavedInfo &CSI = SpillLabels[I].second;
+      const CalleeSavedInfo &CSI = SpillLabel.second;
       int Offset = MFI->getObjectOffset(CSI.getFrameIdx());
       unsigned DRegNum = MRI->getDwarfRegNum(CSI.getReg(), true);
       EmitCfiOffset(MBB, Pos, dl, TII, MMI, DRegNum, Offset);
@@ -317,7 +324,8 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF) const {
       // The unwinder requires stack slot & CFI offsets for the exception info.
       // We do not save/spill these registers.
       SmallVector<StackSlotInfo,2> SpillList;
-      GetEHSpillList(SpillList, MFI, XFI, MF.getTarget().getTargetLowering());
+      GetEHSpillList(SpillList, MFI, XFI,
+                     MF.getSubtarget().getTargetLowering());
       assert(SpillList.size()==2 && "Unexpected SpillList size");
       EmitCfiOffset(MBB, MBBI, dl, TII, MMI,
                     MRI->getDwarfRegNum(SpillList[0].Reg, true),
@@ -334,7 +342,7 @@ void XCoreFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineFrameInfo *MFI = MF.getFrameInfo();
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   const XCoreInstrInfo &TII =
-    *static_cast<const XCoreInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
   XCoreFunctionInfo *XFI = MF.getInfo<XCoreFunctionInfo>();
   DebugLoc dl = MBBI->getDebugLoc();
   unsigned RetOpcode = MBBI->getOpcode();
@@ -346,9 +354,10 @@ void XCoreFrameLowering::emitEpilogue(MachineFunction &MF,
   RemainingAdj /= 4;
 
   if (RetOpcode == XCore::EH_RETURN) {
-    // 'Restore' the exception info the unwinder has placed into the stack slots.
+    // 'Restore' the exception info the unwinder has placed into the stack
+    // slots.
     SmallVector<StackSlotInfo,2> SpillList;
-    GetEHSpillList(SpillList, MFI, XFI, MF.getTarget().getTargetLowering());
+    GetEHSpillList(SpillList, MFI, XFI, MF.getSubtarget().getTargetLowering());
     RestoreSpillList(MBB, MBBI, dl, TII, RemainingAdj, SpillList);
 
     // Return to the landing pad.
@@ -406,12 +415,12 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     return true;
 
   MachineFunction *MF = MBB.getParent();
-  const TargetInstrInfo &TII = *MF->getTarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
   XCoreFunctionInfo *XFI = MF->getInfo<XCoreFunctionInfo>();
   bool emitFrameMoves = XCoreRegisterInfo::needsFrameMoves(*MF);
 
   DebugLoc DL;
-  if (MI != MBB.end())
+  if (MI != MBB.end() && !MI->isDebugValue())
     DL = MI->getDebugLoc();
 
   for (std::vector<CalleeSavedInfo>::const_iterator it = CSI.begin();
@@ -439,7 +448,7 @@ restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                             const std::vector<CalleeSavedInfo> &CSI,
                             const TargetRegisterInfo *TRI) const{
   MachineFunction *MF = MBB.getParent();
-  const TargetInstrInfo &TII = *MF->getTarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
   bool AtStart = MI == MBB.begin();
   MachineBasicBlock::iterator BeforeI = MI;
   if (!AtStart)
@@ -472,7 +481,7 @@ void XCoreFrameLowering::
 eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
   const XCoreInstrInfo &TII =
-    *static_cast<const XCoreInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
   if (!hasReservedCallFrame(MF)) {
     // Turn the adjcallstackdown instruction into 'extsp <amt>' and the
     // adjcallstackup instruction into 'ldaw sp, sp[<amt>]'
@@ -495,7 +504,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
         errs() << "eliminateCallFramePseudoInstr size too big: "
                << Amount << "\n";
 #endif
-        llvm_unreachable(0);
+        llvm_unreachable(nullptr);
       }
 
       MachineInstr *New;
@@ -514,7 +523,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
       MBB.insert(I, New);
     }
   }
-  
+
   MBB.erase(I);
 }
 

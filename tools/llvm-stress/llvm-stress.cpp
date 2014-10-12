@@ -22,6 +22,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/PassManager.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -245,7 +246,7 @@ protected:
 
   /// Pick a random scalar type.
   Type *pickScalarType() {
-    Type *t = 0;
+    Type *t = nullptr;
     do {
       switch (Ran->Rand() % 30) {
       case 0: t = Type::getInt1Ty(Context); break;
@@ -271,7 +272,7 @@ protected:
       case 29: if (GenX86MMX) t = Type::getX86_MMXTy(Context); break;
       default: llvm_unreachable("Invalid scalar value");
       }
-    } while (t == 0);
+    } while (t == nullptr);
 
     return t;
   }
@@ -703,16 +704,16 @@ int main(int argc, char **argv) {
   if (OutputFilename.empty())
     OutputFilename = "-";
 
-  std::string ErrorInfo;
-  Out.reset(new tool_output_file(OutputFilename.c_str(), ErrorInfo,
-                                 sys::fs::F_None));
-  if (!ErrorInfo.empty()) {
-    errs() << ErrorInfo << '\n';
+  std::error_code EC;
+  Out.reset(new tool_output_file(OutputFilename, EC, sys::fs::F_None));
+  if (EC) {
+    errs() << EC.message() << '\n';
     return 1;
   }
 
   PassManager Passes;
   Passes.add(createVerifierPass());
+  Passes.add(createDebugInfoVerifierPass());
   Passes.add(createPrintModulePass(Out->os()));
   Passes.run(*M.get());
   Out->keep();

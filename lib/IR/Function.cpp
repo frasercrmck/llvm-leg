@@ -44,7 +44,7 @@ void Argument::anchor() { }
 
 Argument::Argument(Type *Ty, const Twine &Name, Function *Par)
   : Value(Ty, Value::ArgumentVal) {
-  Parent = 0;
+  Parent = nullptr;
 
   // Make sure that we get added to a function
   LeakDetector::addGarbageObject(this);
@@ -76,6 +76,20 @@ unsigned Argument::getArgNo() const {
   return ArgIdx;
 }
 
+/// hasNonNullAttr - Return true if this argument has the nonnull attribute on
+/// it in its containing function. Also returns true if at least one byte is
+/// known to be dereferenceable and the pointer is in addrspace(0).
+bool Argument::hasNonNullAttr() const {
+  if (!getType()->isPointerTy()) return false;
+  if (getParent()->getAttributes().
+        hasAttribute(getArgNo()+1, Attribute::NonNull))
+    return true;
+  else if (getDereferenceableBytes() > 0 &&
+           getType()->getPointerAddressSpace() == 0)
+    return true;
+  return false;
+}
+
 /// hasByValAttr - Return true if this argument has the byval attribute on it
 /// in its containing function.
 bool Argument::hasByValAttr() const {
@@ -103,6 +117,12 @@ unsigned Argument::getParamAlignment() const {
   assert(getType()->isPointerTy() && "Only pointers have alignments");
   return getParent()->getParamAlignment(getArgNo()+1);
 
+}
+
+uint64_t Argument::getDereferenceableBytes() const {
+  assert(getType()->isPointerTy() &&
+         "Only pointers have dereferenceable bytes");
+  return getParent()->getDereferenceableBytes(getArgNo()+1);
 }
 
 /// hasNestAttr - Return true if this argument has the nest attribute on
@@ -144,6 +164,20 @@ bool Argument::hasStructRetAttr() const {
 bool Argument::hasReturnedAttr() const {
   return getParent()->getAttributes().
     hasAttribute(getArgNo()+1, Attribute::Returned);
+}
+
+/// hasZExtAttr - Return true if this argument has the zext attribute on it in
+/// its containing function.
+bool Argument::hasZExtAttr() const {
+  return getParent()->getAttributes().
+    hasAttribute(getArgNo()+1, Attribute::ZExt);
+}
+
+/// hasSExtAttr Return true if this argument has the sext attribute on it in its
+/// containing function.
+bool Argument::hasSExtAttr() const {
+  return getParent()->getAttributes().
+    hasAttribute(getArgNo()+1, Attribute::SExt);
 }
 
 /// Return true if this argument has the readonly or readnone attribute on it
@@ -209,8 +243,8 @@ void Function::eraseFromParent() {
 
 Function::Function(FunctionType *Ty, LinkageTypes Linkage,
                    const Twine &name, Module *ParentModule)
-  : GlobalValue(PointerType::getUnqual(Ty),
-                Value::FunctionVal, 0, 0, Linkage, name) {
+  : GlobalObject(PointerType::getUnqual(Ty),
+                Value::FunctionVal, nullptr, 0, Linkage, name) {
   assert(FunctionType::isValidReturnType(getReturnType()) &&
          "invalid return type");
   SymTab = new ValueSymbolTable();
@@ -293,7 +327,7 @@ void Function::dropAllReferences() {
     BasicBlocks.begin()->eraseFromParent();
 
   // Prefix data is stored in a side table.
-  setPrefixData(0);
+  setPrefixData(nullptr);
 }
 
 void Function::addAttribute(unsigned i, Attribute::AttrKind attr) {
@@ -348,10 +382,10 @@ void Function::clearGC() {
     GCNames->erase(this);
     if (GCNames->empty()) {
       delete GCNames;
-      GCNames = 0;
+      GCNames = nullptr;
       if (GCNamePool->empty()) {
         delete GCNamePool;
-        GCNamePool = 0;
+        GCNamePool = nullptr;
       }
     }
   }
@@ -361,7 +395,7 @@ void Function::clearGC() {
 /// create a Function) from the Function Src to this one.
 void Function::copyAttributesFrom(const GlobalValue *Src) {
   assert(isa<Function>(Src) && "Expected a Function!");
-  GlobalValue::copyAttributesFrom(Src);
+  GlobalObject::copyAttributesFrom(Src);
   const Function *SrcF = cast<Function>(Src);
   setCallingConv(SrcF->getCallingConv());
   setAttributes(SrcF->getAttributes());
@@ -372,7 +406,7 @@ void Function::copyAttributesFrom(const GlobalValue *Src) {
   if (SrcF->hasPrefixData())
     setPrefixData(SrcF->getPrefixData());
   else
-    setPrefixData(0);
+    setPrefixData(nullptr);
 }
 
 /// getIntrinsicID - This method returns the ID number of the specified
@@ -440,7 +474,7 @@ std::string Intrinsic::getName(ID id, ArrayRef<Type*> Tys) {
 ///
 /// NOTE: This must be kept in synch with the copy in TblGen/IntrinsicEmitter!
 enum IIT_Info {
-  // Common values should be encoded with 0-15.
+  // Common values should be encoded with 0-16.
   IIT_Done = 0,
   IIT_I1   = 1,
   IIT_I8   = 2,
@@ -455,23 +489,24 @@ enum IIT_Info {
   IIT_V8   = 11,
   IIT_V16  = 12,
   IIT_V32  = 13,
-  IIT_PTR  = 14,
-  IIT_ARG  = 15,
+  IIT_V64  = 14,
+  IIT_PTR  = 15,
+  IIT_ARG  = 16,
 
-  // Values from 16+ are only encodable with the inefficient encoding.
-  IIT_MMX  = 16,
-  IIT_METADATA = 17,
-  IIT_EMPTYSTRUCT = 18,
-  IIT_STRUCT2 = 19,
-  IIT_STRUCT3 = 20,
-  IIT_STRUCT4 = 21,
-  IIT_STRUCT5 = 22,
-  IIT_EXTEND_ARG = 23,
-  IIT_TRUNC_ARG = 24,
-  IIT_ANYPTR = 25,
-  IIT_V1   = 26,
-  IIT_VARARG = 27,
-  IIT_HALF_VEC_ARG = 28
+  // Values from 17+ are only encodable with the inefficient encoding.
+  IIT_MMX  = 17,
+  IIT_METADATA = 18,
+  IIT_EMPTYSTRUCT = 19,
+  IIT_STRUCT2 = 20,
+  IIT_STRUCT3 = 21,
+  IIT_STRUCT4 = 22,
+  IIT_STRUCT5 = 23,
+  IIT_EXTEND_ARG = 24,
+  IIT_TRUNC_ARG = 25,
+  IIT_ANYPTR = 26,
+  IIT_V1   = 27,
+  IIT_VARARG = 28,
+  IIT_HALF_VEC_ARG = 29
 };
 
 
@@ -540,6 +575,10 @@ static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
     return;
   case IIT_V32:
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::Vector, 32));
+    DecodeIITType(NextElt, Infos, OutputTable);
+    return;
+  case IIT_V64:
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::Vector, 64));
     DecodeIITType(NextElt, Infos, OutputTable);
     return;
   case IIT_PTR:
@@ -658,7 +697,7 @@ static Type *DecodeFixedType(ArrayRef<Intrinsic::IITDescriptor> &Infos,
     assert(D.Struct_NumElements <= 5 && "Can't handle this yet");
     for (unsigned i = 0, e = D.Struct_NumElements; i != e; ++i)
       Elts[i] = DecodeFixedType(Infos, Tys, Context);
-    return StructType::get(Context, ArrayRef<Type*>(Elts,D.Struct_NumElements));
+    return StructType::get(Context, makeArrayRef(Elts,D.Struct_NumElements));
   }
 
   case IITDescriptor::Argument:
@@ -726,6 +765,11 @@ Function *Intrinsic::getDeclaration(Module *M, ID id, ArrayRef<Type*> Tys) {
 #define GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
 #include "llvm/IR/Intrinsics.gen"
 #undef GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
+
+// This defines the "Intrinsic::getIntrinsicForMSBuiltin()" method.
+#define GET_LLVM_INTRINSIC_FOR_MS_BUILTIN
+#include "llvm/IR/Intrinsics.gen"
+#undef GET_LLVM_INTRINSIC_FOR_MS_BUILTIN
 
 /// hasAddressTaken - returns true if there are any uses of this function
 /// other than direct calls or invokes to it.

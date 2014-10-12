@@ -41,6 +41,28 @@ class MicroMipsInst16<dag outs, dag ins, string asmstr, list<dag> pattern,
 // MicroMIPS 16-bit Instruction Formats
 //===----------------------------------------------------------------------===//
 
+class ADDIUS5_FM_MM16 {
+  bits<5> rd;
+  bits<4> imm;
+
+  bits<16> Inst;
+
+  let Inst{15-10} = 0x13;
+  let Inst{9-5}   = rd;
+  let Inst{4-1}   = imm;
+  let Inst{0}     = 0;
+}
+
+class ADDIUSP_FM_MM16 {
+  bits<9> imm;
+
+  bits<16> Inst;
+
+  let Inst{15-10} = 0x13;
+  let Inst{9-1}   = imm;
+  let Inst{0}     = 1;
+}
+
 class MOVE_FM_MM16<bits<6> funct> {
   bits<5> rs;
   bits<5> rd;
@@ -60,6 +82,27 @@ class JALR_FM_MM16<bits<5> op> {
   let Inst{15-10} = 0x11;
   let Inst{9-5}   = op;
   let Inst{4-0}   = rs;
+}
+
+class MFHILO_FM_MM16<bits<5> funct> {
+  bits<5> rd;
+
+  bits<16> Inst;
+
+  let Inst{15-10} = 0x11;
+  let Inst{9-5}   = funct;
+  let Inst{4-0}   = rd;
+}
+
+class JRADDIUSP_FM_MM16<bits<5> op> {
+  bits<5> rs;
+  bits<5> imm;
+
+  bits<16> Inst;
+
+  let Inst{15-10} = 0x11;
+  let Inst{9-5}   = op;
+  let Inst{4-0}   = imm;
 }
 
 //===----------------------------------------------------------------------===//
@@ -610,4 +653,25 @@ class MADDS_FM_MM<bits<6> funct>: MMArch {
   let Inst{15-11} = fd;
   let Inst{10-6}  = fr;
   let Inst{5-0}   = funct;
+}
+
+class COMPACT_BRANCH_FM_MM<bits<5> funct> {
+  bits<5>  rs;
+  bits<16> offset;
+
+  bits<32> Inst;
+
+  let Inst{31-26} = 0x10;
+  let Inst{25-21} = funct;
+  let Inst{20-16} = rs;
+  let Inst{15-0}  = offset;
+}
+
+class COP0_TLB_FM_MM<bits<10> op> : MMArch {
+  bits<32> Inst;
+
+  let Inst{31-26} = 0x0;
+  let Inst{25-16} = 0x0;
+  let Inst{15-6}  = op;
+  let Inst{5-0}   = 0x3c;
 }

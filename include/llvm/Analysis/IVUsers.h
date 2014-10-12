@@ -169,12 +169,12 @@ public:
     return Processed.count(Inst);
   }
 
-  void print(raw_ostream &OS, const Module* = 0) const override;
+  void print(raw_ostream &OS, const Module* = nullptr) const override;
 
   /// dump - This method is used for debugging.
   void dump() const;
 protected:
-  bool AddUsersImpl(Instruction *I, SmallPtrSet<Loop*,16> &SimpleLoopNests);
+  bool AddUsersImpl(Instruction *I, SmallPtrSetImpl<Loop*> &SimpleLoopNests);
 };
 
 Pass *createIVUsersPass();

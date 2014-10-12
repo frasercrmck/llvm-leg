@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_ARM_TARGETOBJECTFILE_H
-#define LLVM_TARGET_ARM_TARGETOBJECTFILE_H
+#ifndef LLVM_LIB_TARGET_ARM_ARMTARGETOBJECTFILE_H
+#define LLVM_LIB_TARGET_ARM_ARMTARGETOBJECTFILE_H
 
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 
@@ -23,7 +23,7 @@ protected:
 public:
   ARMElfTargetObjectFile() :
     TargetLoweringObjectFileELF(),
-    AttributesSection(NULL)
+    AttributesSection(nullptr)
   {}
 
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;

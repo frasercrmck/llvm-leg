@@ -39,7 +39,7 @@ multiclass XX3Form_Rcr<bits<6> opcode, bits<7> xo, dag OOL, dag IOL,
   }
 }
 
-def HasVSX : Predicate<"PPCSubTarget.hasVSX()">;
+def HasVSX : Predicate<"PPCSubTarget->hasVSX()">;
 let Predicates = [HasVSX] in {
 let AddedComplexity = 400 in { // Prefer VSX patterns over non-VSX patterns.
 let neverHasSideEffects = 1 in { // VSX instructions don't have side effects.
@@ -47,21 +47,21 @@ let Uses = [RM] in {
 
   // Load indexed instructions
   let mayLoad = 1, canFoldAsLoad = 1 in {
-    def LXSDX : XForm_1<31, 588,
+    def LXSDX : XX1Form<31, 588,
                         (outs vsfrc:$XT), (ins memrr:$src),
                         "lxsdx $XT, $src", IIC_LdStLFD,
                         [(set f64:$XT, (load xoaddr:$src))]>;
 
-    def LXVD2X : XForm_1<31, 844,
+    def LXVD2X : XX1Form<31, 844,
                          (outs vsrc:$XT), (ins memrr:$src),
                          "lxvd2x $XT, $src", IIC_LdStLFD,
                          [(set v2f64:$XT, (load xoaddr:$src))]>;
 
-    def LXVDSX : XForm_1<31, 332,
+    def LXVDSX : XX1Form<31, 332,
                          (outs vsrc:$XT), (ins memrr:$src),
                          "lxvdsx $XT, $src", IIC_LdStLFD, []>;
 
-    def LXVW4X : XForm_1<31, 780,
+    def LXVW4X : XX1Form<31, 780,
                          (outs vsrc:$XT), (ins memrr:$src),
                          "lxvw4x $XT, $src", IIC_LdStLFD, []>;
   }
@@ -758,6 +758,8 @@ def : Pat<(fma (fneg v4f32:$A), v4f32:$C, v4f32:$B),
 def : Pat<(fma v4f32:$A, (fneg v4f32:$C), v4f32:$B),
           (XVNMSUBASP $B, $C, $A)>;
 
+def : Pat<(v2f64 (bitconvert v4f32:$A)),
+          (COPY_TO_REGCLASS $A, VSRC)>;
 def : Pat<(v2f64 (bitconvert v4i32:$A)),
           (COPY_TO_REGCLASS $A, VSRC)>;
 def : Pat<(v2f64 (bitconvert v8i16:$A)),
@@ -765,6 +767,8 @@ def : Pat<(v2f64 (bitconvert v8i16:$A)),
 def : Pat<(v2f64 (bitconvert v16i8:$A)),
           (COPY_TO_REGCLASS $A, VSRC)>;
 
+def : Pat<(v4f32 (bitconvert v2f64:$A)),
+          (COPY_TO_REGCLASS $A, VRRC)>;
 def : Pat<(v4i32 (bitconvert v2f64:$A)),
           (COPY_TO_REGCLASS $A, VRRC)>;
 def : Pat<(v8i16 (bitconvert v2f64:$A)),
@@ -772,6 +776,8 @@ def : Pat<(v8i16 (bitconvert v2f64:$A)),
 def : Pat<(v16i8 (bitconvert v2f64:$A)),
           (COPY_TO_REGCLASS $A, VRRC)>;
 
+def : Pat<(v2i64 (bitconvert v4f32:$A)),
+          (COPY_TO_REGCLASS $A, VSRC)>;
 def : Pat<(v2i64 (bitconvert v4i32:$A)),
           (COPY_TO_REGCLASS $A, VSRC)>;
 def : Pat<(v2i64 (bitconvert v8i16:$A)),
@@ -779,6 +785,8 @@ def : Pat<(v2i64 (bitconvert v8i16:$A)),
 def : Pat<(v2i64 (bitconvert v16i8:$A)),
           (COPY_TO_REGCLASS $A, VSRC)>;
 
+def : Pat<(v4f32 (bitconvert v2i64:$A)),
+          (COPY_TO_REGCLASS $A, VRRC)>;
 def : Pat<(v4i32 (bitconvert v2i64:$A)),
           (COPY_TO_REGCLASS $A, VRRC)>;
 def : Pat<(v8i16 (bitconvert v2i64:$A)),

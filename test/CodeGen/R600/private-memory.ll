@@ -1,24 +1,23 @@
-; RUN: llc < %s -march=r600 -mcpu=redwood | FileCheck %s --check-prefix=R600-CHECK --check-prefix=FUNC
-; RUN: llc < %s -march=r600 -mcpu=SI | FileCheck %s --check-prefix=SI-CHECK --check-prefix=FUNC
+; RUN: llc -march=r600 -mcpu=redwood < %s | FileCheck %s -check-prefix=R600 -check-prefix=FUNC
+; RUN: llc -show-mc-encoding -mattr=+promote-alloca -verify-machineinstrs -march=r600 -mcpu=SI < %s | FileCheck %s -check-prefix=SI-PROMOTE -check-prefix=SI -check-prefix=FUNC
+; RUN: llc -show-mc-encoding -mattr=-promote-alloca -verify-machineinstrs -march=r600 -mcpu=SI < %s | FileCheck %s -check-prefix=SI-ALLOCA -check-prefix=SI -check-prefix=FUNC
 
-; This test checks that uses and defs of the AR register happen in the same
-; instruction clause.
+declare i32 @llvm.r600.read.tidig.x() nounwind readnone
 
-; FUNC-LABEL: @mova_same_clause
+; FUNC-LABEL: {{^}}mova_same_clause:
 
-; R600-CHECK: MOVA_INT
-; R600-CHECK-NOT: ALU clause
-; R600-CHECK: 0 + AR.x
-; R600-CHECK: MOVA_INT
-; R600-CHECK-NOT: ALU clause
-; R600-CHECK: 0 + AR.x
+; R600: LDS_WRITE
+; R600: LDS_WRITE
+; R600: LDS_READ
+; R600: LDS_READ
 
-; SI-CHECK: V_READFIRSTLANE_B32 vcc_lo
-; SI-CHECK: V_MOVRELD
-; SI-CHECK: S_CBRANCH
-; SI-CHECK: V_READFIRSTLANE_B32 vcc_lo
-; SI-CHECK: V_MOVRELD
-; SI-CHECK: S_CBRANCH
+; SI-PROMOTE: DS_WRITE_B32
+; SI-PROMOTE: DS_WRITE_B32
+; SI-PROMOTE: DS_READ_B32
+; SI-PROMOTE: DS_READ_B32
+
+; SI-ALLOCA: BUFFER_STORE_DWORD v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen ; encoding: [0x00,0x10,0x70,0xe0
+; SI-ALLOCA: BUFFER_STORE_DWORD v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen ; encoding: [0x00,0x10,0x70,0xe0
 define void @mova_same_clause(i32 addrspace(1)* nocapture %out, i32 addrspace(1)* nocapture %in) {
 entry:
   %stack = alloca [5 x i32], align 4
@@ -46,9 +45,10 @@ entry:
 ; XXX: This generated code has unnecessary MOVs, we should be able to optimize
 ; this.
 
-; FUNC-LABEL: @multiple_structs
-; R600-CHECK-NOT: MOVA_INT
-; SI-CHECK-NOT: V_MOVREL
+; FUNC-LABEL: {{^}}multiple_structs:
+; R600-NOT: MOVA_INT
+; SI-NOT: V_MOVREL
+; SI-NOT: V_MOVREL
 %struct.point = type { i32, i32 }
 
 define void @multiple_structs(i32 addrspace(1)* %out) {
@@ -76,9 +76,9 @@ entry:
 ; loads and stores should be lowered to copies, so there shouldn't be any
 ; MOVA instructions.
 
-; FUNC-LABEL: @direct_loop
-; R600-CHECK-NOT: MOVA_INT
-; SI-CHECK-NOT: V_MOVREL
+; FUNC-LABEL: {{^}}direct_loop:
+; R600-NOT: MOVA_INT
+; SI-NOT: V_MOVREL
 
 define void @direct_loop(i32 addrspace(1)* %out, i32 addrspace(1)* %in) {
 entry:
@@ -112,15 +112,13 @@ for.end:
   ret void
 }
 
-; FUNC-LABEL: @short_array
+; FUNC-LABEL: {{^}}short_array:
 
-; R600-CHECK: MOV {{\** *}}T{{[0-9]\.[XYZW]}}, literal
-; R600-CHECK: 65536
-; R600-CHECK: *
-; R600-CHECK: MOVA_INT
+; R600: MOVA_INT
 
-; SI-CHECK: V_MOV_B32_e32 v{{[0-9]}}, 65536
-; SI-CHECK: V_MOVRELS_B32_e32
+; SI-PROMOTE-DAG: BUFFER_STORE_SHORT v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen ; encoding: [0x00,0x10,0x68,0xe0
+; SI-PROMOTE-DAG: BUFFER_STORE_SHORT v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen offset:0x2 ; encoding: [0x02,0x10,0x68,0xe0
+; SI-PROMOTE: BUFFER_LOAD_SSHORT v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}}
 define void @short_array(i32 addrspace(1)* %out, i32 %index) {
 entry:
   %0 = alloca [2 x i16]
@@ -135,15 +133,12 @@ entry:
   ret void
 }
 
-; FUNC-LABEL: @char_array
+; FUNC-LABEL: {{^}}char_array:
 
-; R600-CHECK: OR_INT {{\** *}}T{{[0-9]\.[XYZW]}}, {{[PVT0-9]+\.[XYZW]}}, literal
-; R600-CHECK: 256
-; R600-CHECK: *
-; R600-CHECK-NEXT: MOVA_INT
+; R600: MOVA_INT
 
-; SI-CHECK: V_OR_B32_e32 v{{[0-9]}}, 256
-; SI-CHECK: V_MOVRELS_B32_e32
+; SI-DAG: BUFFER_STORE_BYTE v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen ; encoding: [0x00,0x10,0x60,0xe0
+; SI-DAG: BUFFER_STORE_BYTE v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+:[0-9]+}}], s{{[0-9]+}} offen offset:0x1 ; encoding: [0x01,0x10,0x60,0xe0
 define void @char_array(i32 addrspace(1)* %out, i32 %index) {
 entry:
   %0 = alloca [2 x i8]
@@ -161,12 +156,12 @@ entry:
 
 ; Make sure we don't overwrite workitem information with private memory
 
-; FUNC-LABEL: @work_item_info
-; R600-CHECK-NOT: MOV T0.X
+; FUNC-LABEL: {{^}}work_item_info:
+; R600-NOT: MOV T0.X
 ; Additional check in case the move ends up in the last slot
-; R600-CHECK-NOT: MOV * TO.X
+; R600-NOT: MOV * TO.X
 
-; SI-CHECK-NOT: V_MOV_B32_e{{(32|64)}} v0
+; SI-NOT: V_MOV_B32_e{{(32|64)}} v0
 define void @work_item_info(i32 addrspace(1)* %out, i32 %in) {
 entry:
   %0 = alloca [2 x i32]
@@ -184,9 +179,11 @@ entry:
 
 ; Test that two stack objects are not stored in the same register
 ; The second stack object should be in T3.X
-; FUNC-LABEL: @no_overlap
-; R600-CHECK: MOV {{\** *}}T3.X
-; SI-CHECK: V_MOV_B32_e32 v3
+; FUNC-LABEL: {{^}}no_overlap:
+; R600_CHECK: MOV
+; R600_CHECK: [[CHAN:[XYZW]]]+
+; R600-NOT: [[CHAN]]+
+; SI: V_MOV_B32_e32 v3
 define void @no_overlap(i32 addrspace(1)* %out, i32 %in) {
 entry:
   %0 = alloca [3 x i8], align 1
@@ -211,6 +208,85 @@ entry:
   ret void
 }
 
+define void @char_array_array(i32 addrspace(1)* %out, i32 %index) {
+entry:
+  %alloca = alloca [2 x [2 x i8]]
+  %gep0 = getelementptr [2 x [2 x i8]]* %alloca, i32 0, i32 0, i32 0
+  %gep1 = getelementptr [2 x [2 x i8]]* %alloca, i32 0, i32 0, i32 1
+  store i8 0, i8* %gep0
+  store i8 1, i8* %gep1
+  %gep2 = getelementptr [2 x [2 x i8]]* %alloca, i32 0, i32 0, i32 %index
+  %load = load i8* %gep2
+  %sext = sext i8 %load to i32
+  store i32 %sext, i32 addrspace(1)* %out
+  ret void
+}
 
+define void @i32_array_array(i32 addrspace(1)* %out, i32 %index) {
+entry:
+  %alloca = alloca [2 x [2 x i32]]
+  %gep0 = getelementptr [2 x [2 x i32]]* %alloca, i32 0, i32 0, i32 0
+  %gep1 = getelementptr [2 x [2 x i32]]* %alloca, i32 0, i32 0, i32 1
+  store i32 0, i32* %gep0
+  store i32 1, i32* %gep1
+  %gep2 = getelementptr [2 x [2 x i32]]* %alloca, i32 0, i32 0, i32 %index
+  %load = load i32* %gep2
+  store i32 %load, i32 addrspace(1)* %out
+  ret void
+}
 
-declare i32 @llvm.r600.read.tidig.x() nounwind readnone
+define void @i64_array_array(i64 addrspace(1)* %out, i32 %index) {
+entry:
+  %alloca = alloca [2 x [2 x i64]]
+  %gep0 = getelementptr [2 x [2 x i64]]* %alloca, i32 0, i32 0, i32 0
+  %gep1 = getelementptr [2 x [2 x i64]]* %alloca, i32 0, i32 0, i32 1
+  store i64 0, i64* %gep0
+  store i64 1, i64* %gep1
+  %gep2 = getelementptr [2 x [2 x i64]]* %alloca, i32 0, i32 0, i32 %index
+  %load = load i64* %gep2
+  store i64 %load, i64 addrspace(1)* %out
+  ret void
+}
+
+%struct.pair32 = type { i32, i32 }
+
+define void @struct_array_array(i32 addrspace(1)* %out, i32 %index) {
+entry:
+  %alloca = alloca [2 x [2 x %struct.pair32]]
+  %gep0 = getelementptr [2 x [2 x %struct.pair32]]* %alloca, i32 0, i32 0, i32 0, i32 1
+  %gep1 = getelementptr [2 x [2 x %struct.pair32]]* %alloca, i32 0, i32 0, i32 1, i32 1
+  store i32 0, i32* %gep0
+  store i32 1, i32* %gep1
+  %gep2 = getelementptr [2 x [2 x %struct.pair32]]* %alloca, i32 0, i32 0, i32 %index, i32 0
+  %load = load i32* %gep2
+  store i32 %load, i32 addrspace(1)* %out
+  ret void
+}
+
+define void @struct_pair32_array(i32 addrspace(1)* %out, i32 %index) {
+entry:
+  %alloca = alloca [2 x %struct.pair32]
+  %gep0 = getelementptr [2 x %struct.pair32]* %alloca, i32 0, i32 0, i32 1
+  %gep1 = getelementptr [2 x %struct.pair32]* %alloca, i32 0, i32 1, i32 0
+  store i32 0, i32* %gep0
+  store i32 1, i32* %gep1
+  %gep2 = getelementptr [2 x %struct.pair32]* %alloca, i32 0, i32 %index, i32 0
+  %load = load i32* %gep2
+  store i32 %load, i32 addrspace(1)* %out
+  ret void
+}
+
+define void @select_private(i32 addrspace(1)* %out, i32 %in) nounwind {
+entry:
+  %tmp = alloca [2 x i32]
+  %tmp1 = getelementptr [2 x i32]* %tmp, i32 0, i32 0
+  %tmp2 = getelementptr [2 x i32]* %tmp, i32 0, i32 1
+  store i32 0, i32* %tmp1
+  store i32 1, i32* %tmp2
+  %cmp = icmp eq i32 %in, 0
+  %sel = select i1 %cmp, i32* %tmp1, i32* %tmp2
+  %load = load i32* %sel
+  store i32 %load, i32 addrspace(1)* %out
+  ret void
+}
+

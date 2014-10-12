@@ -14,12 +14,13 @@
 #include "LLVMContextImpl.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Attributes.h"
+#include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Module.h"
 #include <algorithm>
 using namespace llvm;
 
 LLVMContextImpl::LLVMContextImpl(LLVMContext &C)
-  : TheTrueVal(0), TheFalseVal(0),
+  : TheTrueVal(nullptr), TheFalseVal(nullptr),
     VoidTy(C, Type::VoidTyID),
     LabelTy(C, Type::LabelTyID),
     HalfTy(C, Type::HalfTyID),
@@ -35,10 +36,13 @@ LLVMContextImpl::LLVMContextImpl(LLVMContext &C)
     Int16Ty(C, 16),
     Int32Ty(C, 32),
     Int64Ty(C, 64) {
-  InlineAsmDiagHandler = 0;
-  InlineAsmDiagContext = 0;
-  DiagnosticHandler = 0;
-  DiagnosticContext = 0;
+  InlineAsmDiagHandler = nullptr;
+  InlineAsmDiagContext = nullptr;
+  DiagnosticHandler = nullptr;
+  DiagnosticContext = nullptr;
+  RespectDiagnosticFilters = false;
+  YieldCallback = nullptr;
+  YieldOpaqueHandle = nullptr;
   NamedStructTypesUniqueID = 0;
 }
 
@@ -46,8 +50,7 @@ namespace {
 struct DropReferences {
   // Takes the value_type of a ConstantUniqueMap's internal map, whose 'second'
   // is a Constant*.
-  template<typename PairT>
-  void operator()(const PairT &P) {
+  template <typename PairT> void operator()(const PairT &P) {
     P.second->dropAllReferences();
   }
 };
@@ -64,17 +67,16 @@ struct DropFirst {
 }
 
 LLVMContextImpl::~LLVMContextImpl() {
-  // NOTE: We need to delete the contents of OwnedModules, but we have to
-  // duplicate it into a temporary vector, because the destructor of Module
-  // will try to remove itself from OwnedModules set.  This would cause
-  // iterator invalidation if we iterated on the set directly.
-  std::vector<Module*> Modules(OwnedModules.begin(), OwnedModules.end());
-  DeleteContainerPointers(Modules);
+  // NOTE: We need to delete the contents of OwnedModules, but Module's dtor
+  // will call LLVMContextImpl::removeModule, thus invalidating iterators into
+  // the container. Avoid iterators during this operation:
+  while (!OwnedModules.empty())
+    delete *OwnedModules.begin();
   
   // Free the constants.  This is important to do here to ensure that they are
   // freed before the LeakDetector is torn down.
   std::for_each(ExprConstants.map_begin(), ExprConstants.map_end(),
-                DropReferences());
+                DropFirst());
   std::for_each(ArrayConstants.map_begin(), ArrayConstants.map_end(),
                 DropFirst());
   std::for_each(StructConstants.map_begin(), StructConstants.map_end(),

@@ -30,6 +30,7 @@
 namespace llvm {
 class MCAsmBackend;
 class MCContext;
+class MCObjectStreamer;
 class MCSection;
 class MCStreamer;
 class MCSymbol;
@@ -147,7 +148,7 @@ public:
   // This is called when an instruction is assembled into the specified
   // section and if there is information from the last .loc directive that
   // has yet to have a line entry made for it is made.
-  static void Make(MCStreamer *MCOS, const MCSection *Section);
+  static void Make(MCObjectStreamer *MCOS, const MCSection *Section);
 };
 
 /// MCLineSection - Instances of this class represent the line information
@@ -210,10 +211,10 @@ class MCDwarfLineTable {
 
 public:
   // This emits the Dwarf file and the line tables for all Compile Units.
-  static void Emit(MCStreamer *MCOS);
+  static void Emit(MCObjectStreamer *MCOS);
 
   // This emits the Dwarf file and the line tables for a given Compile Unit.
-  void EmitCU(MCStreamer *MCOS) const;
+  void EmitCU(MCObjectStreamer *MCOS) const;
 
   unsigned getFile(StringRef &Directory, StringRef &FileName,
                    unsigned FileNumber = 0);
@@ -456,7 +457,7 @@ public:
     return Offset;
   }
 
-  const StringRef getValues() const {
+  StringRef getValues() const {
     assert(Operation == OpEscape);
     return StringRef(&Values[0], Values.size());
   }
@@ -464,15 +465,16 @@ public:
 
 struct MCDwarfFrameInfo {
   MCDwarfFrameInfo()
-      : Begin(0), End(0), Personality(0), Lsda(0), Function(0), Instructions(),
-        PersonalityEncoding(), LsdaEncoding(0), CompactUnwindEncoding(0),
-        IsSignalFrame(false), IsSimple(false) {}
+      : Begin(nullptr), End(nullptr), Personality(nullptr), Lsda(nullptr),
+        Instructions(), CurrentCfaRegister(0), PersonalityEncoding(),
+        LsdaEncoding(0), CompactUnwindEncoding(0), IsSignalFrame(false),
+        IsSimple(false) {}
   MCSymbol *Begin;
   MCSymbol *End;
   const MCSymbol *Personality;
   const MCSymbol *Lsda;
-  const MCSymbol *Function;
   std::vector<MCCFIInstruction> Instructions;
+  unsigned CurrentCfaRegister;
   unsigned PersonalityEncoding;
   unsigned LsdaEncoding;
   uint32_t CompactUnwindEncoding;
@@ -485,9 +487,8 @@ public:
   //
   // This emits the frame info section.
   //
-  static void Emit(MCStreamer &streamer, MCAsmBackend *MAB,
-                   bool usingCFI, bool isEH);
-  static void EmitAdvanceLoc(MCStreamer &Streamer, uint64_t AddrDelta);
+  static void Emit(MCObjectStreamer &streamer, MCAsmBackend *MAB, bool isEH);
+  static void EmitAdvanceLoc(MCObjectStreamer &Streamer, uint64_t AddrDelta);
   static void EncodeAdvanceLoc(MCContext &Context, uint64_t AddrDelta,
                                raw_ostream &OS);
 };

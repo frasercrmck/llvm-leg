@@ -19,6 +19,7 @@
 
 #include "llvm/Analysis/CFGPrinter.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/FileSystem.h"
 using namespace llvm;
 
 namespace {
@@ -33,7 +34,7 @@ namespace {
       return false;
     }
 
-    void print(raw_ostream &OS, const Module* = 0) const override {}
+    void print(raw_ostream &OS, const Module* = nullptr) const override {}
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesAll();
@@ -56,7 +57,7 @@ namespace {
       return false;
     }
 
-    void print(raw_ostream &OS, const Module* = 0) const override {}
+    void print(raw_ostream &OS, const Module* = nullptr) const override {}
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesAll();
@@ -78,11 +79,11 @@ namespace {
     bool runOnFunction(Function &F) override {
       std::string Filename = "cfg." + F.getName().str() + ".dot";
       errs() << "Writing '" << Filename << "'...";
-      
-      std::string ErrorInfo;
-      raw_fd_ostream File(Filename.c_str(), ErrorInfo, sys::fs::F_Text);
 
-      if (ErrorInfo.empty())
+      std::error_code EC;
+      raw_fd_ostream File(Filename, EC, sys::fs::F_Text);
+
+      if (!EC)
         WriteGraph(File, (const Function*)&F);
       else
         errs() << "  error opening file for writing!";
@@ -90,7 +91,7 @@ namespace {
       return false;
     }
 
-    void print(raw_ostream &OS, const Module* = 0) const override {}
+    void print(raw_ostream &OS, const Module* = nullptr) const override {}
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesAll();
@@ -113,17 +114,17 @@ namespace {
       std::string Filename = "cfg." + F.getName().str() + ".dot";
       errs() << "Writing '" << Filename << "'...";
 
-      std::string ErrorInfo;
-      raw_fd_ostream File(Filename.c_str(), ErrorInfo, sys::fs::F_Text);
-      
-      if (ErrorInfo.empty())
+      std::error_code EC;
+      raw_fd_ostream File(Filename, EC, sys::fs::F_Text);
+
+      if (!EC)
         WriteGraph(File, (const Function*)&F, true);
       else
         errs() << "  error opening file for writing!";
       errs() << "\n";
       return false;
     }
-    void print(raw_ostream &OS, const Module* = 0) const override {}
+    void print(raw_ostream &OS, const Module* = nullptr) const override {}
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesAll();
@@ -147,8 +148,8 @@ void Function::viewCFG() const {
 
 /// viewCFGOnly - This function is meant for use from the debugger.  It works
 /// just like viewCFG, but it does not include the contents of basic blocks
-/// into the nodes, just the label.  If you are only interested in the CFG t
-/// his can make the graph smaller.
+/// into the nodes, just the label.  If you are only interested in the CFG
+/// this can make the graph smaller.
 ///
 void Function::viewCFGOnly() const {
   ViewGraph(this, "cfg" + getName(), true);

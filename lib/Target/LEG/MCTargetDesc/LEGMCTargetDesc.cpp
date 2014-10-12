@@ -84,11 +84,11 @@ createLEGMCInstPrinter(const Target &T, unsigned SyntaxVariant,
 
 static MCStreamer *
 createMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
-                       bool isVerboseAsm, bool useCFI, bool useDwarfDirectory,
-                       MCInstPrinter *InstPrint, MCCodeEmitter *CE,
-                       MCAsmBackend *TAB, bool ShowInst) {
-  return createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI, useDwarfDirectory,
-                           InstPrint, CE, TAB, ShowInst);
+                    bool isVerboseAsm, bool useDwarfDirectory,
+                    MCInstPrinter *InstPrint, MCCodeEmitter *CE,
+                    MCAsmBackend *TAB, bool ShowInst) {
+  return createAsmStreamer(Ctx, OS, isVerboseAsm, useDwarfDirectory, InstPrint,
+                           CE, TAB, ShowInst);
 }
 
 static MCStreamer *createMCStreamer(const Target &T, StringRef TT,

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "regalloc"
 #include "llvm/CodeGen/Passes.h"
 #include "AllocationOrder.h"
 #include "InterferenceCache.h"
@@ -37,15 +36,20 @@
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/PassAnalysisSupport.h"
+#include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <queue>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "regalloc"
 
 STATISTIC(NumGlobalSplits, "Number of split global live ranges");
 STATISTIC(NumLocalSplits,  "Number of split local live ranges");
@@ -70,6 +74,17 @@ static cl::opt<unsigned> LastChanceRecoloringMaxInterference(
     cl::desc("Last chance recoloring maximum number of considered"
              " interference at a time"),
     cl::init(8));
+
+static cl::opt<bool>
+ExhaustiveSearch("exhaustive-register-search", cl::NotHidden,
+                 cl::desc("Exhaustive Search for registers bypassing the depth "
+                          "and interference cutoffs of last chance recoloring"));
+
+static cl::opt<bool> EnableLocalReassignment(
+    "enable-local-reassign", cl::Hidden,
+    cl::desc("Local reassignment can yield better allocation decisions, but "
+             "may be compile time intensive"),
+    cl::init(false));
 
 // FIXME: Find a good default for this flag and remove the flag.
 static cl::opt<unsigned>
@@ -146,6 +161,22 @@ class RAGreedy : public MachineFunctionPass,
     /// if it can't be assigned.
     RS_Done
   };
+
+  // Enum CutOffStage to keep a track whether the register allocation failed
+  // because of the cutoffs encountered in last chance recoloring.
+  // Note: This is used as bitmask. New value should be next power of 2.
+  enum CutOffStage {
+    // No cutoffs encountered
+    CO_None = 0,
+
+    // lcr-max-depth cutoff encountered
+    CO_Depth = 1,
+
+    // lcr-max-interf cutoff encountered
+    CO_Interf = 2
+  };
+
+  uint8_t CutOffInfo;
 
 #ifndef NDEBUG
   static const char *const StageName[];
@@ -258,6 +289,13 @@ class RAGreedy : public MachineFunctionPass,
   /// NoCand which indicates the stack interval.
   SmallVector<unsigned, 32> BundleCand;
 
+  /// Callee-save register cost, calculated once per machine function.
+  BlockFrequency CSRCost;
+
+  /// Run or not the local reassignment heuristic. This information is
+  /// obtained from the TargetSubtargetInfo.
+  bool EnableLocalReassign;
+
 public:
   RAGreedy();
 
@@ -326,6 +364,7 @@ private:
   unsigned tryAssignCSRFirstTime(LiveInterval &VirtReg, AllocationOrder &Order,
                                  unsigned PhysReg, unsigned &CostPerUseLimit,
                                  SmallVectorImpl<unsigned> &NewVRegs);
+  void initializeCSRCost();
   unsigned tryBlockSplit(LiveInterval&, AllocationOrder&,
                          SmallVectorImpl<unsigned>&);
   unsigned tryInstructionSplit(LiveInterval&, AllocationOrder&,
@@ -447,7 +486,7 @@ void RAGreedy::LRE_DidCloneVirtReg(unsigned New, unsigned Old) {
 }
 
 void RAGreedy::releaseMemory() {
-  SpillerInstance.reset(0);
+  SpillerInstance.reset();
   ExtraRegInfo.clear();
   GlobalCand.clear();
 }
@@ -475,7 +514,7 @@ void RAGreedy::enqueue(PQueue &CurQueue, LiveInterval *LI) {
     // Giant live ranges fall back to the global assignment heuristic, which
     // prevents excessive spilling in pathological cases.
     bool ReverseLocal = TRI->reverseLocalAssignment();
-    bool ForceGlobal = !ReverseLocal && TRI->mayOverrideLocalAssignment() &&
+    bool ForceGlobal = !ReverseLocal &&
       (Size / SlotIndex::InstrDist) > (2 * MRI->getRegClass(Reg)->getNumRegs());
 
     if (ExtraRegInfo[Reg].Stage == RS_Assign && !ForceGlobal && !LI->empty() &&
@@ -514,7 +553,7 @@ LiveInterval *RAGreedy::dequeue() { return dequeue(Queue); }
 
 LiveInterval *RAGreedy::dequeue(PQueue &CurQueue) {
   if (CurQueue.empty())
-    return 0;
+    return nullptr;
   LiveInterval *LI = &LIS->getInterval(~CurQueue.top().second);
   CurQueue.pop();
   return LI;
@@ -703,7 +742,7 @@ bool RAGreedy::canEvictInterference(LiveInterval &VirtReg, unsigned PhysReg,
       // Evicting another local live range in this case could lead to suboptimal
       // coloring.
       if (!MaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
-          !canReassign(*Intf, PhysReg)) {
+          (!EnableLocalReassign || !canReassign(*Intf, PhysReg))) {
         return false;
       }
     }
@@ -928,14 +967,12 @@ void RAGreedy::addThroughConstraints(InterferenceCache::Cursor Intf,
       BCS[B].Exit = SpillPlacement::PrefSpill;
 
     if (++B == GroupSize) {
-      ArrayRef<SpillPlacement::BlockConstraint> Array(BCS, B);
-      SpillPlacer->addConstraints(Array);
+      SpillPlacer->addConstraints(makeArrayRef(BCS, B));
       B = 0;
     }
   }
 
-  ArrayRef<SpillPlacement::BlockConstraint> Array(BCS, B);
-  SpillPlacer->addConstraints(Array);
+  SpillPlacer->addConstraints(makeArrayRef(BCS, B));
   SpillPlacer->addLinks(makeArrayRef(TBS, T));
 }
 
@@ -974,7 +1011,7 @@ void RAGreedy::growRegion(GlobalSplitCandidate &Cand) {
 
     // Compute through constraints from the interference, or assume that all
     // through blocks prefer spilling when forming compact regions.
-    ArrayRef<unsigned> NewBlocks = makeArrayRef(ActiveBlocks).slice(AddedTo);
+    auto NewBlocks = makeArrayRef(ActiveBlocks).slice(AddedTo);
     if (Cand.PhysReg)
       addThroughConstraints(Cand.Intf, NewBlocks);
     else
@@ -1910,8 +1947,9 @@ RAGreedy::mayRecolorAllInterferences(unsigned PhysReg, LiveInterval &VirtReg,
     // If there is LastChanceRecoloringMaxInterference or more interferences,
     // chances are one would not be recolorable.
     if (Q.collectInterferingVRegs(LastChanceRecoloringMaxInterference) >=
-        LastChanceRecoloringMaxInterference) {
+        LastChanceRecoloringMaxInterference && !ExhaustiveSearch) {
       DEBUG(dbgs() << "Early abort: too many interferences.\n");
+      CutOffInfo |= CO_Interf;
       return false;
     }
     for (unsigned i = Q.interferingVRegs().size(); i; --i) {
@@ -1982,8 +2020,9 @@ unsigned RAGreedy::tryLastChanceRecoloring(LiveInterval &VirtReg,
   // We may want to reconsider that if we end up with a too large search space
   // for target with hundreds of registers.
   // Indeed, in that case we may want to cut the search space earlier.
-  if (Depth >= LastChanceRecoloringMaxDepth) {
+  if (Depth >= LastChanceRecoloringMaxDepth && !ExhaustiveSearch) {
     DEBUG(dbgs() << "Abort because max depth has been reached.\n");
+    CutOffInfo |= CO_Depth;
     return ~0u;
   }
 
@@ -2108,8 +2147,26 @@ bool RAGreedy::tryRecoloringCandidates(PQueue &RecoloringQueue,
 
 unsigned RAGreedy::selectOrSplit(LiveInterval &VirtReg,
                                  SmallVectorImpl<unsigned> &NewVRegs) {
+  CutOffInfo = CO_None;
+  LLVMContext &Ctx = MF->getFunction()->getContext();
   SmallVirtRegSet FixedRegisters;
-  return selectOrSplitImpl(VirtReg, NewVRegs, FixedRegisters);
+  unsigned Reg = selectOrSplitImpl(VirtReg, NewVRegs, FixedRegisters);
+  if (Reg == ~0U && (CutOffInfo != CO_None)) {
+    uint8_t CutOffEncountered = CutOffInfo & (CO_Depth | CO_Interf);
+    if (CutOffEncountered == CO_Depth)
+      Ctx.emitError("register allocation failed: maximum depth for recoloring "
+                    "reached. Use -fexhaustive-register-search to skip "
+                    "cutoffs");
+    else if (CutOffEncountered == CO_Interf)
+      Ctx.emitError("register allocation failed: maximum interference for "
+                    "recoloring reached. Use -fexhaustive-register-search "
+                    "to skip cutoffs");
+    else if (CutOffEncountered == (CO_Depth | CO_Interf))
+      Ctx.emitError("register allocation failed: maximum interference and "
+                    "depth for recoloring reached. Use "
+                    "-fexhaustive-register-search to skip cutoffs");
+  }
+  return Reg;
 }
 
 /// Using a CSR for the first time has a cost because it causes push|pop
@@ -2123,10 +2180,6 @@ unsigned RAGreedy::tryAssignCSRFirstTime(LiveInterval &VirtReg,
                                          unsigned PhysReg,
                                          unsigned &CostPerUseLimit,
                                          SmallVectorImpl<unsigned> &NewVRegs) {
-  // We use the larger one out of the command-line option and the value report
-  // by TRI.
-  BlockFrequency CSRCost(std::max((unsigned)CSRFirstTimeCost,
-                                  TRI->getCSRFirstUseCost()));
   if (getStage(VirtReg) == RS_Spill && VirtReg.isSpillable()) {
     // We choose spill over using the CSR for the first time if the spill cost
     // is lower than CSRCost.
@@ -2144,9 +2197,9 @@ unsigned RAGreedy::tryAssignCSRFirstTime(LiveInterval &VirtReg,
     // the cost of splitting is lower than CSRCost.
     SA->analyze(&VirtReg);
     unsigned NumCands = 0;
-    unsigned BestCand =
-      calculateRegionSplitCost(VirtReg, Order, CSRCost, NumCands,
-                               true/*IgnoreCSR*/);
+    BlockFrequency BestCost = CSRCost; // Don't modify CSRCost.
+    unsigned BestCand = calculateRegionSplitCost(VirtReg, Order, BestCost,
+                                                 NumCands, true /*IgnoreCSR*/);
     if (BestCand == NoCand)
       // Use the CSR if we can't find a region split below CSRCost.
       return PhysReg;
@@ -2156,6 +2209,31 @@ unsigned RAGreedy::tryAssignCSRFirstTime(LiveInterval &VirtReg,
     return 0;
   }
   return PhysReg;
+}
+
+void RAGreedy::initializeCSRCost() {
+  // We use the larger one out of the command-line option and the value report
+  // by TRI.
+  CSRCost = BlockFrequency(
+      std::max((unsigned)CSRFirstTimeCost, TRI->getCSRFirstUseCost()));
+  if (!CSRCost.getFrequency())
+    return;
+
+  // Raw cost is relative to Entry == 2^14; scale it appropriately.
+  uint64_t ActualEntry = MBFI->getEntryFreq();
+  if (!ActualEntry) {
+    CSRCost = 0;
+    return;
+  }
+  uint64_t FixedEntry = 1 << 14;
+  if (ActualEntry < FixedEntry)
+    CSRCost *= BranchProbability(ActualEntry, FixedEntry);
+  else if (ActualEntry <= UINT32_MAX)
+    // Invert the fraction and divide.
+    CSRCost /= BranchProbability(FixedEntry, ActualEntry);
+  else
+    // Can't use BranchProbability in general, since it takes 32-bit numbers.
+    CSRCost = CSRCost.getFrequency() * (ActualEntry / FixedEntry);
 }
 
 unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
@@ -2175,8 +2253,7 @@ unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
     // When NewVRegs is not empty, we may have made decisions such as evicting
     // a virtual register, go with the earlier decisions and use the physical
     // register.
-    if ((CSRFirstTimeCost || TRI->getCSRFirstUseCost()) &&
-        CSRFirstUse && NewVRegs.empty()) {
+    if (CSRCost.getFrequency() && CSRFirstUse && NewVRegs.empty()) {
       unsigned CSRReg = tryAssignCSRFirstTime(VirtReg, Order, PhysReg,
                                               CostPerUseLimit, NewVRegs);
       if (CSRReg || !NewVRegs.empty())
@@ -2240,9 +2317,14 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
                << "********** Function: " << mf.getName() << '\n');
 
   MF = &mf;
-  TRI = MF->getTarget().getRegisterInfo();
-  TII = MF->getTarget().getInstrInfo();
+  const TargetMachine &TM = MF->getTarget();
+  TRI = TM.getSubtargetImpl()->getRegisterInfo();
+  TII = TM.getSubtargetImpl()->getInstrInfo();
   RCI.runOnMachineFunction(mf);
+
+  EnableLocalReassign = EnableLocalReassignment ||
+    TM.getSubtargetImpl()->enableRALocalReassignment(TM.getOptLevel());
+
   if (VerifyEnabled)
     MF->verify(this, "Before greedy register allocator");
 
@@ -2257,6 +2339,8 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
   Bundles = &getAnalysis<EdgeBundles>();
   SpillPlacer = &getAnalysis<SpillPlacement>();
   DebugVars = &getAnalysis<LiveDebugVariables>();
+
+  initializeCSRCost();
 
   calculateSpillWeightsAndHints(*LIS, mf, *Loops, *MBFI);
 

@@ -40,10 +40,9 @@ public:
 
   GenericToNVVM() : ModulePass(ID) {}
 
-  virtual bool runOnModule(Module &M);
+  bool runOnModule(Module &M) override;
 
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-  }
+  void getAnalysisUsage(AnalysisUsage &AU) const override {}
 
 private:
   Value *getOrInsertCVTA(Module *M, Function *F, GlobalVariable *GV,
@@ -85,10 +84,11 @@ bool GenericToNVVM::runOnModule(Module &M) {
     GlobalVariable *GV = I++;
     if (GV->getType()->getAddressSpace() == llvm::ADDRESS_SPACE_GENERIC &&
         !llvm::isTexture(*GV) && !llvm::isSurface(*GV) &&
-        !GV->getName().startswith("llvm.")) {
+        !llvm::isSampler(*GV) && !GV->getName().startswith("llvm.")) {
       GlobalVariable *NewGV = new GlobalVariable(
           M, GV->getType()->getElementType(), GV->isConstant(),
-          GV->getLinkage(), GV->hasInitializer() ? GV->getInitializer() : NULL,
+          GV->getLinkage(),
+          GV->hasInitializer() ? GV->getInitializer() : nullptr,
           "", GV, GV->getThreadLocalMode(), llvm::ADDRESS_SPACE_GLOBAL);
       NewGV->copyAttributesFrom(GV);
       GVMap[GV] = NewGV;
@@ -140,20 +140,23 @@ bool GenericToNVVM::runOnModule(Module &M) {
   for (GVMapTy::iterator I = GVMap.begin(), E = GVMap.end(); I != E;) {
     GlobalVariable *GV = I->first;
     GlobalVariable *NewGV = I->second;
-    ++I;
+
+    // Remove GV from the map so that it can be RAUWed.  Note that
+    // DenseMap::erase() won't invalidate any iterators but this one.
+    auto Next = std::next(I);
+    GVMap.erase(I);
+    I = Next;
+
     Constant *BitCastNewGV = ConstantExpr::getPointerCast(NewGV, GV->getType());
     // At this point, the remaining uses of GV should be found only in global
     // variable initializers, as other uses have been already been removed
     // while walking through the instructions in function definitions.
-    for (Value::use_iterator UI = GV->use_begin(), UE = GV->use_end();
-         UI != UE;)
-      (UI++)->set(BitCastNewGV);
+    GV->replaceAllUsesWith(BitCastNewGV);
     std::string Name = GV->getName();
-    GV->removeDeadConstantUsers();
     GV->eraseFromParent();
     NewGV->setName(Name);
   }
-  GVMap.clear();
+  assert(GVMap.empty() && "Expected it to be empty by now");
 
   return true;
 }
@@ -162,7 +165,7 @@ Value *GenericToNVVM::getOrInsertCVTA(Module *M, Function *F,
                                       GlobalVariable *GV,
                                       IRBuilder<> &Builder) {
   PointerType *GVType = GV->getType();
-  Value *CVTA = NULL;
+  Value *CVTA = nullptr;
 
   // See if the address space conversion requires the operand to be bitcast
   // to i8 addrspace(n)* first.

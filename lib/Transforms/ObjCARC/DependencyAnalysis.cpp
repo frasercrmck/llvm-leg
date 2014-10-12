@@ -20,7 +20,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "objc-arc-dependency"
 #include "ObjCARC.h"
 #include "DependencyAnalysis.h"
 #include "ProvenanceAnalysis.h"
@@ -28,6 +27,8 @@
 
 using namespace llvm;
 using namespace llvm::objcarc;
+
+#define DEBUG_TYPE "objc-arc-dependency"
 
 /// Test whether the given instruction can result in a reference count
 /// modification (positive or negative) for the pointer's object.
@@ -205,8 +206,8 @@ void
 llvm::objcarc::FindDependencies(DependenceKind Flavor,
                                 const Value *Arg,
                                 BasicBlock *StartBB, Instruction *StartInst,
-                                SmallPtrSet<Instruction *, 4> &DependingInsts,
-                                SmallPtrSet<const BasicBlock *, 4> &Visited,
+                                SmallPtrSetImpl<Instruction *> &DependingInsts,
+                                SmallPtrSetImpl<const BasicBlock *> &Visited,
                                 ProvenanceAnalysis &PA) {
   BasicBlock::iterator StartPos = StartInst;
 
@@ -223,7 +224,7 @@ llvm::objcarc::FindDependencies(DependenceKind Flavor,
         pred_iterator PI(LocalStartBB), PE(LocalStartBB, false);
         if (PI == PE)
           // If we've reached the function entry, produce a null dependence.
-          DependingInsts.insert(0);
+          DependingInsts.insert(nullptr);
         else
           // Add the predecessors to the worklist.
           do {
@@ -245,9 +246,7 @@ llvm::objcarc::FindDependencies(DependenceKind Flavor,
   // Determine whether the original StartBB post-dominates all of the blocks we
   // visited. If not, insert a sentinal indicating that most optimizations are
   // not safe.
-  for (SmallPtrSet<const BasicBlock *, 4>::const_iterator I = Visited.begin(),
-       E = Visited.end(); I != E; ++I) {
-    const BasicBlock *BB = *I;
+  for (const BasicBlock *BB : Visited) {
     if (BB == StartBB)
       continue;
     const TerminatorInst *TI = cast<TerminatorInst>(&BB->back());

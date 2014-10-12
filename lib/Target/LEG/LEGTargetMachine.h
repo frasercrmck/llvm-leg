@@ -14,6 +14,7 @@
 #ifndef LEGTARGETMACHINE_H
 #define LEGTARGETMACHINE_H
 
+#include "LEG.h"
 #include "LEGFrameLowering.h"
 #include "LEGISelLowering.h"
 #include "LEGInstrInfo.h"
@@ -26,32 +27,13 @@ namespace llvm {
 
 class LEGTargetMachine : public LLVMTargetMachine {
   LEGSubtarget Subtarget;
-  const DataLayout DL;
-  LEGInstrInfo InstrInfo;
-  LEGFrameLowering FrameLowering;
-  LEGTargetLowering TLInfo;
-  LEGSelectionDAGInfo TSInfo;
 
 public:
   LEGTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
                    const TargetOptions &Options, Reloc::Model RM,
                    CodeModel::Model CM, CodeGenOpt::Level OL);
 
-  virtual const LEGInstrInfo *getInstrInfo() const { return &InstrInfo; }
-  virtual const LEGFrameLowering *getFrameLowering() const {
-    return &FrameLowering;
-  }
   virtual const LEGSubtarget *getSubtargetImpl() const { return &Subtarget; }
-  virtual const LEGTargetLowering *getTargetLowering() const { return &TLInfo; }
-
-  virtual const LEGSelectionDAGInfo *getSelectionDAGInfo() const {
-    return &TSInfo;
-  }
-
-  virtual const TargetRegisterInfo *getRegisterInfo() const {
-    return &InstrInfo.getRegisterInfo();
-  }
-  virtual const DataLayout *getDataLayout() const { return &DL; }
 
   // Pass Pipeline Configuration
   virtual TargetPassConfig *createPassConfig(PassManagerBase &PM);

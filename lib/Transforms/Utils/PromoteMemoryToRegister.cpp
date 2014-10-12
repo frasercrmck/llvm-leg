@@ -25,7 +25,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "mem2reg"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -51,6 +50,8 @@
 #include <queue>
 using namespace llvm;
 
+#define DEBUG_TYPE "mem2reg"
+
 STATISTIC(NumLocalPromoted, "Number of alloca's promoted within one block");
 STATISTIC(NumSingleStore,   "Number of alloca's promoted with a single store");
 STATISTIC(NumDeadAlloca,    "Number of dead alloca's removed");
@@ -59,6 +60,7 @@ STATISTIC(NumPHIInsert,     "Number of PHI nodes inserted");
 bool llvm::isAllocaPromotable(const AllocaInst *AI) {
   // FIXME: If the memory unit is of pointer or integer type, we can permit
   // assignments to subsections of the memory unit.
+  unsigned AS = AI->getType()->getAddressSpace();
 
   // Only allow direct and non-volatile loads and stores...
   for (const User *U : AI->users()) {
@@ -79,12 +81,12 @@ bool llvm::isAllocaPromotable(const AllocaInst *AI) {
           II->getIntrinsicID() != Intrinsic::lifetime_end)
         return false;
     } else if (const BitCastInst *BCI = dyn_cast<BitCastInst>(U)) {
-      if (BCI->getType() != Type::getInt8PtrTy(U->getContext()))
+      if (BCI->getType() != Type::getInt8PtrTy(U->getContext(), AS))
         return false;
       if (!onlyUsedByLifetimeMarkers(BCI))
         return false;
     } else if (const GetElementPtrInst *GEPI = dyn_cast<GetElementPtrInst>(U)) {
-      if (GEPI->getType() != Type::getInt8PtrTy(U->getContext()))
+      if (GEPI->getType() != Type::getInt8PtrTy(U->getContext(), AS))
         return false;
       if (!GEPI->hasAllZeroIndices())
         return false;
@@ -114,11 +116,11 @@ struct AllocaInfo {
   void clear() {
     DefiningBlocks.clear();
     UsingBlocks.clear();
-    OnlyStore = 0;
-    OnlyBlock = 0;
+    OnlyStore = nullptr;
+    OnlyBlock = nullptr;
     OnlyUsedInOneBlock = true;
-    AllocaPointerVal = 0;
-    DbgDeclare = 0;
+    AllocaPointerVal = nullptr;
+    DbgDeclare = nullptr;
   }
 
   /// Scan the uses of the specified alloca, filling in the AllocaInfo used
@@ -146,7 +148,7 @@ struct AllocaInfo {
       }
 
       if (OnlyUsedInOneBlock) {
-        if (OnlyBlock == 0)
+        if (!OnlyBlock)
           OnlyBlock = User->getParent();
         else if (OnlyBlock != User->getParent())
           OnlyUsedInOneBlock = false;
@@ -162,7 +164,7 @@ class RenamePassData {
 public:
   typedef std::vector<Value *> ValVector;
 
-  RenamePassData() : BB(NULL), Pred(NULL), Values() {}
+  RenamePassData() : BB(nullptr), Pred(nullptr), Values() {}
   RenamePassData(BasicBlock *B, BasicBlock *P, const ValVector &V)
       : BB(B), Pred(P), Values(V) {}
   BasicBlock *BB;
@@ -236,6 +238,9 @@ struct PromoteMem2Reg {
   /// An AliasSetTracker object to update.  If null, don't update it.
   AliasSetTracker *AST;
 
+  /// A cache of @llvm.assume intrinsics used by SimplifyInstruction.
+  AssumptionTracker *AT;
+
   /// Reverse mapping of Allocas.
   DenseMap<AllocaInst *, unsigned> AllocaLookup;
 
@@ -277,9 +282,9 @@ struct PromoteMem2Reg {
 
 public:
   PromoteMem2Reg(ArrayRef<AllocaInst *> Allocas, DominatorTree &DT,
-                 AliasSetTracker *AST)
+                 AliasSetTracker *AST, AssumptionTracker *AT)
       : Allocas(Allocas.begin(), Allocas.end()), DT(DT),
-        DIB(*DT.getRoot()->getParent()->getParent()), AST(AST) {}
+        DIB(*DT.getRoot()->getParent()->getParent()), AST(AST), AT(AT) {}
 
   void run();
 
@@ -300,8 +305,8 @@ private:
   void DetermineInsertionPoint(AllocaInst *AI, unsigned AllocaNum,
                                AllocaInfo &Info);
   void ComputeLiveInBlocks(AllocaInst *AI, AllocaInfo &Info,
-                           const SmallPtrSet<BasicBlock *, 32> &DefBlocks,
-                           SmallPtrSet<BasicBlock *, 32> &LiveInBlocks);
+                           const SmallPtrSetImpl<BasicBlock *> &DefBlocks,
+                           SmallPtrSetImpl<BasicBlock *> &LiveInBlocks);
   void RenamePass(BasicBlock *BB, BasicBlock *Pred,
                   RenamePassData::ValVector &IncVals,
                   std::vector<RenamePassData> &Worklist);
@@ -471,7 +476,8 @@ static void promoteSingleBlockAlloca(AllocaInst *AI, const AllocaInfo &Info,
     // Find the nearest store that has a lower index than this load.
     StoresByIndexTy::iterator I =
         std::lower_bound(StoresByIndex.begin(), StoresByIndex.end(),
-                         std::make_pair(LoadIdx, static_cast<StoreInst *>(0)),
+                         std::make_pair(LoadIdx,
+                                        static_cast<StoreInst *>(nullptr)),
                          less_first());
 
     if (I == StoresByIndex.begin())
@@ -632,7 +638,7 @@ void PromoteMem2Reg::run() {
   // and inserting the phi nodes we marked as necessary
   //
   std::vector<RenamePassData> RenamePassWorkList;
-  RenamePassWorkList.push_back(RenamePassData(F.begin(), 0, Values));
+  RenamePassWorkList.push_back(RenamePassData(F.begin(), nullptr, Values));
   do {
     RenamePassData RPD;
     RPD.swap(RenamePassWorkList.back());
@@ -682,7 +688,7 @@ void PromoteMem2Reg::run() {
       PHINode *PN = I->second;
 
       // If this PHI node merges one value and/or undefs, get the value.
-      if (Value *V = SimplifyInstruction(PN, 0, 0, &DT)) {
+      if (Value *V = SimplifyInstruction(PN, nullptr, nullptr, &DT, AT)) {
         if (AST && PN->getType()->isPointerTy())
           AST->deleteValue(PN);
         PN->replaceAllUsesWith(V);
@@ -763,8 +769,8 @@ void PromoteMem2Reg::run() {
 /// inserted phi nodes would be dead).
 void PromoteMem2Reg::ComputeLiveInBlocks(
     AllocaInst *AI, AllocaInfo &Info,
-    const SmallPtrSet<BasicBlock *, 32> &DefBlocks,
-    SmallPtrSet<BasicBlock *, 32> &LiveInBlocks) {
+    const SmallPtrSetImpl<BasicBlock *> &DefBlocks,
+    SmallPtrSetImpl<BasicBlock *> &LiveInBlocks) {
 
   // To determine liveness, we must iterate through the predecessors of blocks
   // where the def is live.  Blocks are added to the worklist if we need to
@@ -854,10 +860,8 @@ void PromoteMem2Reg::DetermineInsertionPoint(AllocaInst *AI, unsigned AllocaNum,
                               less_second> IDFPriorityQueue;
   IDFPriorityQueue PQ;
 
-  for (SmallPtrSet<BasicBlock *, 32>::const_iterator I = DefBlocks.begin(),
-                                                     E = DefBlocks.end();
-       I != E; ++I) {
-    if (DomTreeNode *Node = DT.getNode(*I))
+  for (BasicBlock *BB : DefBlocks) {
+    if (DomTreeNode *Node = DT.getNode(BB))
       PQ.push(std::make_pair(Node, DomLevels[Node]));
   }
 
@@ -990,7 +994,7 @@ NextIteration:
         // Get the next phi node.
         ++PNI;
         APN = dyn_cast<PHINode>(PNI);
-        if (APN == 0)
+        if (!APN)
           break;
 
         // Verify that it is missing entries.  If not, it is not being inserted
@@ -1064,10 +1068,10 @@ NextIteration:
 }
 
 void llvm::PromoteMemToReg(ArrayRef<AllocaInst *> Allocas, DominatorTree &DT,
-                           AliasSetTracker *AST) {
+                           AliasSetTracker *AST, AssumptionTracker *AT) {
   // If there is nothing to do, bail out...
   if (Allocas.empty())
     return;
 
-  PromoteMem2Reg(Allocas, DT, AST).run();
+  PromoteMem2Reg(Allocas, DT, AST, AT).run();
 }

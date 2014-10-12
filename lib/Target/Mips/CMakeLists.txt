@@ -3,10 +3,10 @@ set(LLVM_TARGET_DEFINITIONS Mips.td)
 tablegen(LLVM MipsGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM MipsGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM MipsGenDisassemblerTables.inc -gen-disassembler)
-tablegen(LLVM MipsGenCodeEmitter.inc -gen-emitter)
-tablegen(LLVM MipsGenMCCodeEmitter.inc -gen-emitter -mc-emitter)
+tablegen(LLVM MipsGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM MipsGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM MipsGenDAGISel.inc -gen-dag-isel)
+tablegen(LLVM MipsGenFastISel.inc -gen-fast-isel)
 tablegen(LLVM MipsGenCallingConv.inc -gen-callingconv)
 tablegen(LLVM MipsGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM MipsGenAsmMatcher.inc -gen-asm-matcher)
@@ -23,10 +23,9 @@ add_llvm_target(MipsCodeGen
   Mips16RegisterInfo.cpp
   MipsAnalyzeImmediate.cpp
   MipsAsmPrinter.cpp
-  MipsCodeEmitter.cpp
   MipsConstantIslandPass.cpp
   MipsDelaySlotFiller.cpp
-  MipsJITInfo.cpp
+  MipsFastISel.cpp
   MipsInstrInfo.cpp
   MipsISelDAGToDAG.cpp
   MipsISelLowering.cpp

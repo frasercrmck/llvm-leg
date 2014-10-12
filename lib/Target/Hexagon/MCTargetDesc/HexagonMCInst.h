@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HEXAGONMCINST_H
-#define HEXAGONMCINST_H
+#ifndef LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCINST_H
+#define LLVM_LIB_TARGET_HEXAGON_MCTARGETDESC_HEXAGONMCINST_H
 
 #include "HexagonTargetMachine.h"
 #include "llvm/MC/MCInst.h"
@@ -31,7 +31,7 @@ namespace llvm {
 
   public:
     explicit HexagonMCInst():
-      MCInst(), MCID(0), packetStart(0), packetEnd(0) {};
+      MCInst(), MCID(nullptr), packetStart(0), packetEnd(0) {};
     HexagonMCInst(const MCInstrDesc& mcid):
       MCInst(), MCID(&mcid), packetStart(0), packetEnd(0) {};
 

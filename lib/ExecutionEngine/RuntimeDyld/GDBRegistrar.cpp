@@ -45,7 +45,7 @@ extern "C" {
   // We put information about the JITed function in this global, which the
   // debugger reads.  Make sure to specify the version statically, because the
   // debugger checks the version before we can set it during runtime.
-  struct jit_descriptor __jit_debug_descriptor = { 1, 0, 0, 0 };
+  struct jit_descriptor __jit_debug_descriptor = { 1, 0, nullptr, nullptr };
 
   // Debuggers puts a breakpoint in this function.
   LLVM_ATTRIBUTE_NOINLINE void __jit_debug_register_code() {
@@ -101,17 +101,17 @@ private:
 
 /// Lock used to serialize all jit registration events, since they
 /// modify global variables.
-llvm::sys::Mutex JITDebugLock;
+ManagedStatic<sys::Mutex> JITDebugLock;
 
 /// Do the registration.
 void NotifyDebugger(jit_code_entry* JITCodeEntry) {
   __jit_debug_descriptor.action_flag = JIT_REGISTER_FN;
 
   // Insert this entry at the head of the list.
-  JITCodeEntry->prev_entry = NULL;
+  JITCodeEntry->prev_entry = nullptr;
   jit_code_entry* NextEntry = __jit_debug_descriptor.first_entry;
   JITCodeEntry->next_entry = NextEntry;
-  if (NextEntry != NULL) {
+  if (NextEntry) {
     NextEntry->prev_entry = JITCodeEntry;
   }
   __jit_debug_descriptor.first_entry = JITCodeEntry;
@@ -121,7 +121,7 @@ void NotifyDebugger(jit_code_entry* JITCodeEntry) {
 
 GDBJITRegistrar::~GDBJITRegistrar() {
   // Free all registered object files.
-  llvm::MutexGuard locked(JITDebugLock);
+  llvm::MutexGuard locked(*JITDebugLock);
   for (RegisteredObjectBufferMap::iterator I = ObjectBufferMap.begin(), E = ObjectBufferMap.end();
        I != E; ++I) {
     // Call the private method that doesn't update the map so our iterator
@@ -137,16 +137,15 @@ void GDBJITRegistrar::registerObject(const ObjectBuffer &Object) {
   size_t      Size = Object.getBufferSize();
 
   assert(Buffer && "Attempt to register a null object with a debugger.");
-  llvm::MutexGuard locked(JITDebugLock);
+  llvm::MutexGuard locked(*JITDebugLock);
   assert(ObjectBufferMap.find(Buffer) == ObjectBufferMap.end() &&
          "Second attempt to perform debug registration.");
   jit_code_entry* JITCodeEntry = new jit_code_entry();
 
-  if (JITCodeEntry == 0) {
+  if (!JITCodeEntry) {
     llvm::report_fatal_error(
       "Allocation failed when registering a JIT entry!\n");
-  }
-  else {
+  } else {
     JITCodeEntry->symfile_addr = Buffer;
     JITCodeEntry->symfile_size = Size;
 
@@ -157,7 +156,7 @@ void GDBJITRegistrar::registerObject(const ObjectBuffer &Object) {
 
 bool GDBJITRegistrar::deregisterObject(const ObjectBuffer& Object) {
   const char *Buffer = Object.getBufferStart();
-  llvm::MutexGuard locked(JITDebugLock);
+  llvm::MutexGuard locked(*JITDebugLock);
   RegisteredObjectBufferMap::iterator I = ObjectBufferMap.find(Buffer);
 
   if (I != ObjectBufferMap.end()) {
@@ -198,7 +197,7 @@ void GDBJITRegistrar::deregisterObjectInternal(
   }
 
   delete JITCodeEntry;
-  JITCodeEntry = NULL;
+  JITCodeEntry = nullptr;
 }
 
 llvm::ManagedStatic<GDBJITRegistrar> TheRegistrar;

@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_RUNTIME_DYLD_ELF_H
-#define LLVM_RUNTIME_DYLD_ELF_H
+#ifndef LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_RUNTIMEDYLDELF_H
+#define LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_RUNTIMEDYLDELF_H
 
 #include "RuntimeDyldImpl.h"
 #include "llvm/ADT/DenseMap.h"
@@ -20,10 +20,9 @@
 using namespace llvm;
 
 namespace llvm {
-
 namespace {
 // Helper for extensive error checking in debug builds.
-error_code Check(error_code Err) {
+std::error_code Check(std::error_code Err) {
   if (Err) {
     report_fatal_error(Err.message());
   }
@@ -59,7 +58,7 @@ class RuntimeDyldELF : public RuntimeDyldImpl {
                                 uint64_t Value, uint32_t Type, int64_t Addend);
 
   unsigned getMaxStubSize() override {
-    if (Arch == Triple::aarch64)
+    if (Arch == Triple::aarch64 || Arch == Triple::aarch64_be)
       return 20; // movz; movk; movk; movk; br
     if (Arch == Triple::arm || Arch == Triple::thumb)
       return 8; // 32-bit instruction and 32-bit address
@@ -82,7 +81,8 @@ class RuntimeDyldELF : public RuntimeDyldImpl {
       return 1;
   }
 
-  uint64_t findPPC64TOC() const;
+  void findPPC64TOCSection(ObjectImage &Obj, ObjSectionToIDMap &LocalSections,
+                           RelocationValueRef &Rel);
   void findOPDEntrySection(ObjectImage &Obj, ObjSectionToIDMap &LocalSections,
                            RelocationValueRef &Rel);
 
@@ -115,11 +115,13 @@ public:
   bool isCompatibleFile(const object::ObjectFile *Buffer) const override;
   void registerEHFrames() override;
   void deregisterEHFrames() override;
-  void finalizeLoad(ObjSectionToIDMap &SectionMap) override;
+  void finalizeLoad(ObjectImage &ObjImg,
+                    ObjSectionToIDMap &SectionMap) override;
   virtual ~RuntimeDyldELF();
 
-  static ObjectImage *createObjectImage(ObjectBuffer *InputBuffer);
-  static ObjectImage *createObjectImageFromFile(object::ObjectFile *Obj);
+  static std::unique_ptr<ObjectImage>
+  createObjectImage(std::unique_ptr<ObjectBuffer> InputBuffer);
+  static ObjectImage *createObjectImageFromFile(std::unique_ptr<object::ObjectFile> Obj);
 };
 
 } // end namespace llvm

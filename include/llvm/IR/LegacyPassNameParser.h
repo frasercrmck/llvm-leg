@@ -43,7 +43,7 @@ class PassNameParser : public PassRegistrationListener,
                        public cl::parser<const PassInfo*> {
   cl::Option *Opt;
 public:
-  PassNameParser() : Opt(0) {}
+  PassNameParser();
   virtual ~PassNameParser();
 
   void initialize(cl::Option &O) {
@@ -62,8 +62,8 @@ public:
   inline bool ignorablePass(const PassInfo *P) const {
     // Ignore non-selectable and non-constructible passes!  Ignore
     // non-optimizations.
-    return P->getPassArgument() == 0 || *P->getPassArgument() == 0 ||
-           P->getNormalCtor() == 0 || ignorablePassImpl(P);
+    return P->getPassArgument() == nullptr || *P->getPassArgument() == 0 ||
+           P->getNormalCtor() == nullptr || ignorablePassImpl(P);
   }
 
   // Implement the PassRegistrationListener callbacks used to populate our map
@@ -73,7 +73,7 @@ public:
     if (findOption(P->getPassArgument()) != getNumOptions()) {
       errs() << "Two passes with the same argument (-"
            << P->getPassArgument() << ") attempted to be registered!\n";
-      llvm_unreachable(0);
+      llvm_unreachable(nullptr);
     }
     addLiteralOption(P->getPassArgument(), P, P->getPassName());
   }

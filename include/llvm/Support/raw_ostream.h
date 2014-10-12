@@ -17,12 +17,20 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/DataTypes.h"
-#include "llvm/Support/FileSystem.h"
+#include <system_error>
 
 namespace llvm {
   class format_object_base;
+  class FormattedString;
+  class FormattedNumber;
   template <typename T>
   class SmallVectorImpl;
+
+  namespace sys {
+    namespace fs {
+      enum OpenFlags : unsigned;
+    }
+  }
 
 /// raw_ostream - This class implements an extremely fast bulk output stream
 /// that can *only* output to a stream.  It does not support seeking, reopening,
@@ -76,7 +84,7 @@ public:
   explicit raw_ostream(bool unbuffered=false)
     : BufferMode(unbuffered ? Unbuffered : InternalBuffer) {
     // Start out ready to flush.
-    OutBufStart = OutBufEnd = OutBufCur = 0;
+    OutBufStart = OutBufEnd = OutBufCur = nullptr;
   }
 
   virtual ~raw_ostream();
@@ -102,7 +110,7 @@ public:
   size_t GetBufferSize() const {
     // If we're supposed to be buffered but haven't actually gotten around
     // to allocating the buffer yet, return the value that would be used.
-    if (BufferMode != Unbuffered && OutBufStart == 0)
+    if (BufferMode != Unbuffered && OutBufStart == nullptr)
       return preferred_buffer_size();
 
     // Otherwise just return the size of the allocated buffer.
@@ -115,7 +123,7 @@ public:
   /// set to unbuffered.
   void SetUnbuffered() {
     flush();
-    SetBufferAndMode(0, 0, Unbuffered);
+    SetBufferAndMode(nullptr, 0, Unbuffered);
   }
 
   size_t GetNumBytesInBuffer() const {
@@ -157,7 +165,7 @@ public:
     size_t Size = Str.size();
 
     // Make sure we can use the fast path.
-    if (OutBufCur+Size > OutBufEnd)
+    if (Size > (size_t)(OutBufEnd - OutBufCur))
       return write(Str.data(), Size);
 
     memcpy(OutBufCur, Str.data(), Size);
@@ -205,6 +213,12 @@ public:
   // Formatted output, see the format() function in Support/Format.h.
   raw_ostream &operator<<(const format_object_base &Fmt);
 
+  // Formatted output, see the leftJustify() function in Support/Format.h.
+  raw_ostream &operator<<(const FormattedString &);
+  
+  // Formatted output, see the formatHex() function in Support/Format.h.
+  raw_ostream &operator<<(const FormattedNumber &);
+  
   /// indent - Insert 'NumSpaces' spaces.
   raw_ostream &indent(unsigned NumSpaces);
 
@@ -336,17 +350,17 @@ class raw_fd_ostream : public raw_ostream {
   void error_detected() { Error = true; }
 
 public:
-  /// raw_fd_ostream - Open the specified file for writing. If an error occurs,
-  /// information about the error is put into ErrorInfo, and the stream should
-  /// be immediately destroyed; the string will be empty if no error occurred.
-  /// This allows optional flags to control how the file will be opened.
+  /// Open the specified file for writing. If an error occurs, information
+  /// about the error is put into EC, and the stream should be immediately
+  /// destroyed;
+  /// \p Flags allows optional flags to control how the file will be opened.
   ///
   /// As a special case, if Filename is "-", then the stream will use
   /// STDOUT_FILENO instead of opening a file. Note that it will still consider
   /// itself to own the file descriptor. In particular, it will close the
   /// file descriptor when it is done (this is necessary to detect
   /// output errors).
-  raw_fd_ostream(const char *Filename, std::string &ErrorInfo,
+  raw_fd_ostream(StringRef Filename, std::error_code &EC,
                  sys::fs::OpenFlags Flags);
 
   /// raw_fd_ostream ctor - FD is the file descriptor that this writes to.  If

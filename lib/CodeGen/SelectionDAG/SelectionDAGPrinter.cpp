@@ -27,6 +27,8 @@
 #include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "dag-printer"
+
 namespace llvm {
   template<>
   struct DOTGraphTraits<SelectionDAG*> : public DefaultDOTGraphTraits {
@@ -124,9 +126,9 @@ namespace llvm {
 
     static void addCustomGraphFeatures(SelectionDAG *G,
                                        GraphWriter<SelectionDAG*> &GW) {
-      GW.emitSimpleNode(0, "plaintext=circle", "GraphRoot");
+      GW.emitSimpleNode(nullptr, "plaintext=circle", "GraphRoot");
       if (G->getRoot().getNode())
-        GW.emitEdge(0, -1, G->getRoot().getNode(), G->getRoot().getResNo(),
+        GW.emitEdge(nullptr, -1, G->getRoot().getNode(), G->getRoot().getResNo(),
                     "color=blue,style=dashed");
     }
   };
@@ -289,10 +291,10 @@ std::string ScheduleDAGSDNodes::getGraphNodeLabel(const SUnit *SU) const {
 void ScheduleDAGSDNodes::getCustomGraphFeatures(GraphWriter<ScheduleDAG*> &GW) const {
   if (DAG) {
     // Draw a special "GraphRoot" node to indicate the root of the graph.
-    GW.emitSimpleNode(0, "plaintext=circle", "GraphRoot");
+    GW.emitSimpleNode(nullptr, "plaintext=circle", "GraphRoot");
     const SDNode *N = DAG->getRoot().getNode();
     if (N && N->getNodeId() != -1)
-      GW.emitEdge(0, -1, &SUnits[N->getNodeId()], -1,
+      GW.emitEdge(nullptr, -1, &SUnits[N->getNodeId()], -1,
                   "color=blue,style=dashed");
   }
 }

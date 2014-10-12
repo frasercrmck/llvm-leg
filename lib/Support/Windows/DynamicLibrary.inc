@@ -41,32 +41,11 @@ using namespace sys;
 
 static DenseSet<HMODULE> *OpenedHandles;
 
-extern "C" {
-
-  static BOOL CALLBACK ELM_Callback(WIN32_ELMCB_PCSTR ModuleName,
-                                    ULONG_PTR ModuleBase,
-                                    ULONG ModuleSize,
-                                    PVOID UserContext)
-  {
-    // Ignore VC++ runtimes prior to 7.1.  Somehow some of them get loaded
-    // into the process.
-    if (stricmp(ModuleName, "msvci70") != 0 &&
-        stricmp(ModuleName, "msvcirt") != 0 &&
-        stricmp(ModuleName, "msvcp50") != 0 &&
-        stricmp(ModuleName, "msvcp60") != 0 &&
-        stricmp(ModuleName, "msvcp70") != 0 &&
-        stricmp(ModuleName, "msvcr70") != 0 &&
-#ifndef __MINGW32__
-        // Mingw32 uses msvcrt.dll by default. Don't ignore it.
-        // Otherwise, user should be aware, what he's doing :)
-        stricmp(ModuleName, "msvcrt") != 0 &&
-#endif
-        stricmp(ModuleName, "msvcrt20") != 0 &&
-        stricmp(ModuleName, "msvcrt40") != 0) {
-      OpenedHandles->insert((HMODULE)ModuleBase);
-    }
-    return TRUE;
-  }
+static BOOL CALLBACK
+ELM_Callback(WIN32_ELMCB_PCSTR ModuleName, ULONG_PTR ModuleBase,
+             ULONG ModuleSize, PVOID UserContext) {
+  OpenedHandles->insert((HMODULE)ModuleBase);
+  return TRUE;
 }
 
 DynamicLibrary DynamicLibrary::getPermanentLibrary(const char *filename,
@@ -85,7 +64,7 @@ DynamicLibrary DynamicLibrary::getPermanentLibrary(const char *filename,
   }
 
   SmallVector<wchar_t, MAX_PATH> filenameUnicode;
-  if (error_code ec = windows::UTF8ToUTF16(filename, filenameUnicode)) {
+  if (std::error_code ec = windows::UTF8ToUTF16(filename, filenameUnicode)) {
     SetLastError(ec.value());
     MakeErrMsg(errMsg, std::string(filename) + ": Can't convert to UTF-16: ");
     return DynamicLibrary();

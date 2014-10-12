@@ -27,14 +27,14 @@ void Use::swap(Use &RHS) {
     Val = RHS.Val;
     Val->addUse(*this);
   } else {
-    Val = 0;
+    Val = nullptr;
   }
 
   if (OldVal) {
     RHS.Val = OldVal;
     RHS.Val->addUse(RHS);
   } else {
-    RHS.Val = 0;
+    RHS.Val = nullptr;
   }
 }
 
@@ -49,10 +49,10 @@ unsigned Use::getOperandNo() const {
   return this - getUser()->op_begin();
 }
 
-// Sets up the waymarking algoritm's tags for a series of Uses. See the
+// Sets up the waymarking algorithm's tags for a series of Uses. See the
 // algorithm details here:
 //
-//   http://www.llvm.org/docs/ProgrammersManual.html#UserLayout
+//   http://www.llvm.org/docs/ProgrammersManual.html#the-waymarking-algorithm
 //
 Use *Use::initTags(Use *const Start, Use *Stop) {
   ptrdiff_t Done = 0;

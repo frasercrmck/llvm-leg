@@ -22,8 +22,7 @@
 using namespace llvm;
 
 AsmLexer::AsmLexer(const MCAsmInfo &_MAI) : MAI(_MAI)  {
-  CurBuf = NULL;
-  CurPtr = NULL;
+  CurPtr = nullptr;
   isAtStartOfLine = true;
   AllowAtInIdentifier = !StringRef(MAI.getCommentString()).startswith("@");
 }
@@ -31,15 +30,15 @@ AsmLexer::AsmLexer(const MCAsmInfo &_MAI) : MAI(_MAI)  {
 AsmLexer::~AsmLexer() {
 }
 
-void AsmLexer::setBuffer(const MemoryBuffer *buf, const char *ptr) {
-  CurBuf = buf;
+void AsmLexer::setBuffer(StringRef Buf, const char *ptr) {
+  CurBuf = Buf;
 
   if (ptr)
     CurPtr = ptr;
   else
-    CurPtr = CurBuf->getBufferStart();
+    CurPtr = CurBuf.begin();
 
-  TokStart = 0;
+  TokStart = nullptr;
 }
 
 /// ReturnError - Set the error to the specified string at the specified
@@ -58,7 +57,7 @@ int AsmLexer::getNextChar() {
   case 0:
     // A nul character in the stream is either the end of the current buffer or
     // a random nul in the file.  Disambiguate that here.
-    if (CurPtr-1 != CurBuf->getBufferEnd())
+    if (CurPtr - 1 != CurBuf.end())
       return 0;  // Just whitespace.
 
     // Otherwise, return end of file.
@@ -201,8 +200,8 @@ AsmToken AsmLexer::LexLineComment() {
     CurChar = getNextChar();
 
   if (CurChar == EOF)
-    return AsmToken(AsmToken::Eof, StringRef(CurPtr, 0));
-  return AsmToken(AsmToken::EndOfStatement, StringRef(CurPtr, 0));
+    return AsmToken(AsmToken::Eof, StringRef(TokStart, 0));
+  return AsmToken(AsmToken::EndOfStatement, StringRef(TokStart, 0));
 }
 
 static void SkipIgnoredIntegerSuffix(const char *&CurPtr) {
@@ -218,7 +217,7 @@ static void SkipIgnoredIntegerSuffix(const char *&CurPtr) {
 // Look ahead to search for first non-hex digit, if it's [hH], then we treat the
 // integer as a hexadecimal, possibly with leading zeroes.
 static unsigned doLookAhead(const char *&CurPtr, unsigned DefaultRadix) {
-  const char *FirstHex = 0;
+  const char *FirstHex = nullptr;
   const char *LookAhead = CurPtr;
   while (1) {
     if (isdigit(*LookAhead)) {
@@ -418,11 +417,10 @@ AsmToken AsmLexer::LexQuote() {
 StringRef AsmLexer::LexUntilEndOfStatement() {
   TokStart = CurPtr;
 
-  while (!isAtStartOfComment(*CurPtr) &&    // Start of line comment.
+  while (!isAtStartOfComment(CurPtr) &&     // Start of line comment.
          !isAtStatementSeparator(CurPtr) && // End of statement marker.
-         *CurPtr != '\n' &&
-         *CurPtr != '\r' &&
-         (*CurPtr != 0 || CurPtr != CurBuf->getBufferEnd())) {
+         *CurPtr != '\n' && *CurPtr != '\r' &&
+         (*CurPtr != 0 || CurPtr != CurBuf.end())) {
     ++CurPtr;
   }
   return StringRef(TokStart, CurPtr-TokStart);
@@ -431,9 +429,8 @@ StringRef AsmLexer::LexUntilEndOfStatement() {
 StringRef AsmLexer::LexUntilEndOfLine() {
   TokStart = CurPtr;
 
-  while (*CurPtr != '\n' &&
-         *CurPtr != '\r' &&
-         (*CurPtr != 0 || CurPtr != CurBuf->getBufferEnd())) {
+  while (*CurPtr != '\n' && *CurPtr != '\r' &&
+         (*CurPtr != 0 || CurPtr != CurBuf.end())) {
     ++CurPtr;
   }
   return StringRef(TokStart, CurPtr-TokStart);
@@ -461,9 +458,17 @@ const AsmToken AsmLexer::peekTok(bool ShouldSkipSpace) {
   return Token;
 }
 
-bool AsmLexer::isAtStartOfComment(char Char) {
-  // FIXME: This won't work for multi-character comment indicators like "//".
-  return Char == *MAI.getCommentString();
+bool AsmLexer::isAtStartOfComment(const char *Ptr) {
+  const char *CommentString = MAI.getCommentString();
+
+  if (CommentString[1] == '\0')
+    return CommentString[0] == Ptr[0];
+
+  // FIXME: special case for the bogus "##" comment string in X86MCAsmInfoDarwin
+  if (CommentString[1] == '#')
+    return CommentString[0] == Ptr[0];
+
+  return strncmp(Ptr, CommentString, strlen(CommentString)) == 0;
 }
 
 bool AsmLexer::isAtStatementSeparator(const char *Ptr) {
@@ -476,7 +481,7 @@ AsmToken AsmLexer::LexToken() {
   // This always consumes at least one character.
   int CurChar = getNextChar();
 
-  if (isAtStartOfComment(CurChar)) {
+  if (isAtStartOfComment(TokStart)) {
     // If this comment starts with a '#', then return the Hash token and let
     // the assembler parser see if it can be parsed as a cpp line filename
     // comment. We do this only if we are at the start of a line.

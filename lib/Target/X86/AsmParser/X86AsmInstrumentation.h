@@ -7,40 +7,60 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef X86_ASM_INSTRUMENTATION_H
-#define X86_ASM_INSTRUMENTATION_H
+#ifndef LLVM_LIB_TARGET_X86_ASMPARSER_X86ASMINSTRUMENTATION_H
+#define LLVM_LIB_TARGET_X86_ASMPARSER_X86ASMINSTRUMENTATION_H
 
 #include "llvm/ADT/SmallVector.h"
+
+#include <memory>
 
 namespace llvm {
 
 class MCContext;
 class MCInst;
+class MCInstrInfo;
 class MCParsedAsmOperand;
 class MCStreamer;
 class MCSubtargetInfo;
+class MCTargetOptions;
 
 class X86AsmInstrumentation;
 
-X86AsmInstrumentation *CreateX86AsmInstrumentation(MCSubtargetInfo &STI);
+X86AsmInstrumentation *
+CreateX86AsmInstrumentation(const MCTargetOptions &MCOptions,
+                            const MCContext &Ctx, const MCSubtargetInfo &STI);
 
 class X86AsmInstrumentation {
 public:
   virtual ~X86AsmInstrumentation();
 
-  // Instruments Inst. Should be called just before the original
-  // instruction is sent to Out.
-  virtual void InstrumentInstruction(
-      const MCInst &Inst, SmallVectorImpl<MCParsedAsmOperand *> &Operands,
-      MCContext &Ctx, MCStreamer &Out);
+  // Sets frame register corresponding to a current frame.
+  void SetInitialFrameRegister(unsigned RegNo) {
+    InitialFrameReg = RegNo;
+  }
+
+  // Tries to instrument and emit instruction.
+  virtual void InstrumentAndEmitInstruction(
+      const MCInst &Inst,
+      SmallVectorImpl<std::unique_ptr<MCParsedAsmOperand> > &Operands,
+      MCContext &Ctx, const MCInstrInfo &MII, MCStreamer &Out);
 
 protected:
   friend X86AsmInstrumentation *
-  CreateX86AsmInstrumentation(MCSubtargetInfo &STI);
+  CreateX86AsmInstrumentation(const MCTargetOptions &MCOptions,
+                              const MCContext &Ctx, const MCSubtargetInfo &STI);
 
-  X86AsmInstrumentation();
+  X86AsmInstrumentation(const MCSubtargetInfo &STI);
+
+  unsigned GetFrameRegGeneric(const MCContext &Ctx, MCStreamer &Out);
+
+  void EmitInstruction(MCStreamer &Out, const MCInst &Inst);
+
+  const MCSubtargetInfo &STI;
+
+  unsigned InitialFrameReg;
 };
 
-}  // End llvm namespace
+} // End llvm namespace
 
-#endif  // X86_ASM_INSTRUMENTATION_H
+#endif

@@ -94,7 +94,9 @@ supported include:
     uninitialized field
 
 ``0b1001011``
-    binary integer value
+    binary integer value.
+    Note that this is sized by the number of bits given and will not be
+    silently extended/truncated.
 
 ``07654321``
     octal integer value (indicated by a leading 0)
@@ -116,8 +118,9 @@ supported include:
     In rare cases, TableGen is unable to deduce the element type in which case
     the user must specify it explicitly.
 
-``{ a, b, c }``
-    initializer for a "bits<3>" value
+``{ a, b, 0b10 }``
+    initializer for a "bits<4>" value.
+    1-bit from "a", 1-bit from "b", 2-bits from 0b10.
 
 ``value``
     value reference
@@ -160,8 +163,16 @@ supported include:
     remaining elements in the list may be arbitrary other values, including
     nested ```dag``' values.
 
-``!strconcat(a, b)``
+``!listconcat(a, b, ...)``
+    A list value that is the result of concatenating the 'a' and 'b' lists.
+    The lists must have the same element type.
+    More than two arguments are accepted with the result being the concatenation
+    of all the lists given.
+
+``!strconcat(a, b, ...)``
     A string value that is the result of concatenating the 'a' and 'b' strings.
+    More than two arguments are accepted with the result being the concatenation
+    of all the strings given.
 
 ``str1#str2``
     "#" (paste) is a shorthand for !strconcat.  It may concatenate things that
@@ -199,6 +210,9 @@ supported include:
     'bit 1' if string a is equal to string b, 0 otherwise.  This only operates
     on string, int and bit objects.  Use !cast<string> to compare other types of
     objects.
+
+``!shl(a,b)`` ``!srl(a,b)`` ``!sra(a,b)`` ``!add(a,b)`` ``!and(a,b)``
+    The usual binary and arithmetic operators.
 
 Note that all of the values have rules specifying how they convert to values
 for different types.  These rules allow you to assign a value like "``7``"

@@ -24,7 +24,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "a15-sd-optimizer"
 #include "ARM.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMBaseRegisterInfo.h"
@@ -35,9 +34,12 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <set>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "a15-sd-optimizer"
 
 namespace {
   struct A15SDOptimizer : public MachineFunctionPass {
@@ -90,7 +92,7 @@ namespace {
     unsigned createImplicitDef(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator InsertBefore,
                                DebugLoc DL);
-    
+
     //
     // Various property checkers
     //
@@ -259,7 +261,7 @@ unsigned A15SDOptimizer::optimizeSDPattern(MachineInstr *MI) {
       if (DPRMI && SPRMI) {
         // See if the first operand of this insert_subreg is IMPLICIT_DEF
         MachineInstr *ECDef = elideCopies(DPRMI);
-        if (ECDef != 0 && ECDef->isImplicitDef()) {
+        if (ECDef && ECDef->isImplicitDef()) {
           // Another corner case - if we're inserting something that is purely
           // a subreg copy of a DPR, just use that DPR.
 
@@ -320,8 +322,7 @@ unsigned A15SDOptimizer::optimizeSDPattern(MachineInstr *MI) {
       return optimizeAllLanesPattern(MI, MI->getOperand(0).getReg());
   }
 
-  assert(0 && "Unhandled update pattern!");
-  return 0;
+  llvm_unreachable("Unhandled update pattern!");
 }
 
 // Return true if this MachineInstr inserts a scalar (SPR) value into
@@ -348,10 +349,10 @@ MachineInstr *A15SDOptimizer::elideCopies(MachineInstr *MI) {
   if (!MI->isFullCopy())
     return MI;
   if (!TRI->isVirtualRegister(MI->getOperand(1).getReg()))
-    return NULL;
+    return nullptr;
   MachineInstr *Def = MRI->getVRegDef(MI->getOperand(1).getReg());
   if (!Def)
-    return NULL;
+    return nullptr;
   return elideCopies(Def);
 }
 
@@ -435,7 +436,7 @@ A15SDOptimizer::createDupLane(MachineBasicBlock &MBB,
                          Out)
                    .addReg(Reg)
                    .addImm(Lane));
- 
+
   return Out;
 }
 
@@ -601,7 +602,7 @@ bool A15SDOptimizer::runOnInstruction(MachineInstr *MI) {
   //   * INSERT_SUBREG: * If the SPR value was originally in another DPR/QPR
   //                      lane, and the other lane(s) of the DPR/QPR register
   //                      that we are inserting in are undefined, use the
-  //                      original DPR/QPR value. 
+  //                      original DPR/QPR value.
   //                    * Otherwise, fall back on the same stategy as COPY.
   //
   //   * REG_SEQUENCE:  * If all except one of the input operands are
@@ -676,8 +677,8 @@ bool A15SDOptimizer::runOnInstruction(MachineInstr *MI) {
 }
 
 bool A15SDOptimizer::runOnMachineFunction(MachineFunction &Fn) {
-  TII = static_cast<const ARMBaseInstrInfo*>(Fn.getTarget().getInstrInfo());
-  TRI = Fn.getTarget().getRegisterInfo();
+  TII = static_cast<const ARMBaseInstrInfo *>(Fn.getSubtarget().getInstrInfo());
+  TRI = Fn.getSubtarget().getRegisterInfo();
   MRI = &Fn.getRegInfo();
   bool Modified = false;
 
@@ -693,7 +694,7 @@ bool A15SDOptimizer::runOnMachineFunction(MachineFunction &Fn) {
       MI != ME;) {
       Modified |= runOnInstruction(MI++);
     }
- 
+
   }
 
   for (std::set<MachineInstr *>::iterator I = DeadInstr.begin(),

@@ -12,7 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "WindowsSupport.h"
+#include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cstdio>
 #include <fcntl.h>
 #include <io.h>
@@ -166,19 +168,7 @@ static unsigned int ArgLenWithQuotes(const char *Str) {
 
 }
 
-static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
-                    const char **envp, const StringRef **redirects,
-                    unsigned memoryLimit, std::string *ErrMsg) {
-  if (!sys::fs::can_execute(Program)) {
-    if (ErrMsg)
-      *ErrMsg = "program not executable";
-    return false;
-  }
-
-  // Windows wants a command line, not an array of args, to pass to the new
-  // process.  We have to concatenate them all, while quoting the args that
-  // have embedded spaces (or are empty).
-
+static std::unique_ptr<char[]> flattenArgs(const char **args) {
   // First, determine the length of the command line.
   unsigned len = 0;
   for (unsigned i = 0; args[i]; i++) {
@@ -216,6 +206,22 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
   }
 
   *p = 0;
+  return command;
+}
+
+static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
+                    const char **envp, const StringRef **redirects,
+                    unsigned memoryLimit, std::string *ErrMsg) {
+  if (!sys::fs::can_execute(Program)) {
+    if (ErrMsg)
+      *ErrMsg = "program not executable";
+    return false;
+  }
+
+  // Windows wants a command line, not an array of args, to pass to the new
+  // process.  We have to concatenate them all, while quoting the args that
+  // have embedded spaces (or are empty).
+  std::unique_ptr<char[]> command = flattenArgs(args);
 
   // The pointer to the environment block for the new process.
   std::vector<wchar_t> EnvBlock;
@@ -226,7 +232,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
     // an environment block by concatenating them.
     for (unsigned i = 0; envp[i]; ++i) {
       SmallVector<wchar_t, MAX_PATH> EnvString;
-      if (error_code ec = windows::UTF8ToUTF16(envp[i], EnvString)) {
+      if (std::error_code ec = windows::UTF8ToUTF16(envp[i], EnvString)) {
         SetLastError(ec.value());
         MakeErrMsg(ErrMsg, "Unable to convert environment variable to UTF-16");
         return false;
@@ -290,7 +296,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
   fflush(stderr);
 
   SmallVector<wchar_t, MAX_PATH> ProgramUtf16;
-  if (error_code ec = windows::UTF8ToUTF16(Program, ProgramUtf16)) {
+  if (std::error_code ec = windows::UTF8ToUTF16(Program, ProgramUtf16)) {
     SetLastError(ec.value());
     MakeErrMsg(ErrMsg,
                std::string("Unable to convert application name to UTF-16"));
@@ -298,7 +304,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
   }
 
   SmallVector<wchar_t, MAX_PATH> CommandUtf16;
-  if (error_code ec = windows::UTF8ToUTF16(command.get(), CommandUtf16)) {
+  if (std::error_code ec = windows::UTF8ToUTF16(command.get(), CommandUtf16)) {
     SetLastError(ec.value());
     MakeErrMsg(ErrMsg,
                std::string("Unable to convert command-line to UTF-16"));
@@ -422,18 +428,62 @@ ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
   return WaitResult;
 }
 
-error_code sys::ChangeStdinToBinary(){
-  int result = _setmode( _fileno(stdin), _O_BINARY );
+std::error_code sys::ChangeStdinToBinary() {
+  int result = _setmode(_fileno(stdin), _O_BINARY);
   if (result == -1)
-    return error_code(errno, generic_category());
-  return make_error_code(errc::success);
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
 }
 
-error_code sys::ChangeStdoutToBinary(){
-  int result = _setmode( _fileno(stdout), _O_BINARY );
+std::error_code sys::ChangeStdoutToBinary() {
+  int result = _setmode(_fileno(stdout), _O_BINARY);
   if (result == -1)
-    return error_code(errno, generic_category());
-  return make_error_code(errc::success);
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+std::error_code
+llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
+                                 WindowsEncodingMethod Encoding) {
+  std::error_code EC;
+  llvm::raw_fd_ostream OS(FileName, EC, llvm::sys::fs::OpenFlags::F_Text);
+  if (EC)
+    return EC;
+
+  if (Encoding == WEM_UTF8) {
+    OS << Contents;
+  } else if (Encoding == WEM_CurrentCodePage) {
+    SmallVector<wchar_t, 1> ArgsUTF16;
+    SmallVector<char, 1> ArgsCurCP;
+
+    if ((EC = windows::UTF8ToUTF16(Contents, ArgsUTF16)))
+      return EC;
+
+    if ((EC = windows::UTF16ToCurCP(
+             ArgsUTF16.data(), ArgsUTF16.size(), ArgsCurCP)))
+      return EC;
+
+    OS.write(ArgsCurCP.data(), ArgsCurCP.size());
+  } else if (Encoding == WEM_UTF16) {
+    SmallVector<wchar_t, 1> ArgsUTF16;
+
+    if ((EC = windows::UTF8ToUTF16(Contents, ArgsUTF16)))
+      return EC;
+
+    // Endianness guessing
+    char BOM[2];
+    uint16_t src = UNI_UTF16_BYTE_ORDER_MARK_NATIVE;
+    memcpy(BOM, &src, 2);
+    OS.write(BOM, 2);
+    OS.write((char *)ArgsUTF16.data(), ArgsUTF16.size() << 1);
+  } else {
+    llvm_unreachable("Unknown encoding");
+  }
+
+  if (OS.has_error())
+    return std::make_error_code(std::errc::io_error);
+
+  return EC;
 }
 
 bool llvm::sys::argumentsFitWithinSystemLimits(ArrayRef<const char*> Args) {

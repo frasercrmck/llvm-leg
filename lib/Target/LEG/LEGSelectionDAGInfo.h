@@ -18,11 +18,9 @@
 
 namespace llvm {
 
-class LEGTargetMachine;
-
 class LEGSelectionDAGInfo : public TargetSelectionDAGInfo {
 public:
-  explicit LEGSelectionDAGInfo(const LEGTargetMachine &TM);
+  explicit LEGSelectionDAGInfo(const DataLayout &DL);
   ~LEGSelectionDAGInfo();
 };
 }

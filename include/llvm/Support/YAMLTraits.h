@@ -20,10 +20,11 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/YAMLParser.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/system_error.h"
+#include <system_error>
 
 namespace llvm {
 namespace yaml {
@@ -32,7 +33,7 @@ namespace yaml {
 /// This class should be specialized by any type that needs to be converted
 /// to/from a YAML mapping.  For example:
 ///
-///     struct ScalarBitSetTraits<MyStruct> {
+///     struct MappingTraits<MyStruct> {
 ///       static void mapping(IO &io, MyStruct &s) {
 ///         io.mapRequired("name", s.name);
 ///         io.mapRequired("size", s.size);
@@ -98,6 +99,7 @@ struct ScalarBitSetTraits {
 ///        // return empty string on success, or error string
 ///        return StringRef();
 ///      }
+///      static bool mustQuote(StringRef) { return true; }
 ///    };
 template<typename T>
 struct ScalarTraits {
@@ -109,6 +111,9 @@ struct ScalarTraits {
   // Function to convert a string to a value.  Returns the empty
   // StringRef on success or an error string if string is malformed:
   //static StringRef input(StringRef scalar, void *ctxt, T &value);
+  //
+  // Function to determine if the value should be quoted.
+  //static bool mustQuote(StringRef);
 };
 
 
@@ -171,7 +176,8 @@ struct has_ScalarEnumerationTraits
   static double test(...);
 
 public:
-  static bool const value = (sizeof(test<ScalarEnumerationTraits<T> >(0)) == 1);
+  static bool const value =
+    (sizeof(test<ScalarEnumerationTraits<T> >(nullptr)) == 1);
 };
 
 
@@ -188,7 +194,7 @@ struct has_ScalarBitSetTraits
   static double test(...);
 
 public:
-  static bool const value = (sizeof(test<ScalarBitSetTraits<T> >(0)) == 1);
+  static bool const value = (sizeof(test<ScalarBitSetTraits<T> >(nullptr)) == 1);
 };
 
 
@@ -198,16 +204,19 @@ struct has_ScalarTraits
 {
   typedef StringRef (*Signature_input)(StringRef, void*, T&);
   typedef void (*Signature_output)(const T&, void*, llvm::raw_ostream&);
+  typedef bool (*Signature_mustQuote)(StringRef);
 
   template <typename U>
-  static char test(SameType<Signature_input, &U::input>*,
-                   SameType<Signature_output, &U::output>*);
+  static char test(SameType<Signature_input, &U::input> *,
+                   SameType<Signature_output, &U::output> *,
+                   SameType<Signature_mustQuote, &U::mustQuote> *);
 
   template <typename U>
   static double test(...);
 
 public:
-  static bool const value = (sizeof(test<ScalarTraits<T> >(0,0)) == 1);
+  static bool const value =
+      (sizeof(test<ScalarTraits<T>>(nullptr, nullptr, nullptr)) == 1);
 };
 
 
@@ -224,7 +233,7 @@ struct has_MappingTraits
   static double test(...);
 
 public:
-  static bool const value = (sizeof(test<MappingTraits<T> >(0)) == 1);
+  static bool const value = (sizeof(test<MappingTraits<T> >(nullptr)) == 1);
 };
 
 // Test if MappingTraits<T>::validate() is defined on type T.
@@ -240,7 +249,7 @@ struct has_MappingValidateTraits
   static double test(...);
 
 public:
-  static bool const value = (sizeof(test<MappingTraits<T> >(0)) == 1);
+  static bool const value = (sizeof(test<MappingTraits<T> >(nullptr)) == 1);
 };
 
 
@@ -258,7 +267,7 @@ struct has_SequenceMethodTraits
   static double test(...);
 
 public:
-  static bool const value =  (sizeof(test<SequenceTraits<T> >(0)) == 1);
+  static bool const value =  (sizeof(test<SequenceTraits<T> >(nullptr)) == 1);
 };
 
 
@@ -288,7 +297,7 @@ struct has_FlowTraits<T, true>
   static char (&f(...))[2];
 
 public:
-  static bool const value = sizeof(f<Derived>(0)) == 2;
+  static bool const value = sizeof(f<Derived>(nullptr)) == 2;
 };
 
 
@@ -312,10 +321,84 @@ struct has_DocumentListTraits
   static double test(...);
 
 public:
-  static bool const value =  (sizeof(test<DocumentListTraits<T> >(0)) == 1);
+  static bool const value = (sizeof(test<DocumentListTraits<T> >(nullptr))==1);
 };
 
+inline bool isNumber(StringRef S) {
+  static const char OctalChars[] = "01234567";
+  if (S.startswith("0") &&
+      S.drop_front().find_first_not_of(OctalChars) == StringRef::npos)
+    return true;
 
+  if (S.startswith("0o") &&
+      S.drop_front(2).find_first_not_of(OctalChars) == StringRef::npos)
+    return true;
+
+  static const char HexChars[] = "0123456789abcdefABCDEF";
+  if (S.startswith("0x") &&
+      S.drop_front(2).find_first_not_of(HexChars) == StringRef::npos)
+    return true;
+
+  static const char DecChars[] = "0123456789";
+  if (S.find_first_not_of(DecChars) == StringRef::npos)
+    return true;
+
+  if (S.equals(".inf") || S.equals(".Inf") || S.equals(".INF"))
+    return true;
+
+  Regex FloatMatcher("^(\\.[0-9]+|[0-9]+(\\.[0-9]*)?)([eE][-+]?[0-9]+)?$");
+  if (FloatMatcher.match(S))
+    return true;
+
+  return false;
+}
+
+inline bool isNumeric(StringRef S) {
+  if ((S.front() == '-' || S.front() == '+') && isNumber(S.drop_front()))
+    return true;
+
+  if (isNumber(S))
+    return true;
+
+  if (S.equals(".nan") || S.equals(".NaN") || S.equals(".NAN"))
+    return true;
+
+  return false;
+}
+
+inline bool isNull(StringRef S) {
+  return S.equals("null") || S.equals("Null") || S.equals("NULL") ||
+         S.equals("~");
+}
+
+inline bool isBool(StringRef S) {
+  return S.equals("true") || S.equals("True") || S.equals("TRUE") ||
+         S.equals("false") || S.equals("False") || S.equals("FALSE");
+}
+
+inline bool needsQuotes(StringRef S) {
+  if (S.empty())
+    return true;
+  if (isspace(S.front()) || isspace(S.back()))
+    return true;
+  if (S.front() == ',')
+    return true;
+
+  static const char ScalarSafeChars[] =
+      "abcdefghijklmnopqrstuvwxyz"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/^., \t";
+  if (S.find_first_not_of(ScalarSafeChars) != StringRef::npos)
+    return true;
+
+  if (isNull(S))
+    return true;
+  if (isBool(S))
+    return true;
+  if (isNumeric(S))
+    return true;
+
+  return false;
+}
 
 
 template<typename T>
@@ -340,7 +423,7 @@ struct unvalidatedMappingTraits : public std::integral_constant<bool,
 class IO {
 public:
 
-  IO(void *Ctxt=NULL);
+  IO(void *Ctxt=nullptr);
   virtual ~IO();
 
   virtual bool outputting() = 0;
@@ -370,7 +453,7 @@ public:
   virtual bool bitSetMatch(const char*, bool) = 0;
   virtual void endBitSetScalar() = 0;
 
-  virtual void scalarString(StringRef &) = 0;
+  virtual void scalarString(StringRef &, bool) = 0;
 
   virtual void setError(const Twine &) = 0;
 
@@ -402,6 +485,19 @@ public:
     if ( bitSetMatch(Str, outputting() && (Val & ConstVal) == ConstVal) ) {
       Val = Val | ConstVal;
     }
+  }
+
+  template <typename T>
+  void maskedBitSetCase(T &Val, const char *Str, T ConstVal, T Mask) {
+    if (bitSetMatch(Str, outputting() && (Val & Mask) == ConstVal))
+      Val = Val | ConstVal;
+  }
+
+  template <typename T>
+  void maskedBitSetCase(T &Val, const char *Str, uint32_t ConstVal,
+                        uint32_t Mask) {
+    if (bitSetMatch(Str, outputting() && (Val & Mask) == ConstVal))
+      Val = Val | ConstVal;
   }
 
   void *getContext();
@@ -520,11 +616,11 @@ yamlize(IO &io, T &Val, bool) {
     llvm::raw_string_ostream Buffer(Storage);
     ScalarTraits<T>::output(Val, io.getContext(), Buffer);
     StringRef Str = Buffer.str();
-    io.scalarString(Str);
+    io.scalarString(Str, ScalarTraits<T>::mustQuote(Str));
   }
   else {
     StringRef Str;
-    io.scalarString(Str);
+    io.scalarString(Str, ScalarTraits<T>::mustQuote(Str));
     StringRef Result = ScalarTraits<T>::input(Str, io.getContext(), Val);
     if ( !Result.empty() ) {
       io.setError(llvm::Twine(Result));
@@ -601,78 +697,91 @@ template<>
 struct ScalarTraits<bool> {
   static void output(const bool &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, bool &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<StringRef> {
   static void output(const StringRef &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, StringRef &);
+  static bool mustQuote(StringRef S) { return needsQuotes(S); }
 };
  
 template<>
 struct ScalarTraits<std::string> {
   static void output(const std::string &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, std::string &);
+  static bool mustQuote(StringRef S) { return needsQuotes(S); }
 };
 
 template<>
 struct ScalarTraits<uint8_t> {
   static void output(const uint8_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, uint8_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<uint16_t> {
   static void output(const uint16_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, uint16_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<uint32_t> {
   static void output(const uint32_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, uint32_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<uint64_t> {
   static void output(const uint64_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, uint64_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<int8_t> {
   static void output(const int8_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, int8_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<int16_t> {
   static void output(const int16_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, int16_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<int32_t> {
   static void output(const int32_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, int32_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<int64_t> {
   static void output(const int64_t &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, int64_t &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<float> {
   static void output(const float &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, float &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<double> {
   static void output(const double &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, double &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 
@@ -682,7 +791,7 @@ struct ScalarTraits<double> {
 template <typename TNorm, typename TFinal>
 struct MappingNormalization {
   MappingNormalization(IO &i_o, TFinal &Obj)
-      : io(i_o), BufPtr(NULL), Result(Obj) {
+      : io(i_o), BufPtr(nullptr), Result(Obj) {
     if ( io.outputting() ) {
       BufPtr = new (&Buffer) TNorm(io, Obj);
     }
@@ -765,13 +874,13 @@ public:
   // user-data. The DiagHandler can be specified to provide
   // alternative error reporting.
   Input(StringRef InputContent,
-        void *Ctxt = NULL,
-        SourceMgr::DiagHandlerTy DiagHandler = NULL,
-        void *DiagHandlerCtxt = NULL);
+        void *Ctxt = nullptr,
+        SourceMgr::DiagHandlerTy DiagHandler = nullptr,
+        void *DiagHandlerCtxt = nullptr);
   ~Input();
 
   // Check if there was an syntax or semantic error during parsing.
-  llvm::error_code error();
+  std::error_code error();
 
 private:
   bool outputting() override;
@@ -794,7 +903,7 @@ private:
   bool beginBitSetScalar(bool &) override;
   bool bitSetMatch(const char *, bool ) override;
   void endBitSetScalar() override;
-  void scalarString(StringRef &) override;
+  void scalarString(StringRef &, bool) override;
   void setError(const Twine &message) override;
   bool canElideEmptySequence() override;
 
@@ -834,16 +943,17 @@ private:
   };
 
   class MapHNode : public HNode {
+    virtual void anchor();
+
   public:
     MapHNode(Node *n) : HNode(n) { }
-    virtual ~MapHNode();
 
     static inline bool classof(const HNode *n) {
       return MappingNode::classof(n->_node);
     }
     static inline bool classof(const MapHNode *) { return true; }
 
-    typedef llvm::StringMap<HNode*> NameToNode;
+    typedef llvm::StringMap<std::unique_ptr<HNode>> NameToNode;
 
     bool isValidKey(StringRef key);
 
@@ -852,19 +962,20 @@ private:
   };
 
   class SequenceHNode : public HNode {
+    virtual void anchor();
+
   public:
     SequenceHNode(Node *n) : HNode(n) { }
-    virtual ~SequenceHNode();
 
     static inline bool classof(const HNode *n) {
       return SequenceNode::classof(n->_node);
     }
     static inline bool classof(const SequenceHNode *) { return true; }
 
-    std::vector<HNode*> Entries;
+    std::vector<std::unique_ptr<HNode>> Entries;
   };
 
-  Input::HNode *createHNodes(Node *node);
+  std::unique_ptr<Input::HNode> createHNodes(Node *node);
   void setError(HNode *hnode, const Twine &message);
   void setError(Node *node, const Twine &message);
 
@@ -873,13 +984,13 @@ public:
   // These are only used by operator>>. They could be private
   // if those templated things could be made friends.
   bool setCurrentDocument();
-  void nextDocument();
+  bool nextDocument();
 
 private:
   llvm::SourceMgr                     SrcMgr; // must be before Strm
   std::unique_ptr<llvm::yaml::Stream> Strm;
   std::unique_ptr<HNode>              TopNode;
-  llvm::error_code                    EC;
+  std::error_code                     EC;
   llvm::BumpPtrAllocator              StringAllocator;
   llvm::yaml::document_iterator       DocIterator;
   std::vector<bool>                   BitValuesUsed;
@@ -896,7 +1007,7 @@ private:
 ///
 class Output : public IO {
 public:
-  Output(llvm::raw_ostream &, void *Ctxt=NULL);
+  Output(llvm::raw_ostream &, void *Ctxt=nullptr);
   virtual ~Output();
 
   bool outputting() override;
@@ -919,7 +1030,7 @@ public:
   bool beginBitSetScalar(bool &) override;
   bool bitSetMatch(const char *, bool ) override;
   void endBitSetScalar() override;
-  void scalarString(StringRef &) override;
+  void scalarString(StringRef &, bool) override;
   void setError(const Twine &message) override;
   bool canElideEmptySequence() override;
 public:
@@ -990,24 +1101,28 @@ template<>
 struct ScalarTraits<Hex8> {
   static void output(const Hex8 &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, Hex8 &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<Hex16> {
   static void output(const Hex16 &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, Hex16 &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<Hex32> {
   static void output(const Hex32 &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, Hex32 &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template<>
 struct ScalarTraits<Hex64> {
   static void output(const Hex64 &, void*, llvm::raw_ostream &);
   static StringRef input(StringRef, void*, Hex64 &);
+  static bool mustQuote(StringRef) { return false; }
 };
 
 

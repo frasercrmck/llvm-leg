@@ -14,8 +14,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "insert-gcov-profiling"
-
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
@@ -39,9 +37,12 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 using namespace llvm;
+
+#define DEBUG_TYPE "insert-gcov-profiling"
 
 static cl::opt<std::string>
 DefaultGCOVVersion("default-gcov-version", cl::init("402*"), cl::Hidden,
@@ -76,9 +77,6 @@ namespace {
       assert((Options.EmitNotes || Options.EmitData) &&
              "GCOVProfiler asked to do nothing?");
       init();
-    }
-    ~GCOVProfiler() {
-      DeleteContainerPointers(Funcs);
     }
     const char *getPassName() const override {
       return "GCOV Profiler";
@@ -141,7 +139,7 @@ namespace {
 
     Module *M;
     LLVMContext *Ctx;
-    SmallVector<GCOVFunction *, 16> Funcs;
+    SmallVector<std::unique_ptr<GCOVFunction>, 16> Funcs;
   };
 }
 
@@ -213,6 +211,7 @@ namespace {
   class GCOVLines : public GCOVRecord {
    public:
     void addLine(uint32_t Line) {
+      assert(Line != 0 && "Line zero is not a valid real line number.");
       Lines.push_back(Line);
     }
 
@@ -449,6 +448,28 @@ bool GCOVProfiler::runOnModule(Module &M) {
   return false;
 }
 
+static bool functionHasLines(Function *F) {
+  // Check whether this function actually has any source lines. Not only
+  // do these waste space, they also can crash gcov.
+  for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB) {
+    for (BasicBlock::iterator I = BB->begin(), IE = BB->end();
+         I != IE; ++I) {
+      // Debug intrinsic locations correspond to the location of the
+      // declaration, not necessarily any statements or expressions.
+      if (isa<DbgInfoIntrinsic>(I)) continue;
+
+      const DebugLoc &Loc = I->getDebugLoc();
+      if (Loc.isUnknown()) continue;
+
+      // Artificial lines such as calls to the global constructors.
+      if (Loc.getLine() == 0) continue; 
+
+      return true;
+    }
+  }
+  return false;
+}
+
 void GCOVProfiler::emitProfileNotes() {
   NamedMDNode *CU_Nodes = M->getNamedMetadata("llvm.dbg.cu");
   if (!CU_Nodes) return;
@@ -459,9 +480,8 @@ void GCOVProfiler::emitProfileNotes() {
     // LTO, we'll generate the same .gcno files.
 
     DICompileUnit CU(CU_Nodes->getOperand(i));
-    std::string ErrorInfo;
-    raw_fd_ostream out(mangleName(CU, "gcno").c_str(), ErrorInfo,
-                       sys::fs::F_None);
+    std::error_code EC;
+    raw_fd_ostream out(mangleName(CU, "gcno"), EC, sys::fs::F_None);
     std::string EdgeDestinations;
 
     DIArray SPs = CU.getSubprograms();
@@ -474,6 +494,7 @@ void GCOVProfiler::emitProfileNotes() {
 
       Function *F = SP.getFunction();
       if (!F) continue;
+      if (!functionHasLines(F)) continue;
 
       // gcov expects every function to start with an entry block that has a
       // single successor, so split the entry block to make sure of that.
@@ -483,26 +504,34 @@ void GCOVProfiler::emitProfileNotes() {
         ++It;
       EntryBlock.splitBasicBlock(It);
 
-      GCOVFunction *Func =
-        new GCOVFunction(SP, &out, i, Options.UseCfgChecksum);
-      Funcs.push_back(Func);
+      Funcs.push_back(
+          make_unique<GCOVFunction>(SP, &out, i, Options.UseCfgChecksum));
+      GCOVFunction &Func = *Funcs.back();
 
       for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB) {
-        GCOVBlock &Block = Func->getBlock(BB);
+        GCOVBlock &Block = Func.getBlock(BB);
         TerminatorInst *TI = BB->getTerminator();
         if (int successors = TI->getNumSuccessors()) {
           for (int i = 0; i != successors; ++i) {
-            Block.addEdge(Func->getBlock(TI->getSuccessor(i)));
+            Block.addEdge(Func.getBlock(TI->getSuccessor(i)));
           }
         } else if (isa<ReturnInst>(TI)) {
-          Block.addEdge(Func->getReturnBlock());
+          Block.addEdge(Func.getReturnBlock());
         }
 
         uint32_t Line = 0;
         for (BasicBlock::iterator I = BB->begin(), IE = BB->end();
              I != IE; ++I) {
+          // Debug intrinsic locations correspond to the location of the
+          // declaration, not necessarily any statements or expressions.
+          if (isa<DbgInfoIntrinsic>(I)) continue;
+
           const DebugLoc &Loc = I->getDebugLoc();
           if (Loc.isUnknown()) continue;
+
+          // Artificial lines such as calls to the global constructors.
+          if (Loc.getLine() == 0) continue;
+
           if (Line == Loc.getLine()) continue;
           Line = Loc.getLine();
           if (SP != getDISubprogram(Loc.getScope(*Ctx))) continue;
@@ -511,7 +540,7 @@ void GCOVProfiler::emitProfileNotes() {
           Lines.addLine(Loc.getLine());
         }
       }
-      EdgeDestinations += Func->getEdgeDestinations();
+      EdgeDestinations += Func.getEdgeDestinations();
     }
 
     FileChecksums.push_back(hash_value(EdgeDestinations));
@@ -519,9 +548,7 @@ void GCOVProfiler::emitProfileNotes() {
     out.write(ReversedVersion, 4);
     out.write(reinterpret_cast<char*>(&FileChecksums.back()), 4);
 
-    for (SmallVectorImpl<GCOVFunction *>::iterator I = Funcs.begin(),
-           E = Funcs.end(); I != E; ++I) {
-      GCOVFunction *Func = *I;
+    for (auto &Func : Funcs) {
       Func->setCfgChecksum(FileChecksums.back());
       Func->writeOut();
     }
@@ -549,6 +576,7 @@ bool GCOVProfiler::emitProfileArcs() {
         continue;
       Function *F = SP.getFunction();
       if (!F) continue;
+      if (!functionHasLines(F)) continue;
       if (!Result) Result = true;
       unsigned Edges = 0;
       for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB) {
@@ -709,11 +737,11 @@ GlobalVariable *GCOVProfiler::buildEdgeLookupTable(
     Edge += Successors;
   }
 
-  ArrayRef<Constant*> V(&EdgeTable[0], TableSize);
   GlobalVariable *EdgeTableGV =
       new GlobalVariable(
           *M, EdgeTableTy, true, GlobalValue::InternalLinkage,
-          ConstantArray::get(EdgeTableTy, V),
+          ConstantArray::get(EdgeTableTy,
+                             makeArrayRef(&EdgeTable[0],TableSize)),
           "__llvm_gcda_edge_table");
   EdgeTableGV->setUnnamedAddr(true);
   return EdgeTableGV;

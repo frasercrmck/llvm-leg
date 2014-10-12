@@ -19,12 +19,13 @@
 using namespace llvm;
 using namespace object;
 
-inline ObjectFile *unwrap(LLVMObjectFileRef OF) {
-  return reinterpret_cast<ObjectFile*>(OF);
+inline OwningBinary<ObjectFile> *unwrap(LLVMObjectFileRef OF) {
+  return reinterpret_cast<OwningBinary<ObjectFile> *>(OF);
 }
 
-inline LLVMObjectFileRef wrap(const ObjectFile *OF) {
-  return reinterpret_cast<LLVMObjectFileRef>(const_cast<ObjectFile*>(OF));
+inline LLVMObjectFileRef wrap(const OwningBinary<ObjectFile> *OF) {
+  return reinterpret_cast<LLVMObjectFileRef>(
+      const_cast<OwningBinary<ObjectFile> *>(OF));
 }
 
 inline section_iterator *unwrap(LLVMSectionIteratorRef SI) {
@@ -59,9 +60,15 @@ wrap(const relocation_iterator *SI) {
 
 // ObjectFile creation
 LLVMObjectFileRef LLVMCreateObjectFile(LLVMMemoryBufferRef MemBuf) {
-  ErrorOr<ObjectFile*> ObjOrErr(ObjectFile::createObjectFile(unwrap(MemBuf)));
-  ObjectFile *Obj = ObjOrErr ? ObjOrErr.get() : 0;
-  return wrap(Obj);
+  std::unique_ptr<MemoryBuffer> Buf(unwrap(MemBuf));
+  ErrorOr<std::unique_ptr<ObjectFile>> ObjOrErr(
+      ObjectFile::createObjectFile(Buf->getMemBufferRef()));
+  std::unique_ptr<ObjectFile> Obj;
+  if (!ObjOrErr)
+    return nullptr;
+
+  auto *Ret = new OwningBinary<ObjectFile>(std::move(ObjOrErr.get()), std::move(Buf));
+  return wrap(Ret);
 }
 
 void LLVMDisposeObjectFile(LLVMObjectFileRef ObjectFile) {
@@ -69,8 +76,9 @@ void LLVMDisposeObjectFile(LLVMObjectFileRef ObjectFile) {
 }
 
 // ObjectFile Section iterators
-LLVMSectionIteratorRef LLVMGetSections(LLVMObjectFileRef ObjectFile) {
-  section_iterator SI = unwrap(ObjectFile)->section_begin();
+LLVMSectionIteratorRef LLVMGetSections(LLVMObjectFileRef OF) {
+  OwningBinary<ObjectFile> *OB = unwrap(OF);
+  section_iterator SI = OB->getBinary()->section_begin();
   return wrap(new section_iterator(SI));
 }
 
@@ -78,9 +86,10 @@ void LLVMDisposeSectionIterator(LLVMSectionIteratorRef SI) {
   delete unwrap(SI);
 }
 
-LLVMBool LLVMIsSectionIteratorAtEnd(LLVMObjectFileRef ObjectFile,
-                                LLVMSectionIteratorRef SI) {
-  return (*unwrap(SI) == unwrap(ObjectFile)->section_end()) ? 1 : 0;
+LLVMBool LLVMIsSectionIteratorAtEnd(LLVMObjectFileRef OF,
+                                    LLVMSectionIteratorRef SI) {
+  OwningBinary<ObjectFile> *OB = unwrap(OF);
+  return (*unwrap(SI) == OB->getBinary()->section_end()) ? 1 : 0;
 }
 
 void LLVMMoveToNextSection(LLVMSectionIteratorRef SI) {
@@ -89,13 +98,14 @@ void LLVMMoveToNextSection(LLVMSectionIteratorRef SI) {
 
 void LLVMMoveToContainingSection(LLVMSectionIteratorRef Sect,
                                  LLVMSymbolIteratorRef Sym) {
-  if (error_code ec = (*unwrap(Sym))->getSection(*unwrap(Sect)))
+  if (std::error_code ec = (*unwrap(Sym))->getSection(*unwrap(Sect)))
     report_fatal_error(ec.message());
 }
 
 // ObjectFile Symbol iterators
-LLVMSymbolIteratorRef LLVMGetSymbols(LLVMObjectFileRef ObjectFile) {
-  symbol_iterator SI = unwrap(ObjectFile)->symbol_begin();
+LLVMSymbolIteratorRef LLVMGetSymbols(LLVMObjectFileRef OF) {
+  OwningBinary<ObjectFile> *OB = unwrap(OF);
+  symbol_iterator SI = OB->getBinary()->symbol_begin();
   return wrap(new symbol_iterator(SI));
 }
 
@@ -103,9 +113,10 @@ void LLVMDisposeSymbolIterator(LLVMSymbolIteratorRef SI) {
   delete unwrap(SI);
 }
 
-LLVMBool LLVMIsSymbolIteratorAtEnd(LLVMObjectFileRef ObjectFile,
-                                LLVMSymbolIteratorRef SI) {
-  return (*unwrap(SI) == unwrap(ObjectFile)->symbol_end()) ? 1 : 0;
+LLVMBool LLVMIsSymbolIteratorAtEnd(LLVMObjectFileRef OF,
+                                   LLVMSymbolIteratorRef SI) {
+  OwningBinary<ObjectFile> *OB = unwrap(OF);
+  return (*unwrap(SI) == OB->getBinary()->symbol_end()) ? 1 : 0;
 }
 
 void LLVMMoveToNextSymbol(LLVMSymbolIteratorRef SI) {
@@ -115,38 +126,29 @@ void LLVMMoveToNextSymbol(LLVMSymbolIteratorRef SI) {
 // SectionRef accessors
 const char *LLVMGetSectionName(LLVMSectionIteratorRef SI) {
   StringRef ret;
-  if (error_code ec = (*unwrap(SI))->getName(ret))
+  if (std::error_code ec = (*unwrap(SI))->getName(ret))
    report_fatal_error(ec.message());
   return ret.data();
 }
 
 uint64_t LLVMGetSectionSize(LLVMSectionIteratorRef SI) {
-  uint64_t ret;
-  if (error_code ec = (*unwrap(SI))->getSize(ret))
-    report_fatal_error(ec.message());
-  return ret;
+  return (*unwrap(SI))->getSize();
 }
 
 const char *LLVMGetSectionContents(LLVMSectionIteratorRef SI) {
   StringRef ret;
-  if (error_code ec = (*unwrap(SI))->getContents(ret))
+  if (std::error_code ec = (*unwrap(SI))->getContents(ret))
     report_fatal_error(ec.message());
   return ret.data();
 }
 
 uint64_t LLVMGetSectionAddress(LLVMSectionIteratorRef SI) {
-  uint64_t ret;
-  if (error_code ec = (*unwrap(SI))->getAddress(ret))
-    report_fatal_error(ec.message());
-  return ret;
+  return (*unwrap(SI))->getAddress();
 }
 
 LLVMBool LLVMGetSectionContainsSymbol(LLVMSectionIteratorRef SI,
                                  LLVMSymbolIteratorRef Sym) {
-  bool ret;
-  if (error_code ec = (*unwrap(SI))->containsSymbol(**unwrap(Sym), ret))
-    report_fatal_error(ec.message());
-  return ret;
+  return (*unwrap(SI))->containsSymbol(**unwrap(Sym));
 }
 
 // Section Relocation iterators
@@ -172,28 +174,21 @@ void LLVMMoveToNextRelocation(LLVMRelocationIteratorRef SI) {
 // SymbolRef accessors
 const char *LLVMGetSymbolName(LLVMSymbolIteratorRef SI) {
   StringRef ret;
-  if (error_code ec = (*unwrap(SI))->getName(ret))
+  if (std::error_code ec = (*unwrap(SI))->getName(ret))
     report_fatal_error(ec.message());
   return ret.data();
 }
 
 uint64_t LLVMGetSymbolAddress(LLVMSymbolIteratorRef SI) {
   uint64_t ret;
-  if (error_code ec = (*unwrap(SI))->getAddress(ret))
-    report_fatal_error(ec.message());
-  return ret;
-}
-
-uint64_t LLVMGetSymbolFileOffset(LLVMSymbolIteratorRef SI) {
-  uint64_t ret;
-  if (error_code ec = (*unwrap(SI))->getFileOffset(ret))
+  if (std::error_code ec = (*unwrap(SI))->getAddress(ret))
     report_fatal_error(ec.message());
   return ret;
 }
 
 uint64_t LLVMGetSymbolSize(LLVMSymbolIteratorRef SI) {
   uint64_t ret;
-  if (error_code ec = (*unwrap(SI))->getSize(ret))
+  if (std::error_code ec = (*unwrap(SI))->getSize(ret))
     report_fatal_error(ec.message());
   return ret;
 }
@@ -201,14 +196,14 @@ uint64_t LLVMGetSymbolSize(LLVMSymbolIteratorRef SI) {
 // RelocationRef accessors
 uint64_t LLVMGetRelocationAddress(LLVMRelocationIteratorRef RI) {
   uint64_t ret;
-  if (error_code ec = (*unwrap(RI))->getAddress(ret))
+  if (std::error_code ec = (*unwrap(RI))->getAddress(ret))
     report_fatal_error(ec.message());
   return ret;
 }
 
 uint64_t LLVMGetRelocationOffset(LLVMRelocationIteratorRef RI) {
   uint64_t ret;
-  if (error_code ec = (*unwrap(RI))->getOffset(ret))
+  if (std::error_code ec = (*unwrap(RI))->getOffset(ret))
     report_fatal_error(ec.message());
   return ret;
 }
@@ -220,7 +215,7 @@ LLVMSymbolIteratorRef LLVMGetRelocationSymbol(LLVMRelocationIteratorRef RI) {
 
 uint64_t LLVMGetRelocationType(LLVMRelocationIteratorRef RI) {
   uint64_t ret;
-  if (error_code ec = (*unwrap(RI))->getType(ret))
+  if (std::error_code ec = (*unwrap(RI))->getType(ret))
     report_fatal_error(ec.message());
   return ret;
 }
@@ -228,7 +223,7 @@ uint64_t LLVMGetRelocationType(LLVMRelocationIteratorRef RI) {
 // NOTE: Caller takes ownership of returned string.
 const char *LLVMGetRelocationTypeName(LLVMRelocationIteratorRef RI) {
   SmallVector<char, 0> ret;
-  if (error_code ec = (*unwrap(RI))->getTypeName(ret))
+  if (std::error_code ec = (*unwrap(RI))->getTypeName(ret))
     report_fatal_error(ec.message());
 
   char *str = static_cast<char*>(malloc(ret.size()));
@@ -239,7 +234,7 @@ const char *LLVMGetRelocationTypeName(LLVMRelocationIteratorRef RI) {
 // NOTE: Caller takes ownership of returned string.
 const char *LLVMGetRelocationValueString(LLVMRelocationIteratorRef RI) {
   SmallVector<char, 0> ret;
-  if (error_code ec = (*unwrap(RI))->getValueString(ret))
+  if (std::error_code ec = (*unwrap(RI))->getValueString(ret))
     report_fatal_error(ec.message());
 
   char *str = static_cast<char*>(malloc(ret.size()));

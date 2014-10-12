@@ -17,7 +17,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "deadargelim"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -38,7 +37,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include <map>
 #include <set>
+#include <tuple>
 using namespace llvm;
+
+#define DEBUG_TYPE "deadargelim"
 
 STATISTIC(NumArgumentsEliminated, "Number of unread args removed");
 STATISTIC(NumRetValsEliminated  , "Number of unused return values removed");
@@ -125,8 +127,7 @@ namespace {
     // As the code generation for module is finished (and DIBuilder is
     // finalized) we assume that subprogram descriptors won't be changed, and
     // they are stored in map for short duration anyway.
-    typedef DenseMap<Function*, DISubprogram> FunctionDIMap;
-    FunctionDIMap FunctionDIs;
+    DenseMap<const Function *, DISubprogram> FunctionDIs;
 
   protected:
     // DAH uses this to specify a different ID.
@@ -148,7 +149,6 @@ namespace {
                        unsigned RetValNum = 0);
     Liveness SurveyUses(const Value *V, UseVector &MaybeLiveUses);
 
-    void CollectFunctionDIs(Module &M);
     void SurveyFunction(const Function &F);
     void MarkValue(const RetOrArg &RA, Liveness L,
                    const UseVector &MaybeLiveUses);
@@ -188,35 +188,6 @@ INITIALIZE_PASS(DAH, "deadarghaX0r",
 ModulePass *llvm::createDeadArgEliminationPass() { return new DAE(); }
 ModulePass *llvm::createDeadArgHackingPass() { return new DAH(); }
 
-/// CollectFunctionDIs - Map each function in the module to its debug info
-/// descriptor.
-void DAE::CollectFunctionDIs(Module &M) {
-  FunctionDIs.clear();
-
-  for (Module::named_metadata_iterator I = M.named_metadata_begin(),
-       E = M.named_metadata_end(); I != E; ++I) {
-    NamedMDNode &NMD = *I;
-    for (unsigned MDIndex = 0, MDNum = NMD.getNumOperands();
-         MDIndex < MDNum; ++MDIndex) {
-      MDNode *Node = NMD.getOperand(MDIndex);
-      if (!DIDescriptor(Node).isCompileUnit())
-        continue;
-      DICompileUnit CU(Node);
-      const DIArray &SPs = CU.getSubprograms();
-      for (unsigned SPIndex = 0, SPNum = SPs.getNumElements();
-           SPIndex < SPNum; ++SPIndex) {
-        DISubprogram SP(SPs.getElement(SPIndex));
-        assert((!SP || SP.isSubprogram()) &&
-          "A MDNode in subprograms of a CU should be null or a DISubprogram.");
-        if (!SP)
-          continue;
-        if (Function *F = SP.getFunction())
-          FunctionDIs[F] = SP;
-      }
-    }
-  }
-}
-
 /// DeleteDeadVarargs - If this is an function that takes a ... list, and if
 /// llvm.vastart is never called, the varargs list is dead for the function.
 bool DAE::DeleteDeadVarargs(Function &Fn) {
@@ -228,10 +199,15 @@ bool DAE::DeleteDeadVarargs(Function &Fn) {
     return false;
 
   // Okay, we know we can transform this function if safe.  Scan its body
-  // looking for calls to llvm.vastart.
+  // looking for calls marked musttail or calls to llvm.vastart.
   for (Function::iterator BB = Fn.begin(), E = Fn.end(); BB != E; ++BB) {
     for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
-      if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
+      CallInst *CI = dyn_cast<CallInst>(I);
+      if (!CI)
+        continue;
+      if (CI->isMustTailCall())
+        return false;
+      if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(CI)) {
         if (II->getIntrinsicID() == Intrinsic::vastart)
           return false;
       }
@@ -325,9 +301,15 @@ bool DAE::DeleteDeadVarargs(Function &Fn) {
   }
 
   // Patch the pointer to LLVM function in debug info descriptor.
-  FunctionDIMap::iterator DI = FunctionDIs.find(&Fn);
-  if (DI != FunctionDIs.end())
-    DI->second.replaceFunction(NF);
+  auto DI = FunctionDIs.find(&Fn);
+  if (DI != FunctionDIs.end()) {
+    DISubprogram SP = DI->second;
+    SP.replaceFunction(NF);
+    // Ensure the map is updated so it can be reused on non-varargs argument
+    // eliminations of the same function.
+    FunctionDIs.erase(DI);
+    FunctionDIs[NF] = SP;
+  }
 
   // Fix up any BlockAddresses that refer to the function.
   Fn.replaceAllUsesWith(ConstantExpr::getBitCast(NF, Fn.getType()));
@@ -764,7 +746,7 @@ bool DAE::RemoveDeadStuffFromFunction(Function *F) {
 
   // Find out the new return value.
   Type *RetTy = FTy->getReturnType();
-  Type *NRetTy = NULL;
+  Type *NRetTy = nullptr;
   unsigned RetCount = NumRetVals(F);
 
   // -1 means unused, other numbers are the new index
@@ -1050,7 +1032,7 @@ bool DAE::RemoveDeadStuffFromFunction(Function *F) {
         Value *RetVal;
 
         if (NFTy->getReturnType()->isVoidTy()) {
-          RetVal = 0;
+          RetVal = nullptr;
         } else {
           assert (RetTy->isStructTy());
           // The original return value was a struct, insert
@@ -1085,7 +1067,7 @@ bool DAE::RemoveDeadStuffFromFunction(Function *F) {
       }
 
   // Patch the pointer to LLVM function in debug info descriptor.
-  FunctionDIMap::iterator DI = FunctionDIs.find(F);
+  auto DI = FunctionDIs.find(F);
   if (DI != FunctionDIs.end())
     DI->second.replaceFunction(NF);
 
@@ -1099,7 +1081,7 @@ bool DAE::runOnModule(Module &M) {
   bool Changed = false;
 
   // Collect debug info descriptors for functions.
-  CollectFunctionDIs(M);
+  FunctionDIs = makeSubprogramMap(M);
 
   // First pass: Do a simple check to see if any functions can have their "..."
   // removed.  We can do this if they never call va_start.  This loop cannot be
@@ -1117,8 +1099,8 @@ bool DAE::runOnModule(Module &M) {
   // determine that dead arguments passed into recursive functions are dead).
   //
   DEBUG(dbgs() << "DAE - Determining liveness\n");
-  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
-    SurveyFunction(*I);
+  for (auto &F : M)
+    SurveyFunction(F);
 
   // Now, remove all dead arguments and return values from each function in
   // turn.
@@ -1131,11 +1113,8 @@ bool DAE::runOnModule(Module &M) {
 
   // Finally, look for any unused parameters in functions with non-local
   // linkage and replace the passed in parameters with undef.
-  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
-    Function& F = *I;
-
+  for (auto &F : M)
     Changed |= RemoveDeadArgumentsFromCallers(F);
-  }
 
   return Changed;
 }

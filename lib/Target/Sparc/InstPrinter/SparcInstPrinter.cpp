@@ -11,14 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "asm-printer"
 #include "SparcInstPrinter.h"
 #include "Sparc.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "asm-printer"
 
 // The generated AsmMatcher SparcGenAsmWriter uses "Sparc" as the target
 // namespace. But SPARC backend uses "SP" as its namespace.
@@ -171,6 +173,6 @@ void SparcInstPrinter::printCCOperand(const MCInst *MI, int opNum,
 bool SparcInstPrinter::printGetPCX(const MCInst *MI, unsigned opNum,
                                   raw_ostream &O)
 {
-  assert(0 && "FIXME: Implement SparcInstPrinter::printGetPCX.");
+  llvm_unreachable("FIXME: Implement SparcInstPrinter::printGetPCX.");
   return true;
 }

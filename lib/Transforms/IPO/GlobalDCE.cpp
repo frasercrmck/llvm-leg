@@ -15,14 +15,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "globaldce"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Transforms/Utils/CtorUtils.h"
+#include "llvm/Transforms/Utils/GlobalStatus.h"
 #include "llvm/Pass.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "globaldce"
 
 STATISTIC(NumAliases  , "Number of global aliases removed");
 STATISTIC(NumFunctions, "Number of functions removed");
@@ -53,6 +57,15 @@ namespace {
   };
 }
 
+/// Returns true if F contains only a single "ret" instruction.
+static bool isEmptyFunction(Function *F) {
+  BasicBlock &Entry = F->getEntryBlock();
+  if (Entry.size() != 1 || !isa<ReturnInst>(Entry.front()))
+    return false;
+  ReturnInst &RI = cast<ReturnInst>(Entry.front());
+  return RI.getReturnValue() == nullptr;
+}
+
 char GlobalDCE::ID = 0;
 INITIALIZE_PASS(GlobalDCE, "globaldce",
                 "Dead Global Elimination", false, false)
@@ -61,14 +74,18 @@ ModulePass *llvm::createGlobalDCEPass() { return new GlobalDCE(); }
 
 bool GlobalDCE::runOnModule(Module &M) {
   bool Changed = false;
-  
+
+  // Remove empty functions from the global ctors list.
+  Changed |= optimizeGlobalCtorsList(M, isEmptyFunction);
+
   // Loop over the module, adding globals which are obviously necessary.
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
     Changed |= RemoveUnusedGlobalValue(*I);
     // Functions with external linkage are needed if they have a body
-    if (!I->isDiscardableIfUnused() &&
-        !I->isDeclaration() && !I->hasAvailableExternallyLinkage())
-      GlobalIsNeeded(I);
+    if (!I->isDeclaration() && !I->hasAvailableExternallyLinkage()) {
+      if (!I->isDiscardableIfUnused())
+        GlobalIsNeeded(I);
+    }
   }
 
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
@@ -76,17 +93,19 @@ bool GlobalDCE::runOnModule(Module &M) {
     Changed |= RemoveUnusedGlobalValue(*I);
     // Externally visible & appending globals are needed, if they have an
     // initializer.
-    if (!I->isDiscardableIfUnused() &&
-        !I->isDeclaration() && !I->hasAvailableExternallyLinkage())
-      GlobalIsNeeded(I);
+    if (!I->isDeclaration() && !I->hasAvailableExternallyLinkage()) {
+      if (!I->isDiscardableIfUnused())
+        GlobalIsNeeded(I);
+    }
   }
 
   for (Module::alias_iterator I = M.alias_begin(), E = M.alias_end();
        I != E; ++I) {
     Changed |= RemoveUnusedGlobalValue(*I);
     // Externally visible aliases are needed.
-    if (!I->isDiscardableIfUnused())
+    if (!I->isDiscardableIfUnused()) {
       GlobalIsNeeded(I);
+    }
   }
 
   // Now that all globals which are needed are in the AliveGlobals set, we loop
@@ -99,7 +118,12 @@ bool GlobalDCE::runOnModule(Module &M) {
        I != E; ++I)
     if (!AliveGlobals.count(I)) {
       DeadGlobalVars.push_back(I);         // Keep track of dead globals
-      I->setInitializer(0);
+      if (I->hasInitializer()) {
+        Constant *Init = I->getInitializer();
+        I->setInitializer(nullptr);
+        if (isSafeToDestroyConstant(Init))
+          Init->destroyConstant();
+      }
     }
 
   // The second pass drops the bodies of functions which are dead...
@@ -117,7 +141,7 @@ bool GlobalDCE::runOnModule(Module &M) {
        ++I)
     if (!AliveGlobals.count(I)) {
       DeadAliases.push_back(I);
-      I->setAliasee(0);
+      I->setAliasee(nullptr);
     }
 
   if (!DeadFunctions.empty()) {
@@ -163,7 +187,20 @@ void GlobalDCE::GlobalIsNeeded(GlobalValue *G) {
   // If the global is already in the set, no need to reprocess it.
   if (!AliveGlobals.insert(G))
     return;
-  
+
+  Module *M = G->getParent();
+  if (Comdat *C = G->getComdat()) {
+    for (Function &F : *M)
+      if (F.getComdat() == C)
+        GlobalIsNeeded(&F);
+    for (GlobalVariable &GV : M->globals())
+      if (GV.getComdat() == C)
+        GlobalIsNeeded(&GV);
+    for (GlobalAlias &GA : M->aliases())
+      if (GA.getComdat() == C)
+        GlobalIsNeeded(&GA);
+  }
+
   if (GlobalVariable *GV = dyn_cast<GlobalVariable>(G)) {
     // If this is a global variable, we must make sure to add any global values
     // referenced by the initializer to the alive set.

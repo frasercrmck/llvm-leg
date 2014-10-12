@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_X86_TARGETOBJECTFILE_H
-#define LLVM_TARGET_X86_TARGETOBJECTFILE_H
+#ifndef LLVM_LIB_TARGET_X86_X86TARGETOBJECTFILE_H
+#define LLVM_LIB_TARGET_X86_X86TARGETOBJECTFILE_H
 
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -46,6 +46,11 @@ namespace llvm {
     const MCExpr *
     getExecutableRelativeSymbol(const ConstantExpr *CE, Mangler &Mang,
                                 const TargetMachine &TM) const override;
+
+    /// \brief Given a mergeable constant with the specified size and relocation
+    /// information, return a section that it should be placed in.
+    const MCSection *getSectionForConstant(SectionKind Kind,
+                                           const Constant *C) const override;
   };
 
 } // end namespace llvm

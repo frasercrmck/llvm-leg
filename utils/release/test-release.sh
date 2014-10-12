@@ -18,7 +18,7 @@ else
     MAKE=make
 fi
 
-projects="llvm cfe dragonegg compiler-rt libcxx test-suite clang-tools-extra"
+projects="llvm cfe dragonegg compiler-rt libcxx libcxxabi test-suite clang-tools-extra"
 
 # Base SVN URL for the sources.
 Base_url="http://llvm.org/svn/llvm-project"
@@ -67,7 +67,7 @@ while [ $# -gt 0 ]; do
         -release | --release )
             shift
             Release="$1"
-            Release_no_dot="`echo $1 | sed -e 's,\.,,'`"
+            Release_no_dot="`echo $1 | sed -e 's,\.,,g'`"
             ;;
         -rc | --rc | -RC | --RC )
             shift
@@ -223,7 +223,7 @@ function check_valid_urls() {
         echo "# Validating $proj SVN URL"
 
         if ! svn ls $Base_url/$proj/tags/RELEASE_$Release_no_dot/$RC > /dev/null 2>&1 ; then
-            echo "llvm $Release release candidate $RC doesn't exist!"
+            echo "$proj $Release release candidate $RC doesn't exist!"
             exit 1
         fi
     done
@@ -259,6 +259,9 @@ function export_sources() {
     fi
     if [ ! -h libcxx ]; then
         ln -s ../../libcxx.src libcxx
+    fi
+    if [ ! -h libcxxabi ]; then
+        ln -s ../../libcxxabi.src libcxxabi
     fi
     cd $BuildDir
 }

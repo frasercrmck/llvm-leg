@@ -11,15 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HexagonTARGETMACHINE_H
-#define HexagonTARGETMACHINE_H
+#ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONTARGETMACHINE_H
+#define LLVM_LIB_TARGET_HEXAGON_HEXAGONTARGETMACHINE_H
 
-#include "HexagonFrameLowering.h"
-#include "HexagonISelLowering.h"
 #include "HexagonInstrInfo.h"
-#include "HexagonSelectionDAGInfo.h"
 #include "HexagonSubtarget.h"
-#include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
@@ -27,13 +23,7 @@ namespace llvm {
 class Module;
 
 class HexagonTargetMachine : public LLVMTargetMachine {
-  const DataLayout DL;       // Calculates type size & alignment.
   HexagonSubtarget Subtarget;
-  HexagonInstrInfo InstrInfo;
-  HexagonTargetLowering TLInfo;
-  HexagonSelectionDAGInfo TSInfo;
-  HexagonFrameLowering FrameLowering;
-  const InstrItineraryData* InstrItins;
 
 public:
   HexagonTargetMachine(const Target &T, StringRef TT,StringRef CPU,
@@ -41,39 +31,12 @@ public:
                        Reloc::Model RM, CodeModel::Model CM,
                        CodeGenOpt::Level OL);
 
-  virtual const HexagonInstrInfo *getInstrInfo() const {
-    return &InstrInfo;
-  }
-  virtual const HexagonSubtarget *getSubtargetImpl() const {
+  const HexagonSubtarget *getSubtargetImpl() const override {
     return &Subtarget;
   }
-  virtual const HexagonRegisterInfo *getRegisterInfo() const {
-    return &InstrInfo.getRegisterInfo();
-  }
-
-  virtual const InstrItineraryData* getInstrItineraryData() const {
-    return InstrItins;
-  }
-
-
-  virtual const HexagonTargetLowering* getTargetLowering() const {
-    return &TLInfo;
-  }
-
-  virtual const HexagonFrameLowering* getFrameLowering() const {
-    return &FrameLowering;
-  }
-
-  virtual const HexagonSelectionDAGInfo* getSelectionDAGInfo() const {
-    return &TSInfo;
-  }
-
-  virtual const DataLayout       *getDataLayout() const { return &DL; }
   static unsigned getModuleMatchQuality(const Module &M);
 
-  // Pass Pipeline Configuration.
-  virtual bool addPassesForOptimizations(PassManagerBase &PM);
-  virtual TargetPassConfig *createPassConfig(PassManagerBase &PM);
+  TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 };
 
 extern bool flag_aligned_memcpy;

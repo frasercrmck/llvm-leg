@@ -60,7 +60,7 @@ public:
 /// implicit. The implicit pointer is found via a waymarking algorithm
 /// described in the programmer's manual:
 ///
-///   http://www.llvm.org/docs/ProgrammersManual.html#UserLayout
+///   http://www.llvm.org/docs/ProgrammersManual.html#the-waymarking-algorithm
 ///
 /// This is essentially the single most memory intensive object in LLVM because
 /// of the number of uses in the system. At the same time, the constant time
@@ -88,7 +88,7 @@ private:
   enum PrevPtrTag { zeroDigitTag, oneDigitTag, stopTag, fullStopTag };
 
   /// Constructor
-  Use(PrevPtrTag tag) : Val(0) { Prev.setInt(tag); }
+  Use(PrevPtrTag tag) : Val(nullptr) { Prev.setInt(tag); }
 
 public:
   operator Value *() const { return Val; }

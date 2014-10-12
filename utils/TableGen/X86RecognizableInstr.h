@@ -14,8 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef X86RECOGNIZABLEINSTR_H
-#define X86RECOGNIZABLEINSTR_H
+#ifndef LLVM_UTILS_TABLEGEN_X86RECOGNIZABLEINSTR_H
+#define LLVM_UTILS_TABLEGEN_X86RECOGNIZABLEINSTR_H
 
 #include "CodeGenTarget.h"
 #include "X86DisassemblerTables.h"
@@ -78,6 +78,8 @@ private:
   bool IsCodeGenOnly;
   /// The ForceDisassemble field from the record
   bool ForceDisassemble;
+  // The CD8_Scale field from the record
+  uint8_t CD8_Scale;
   // Whether the instruction has the predicate "In64BitMode"
   bool Is64Bit;
   // Whether the instruction has the predicate "In32BitMode"
@@ -152,6 +154,9 @@ private:
                                                         uint8_t OpSize);
   static OperandEncoding writemaskRegisterEncodingFromString(const std::string &s,
                                                              uint8_t OpSize);
+
+  /// \brief Adjust the encoding type for an operand based on the instruction.
+  void adjustOperandEncoding(OperandEncoding &encoding);
 
   /// handleOperand - Converts a single operand from the LLVM table format to
   ///   the emitted table format, handling any duplicate operands it encounters

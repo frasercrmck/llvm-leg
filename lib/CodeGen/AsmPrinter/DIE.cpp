@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "DIE.h"
+
+#include "DwarfCompileUnit.h"
 #include "DwarfDebug.h"
 #include "DwarfUnit.h"
 #include "llvm/ADT/Twine.h"
@@ -104,15 +106,6 @@ void DIEAbbrev::print(raw_ostream &O) {
 void DIEAbbrev::dump() { print(dbgs()); }
 #endif
 
-//===----------------------------------------------------------------------===//
-// DIE Implementation
-//===----------------------------------------------------------------------===//
-
-DIE::~DIE() {
-  for (unsigned i = 0, N = Children.size(); i < N; ++i)
-    delete Children[i];
-}
-
 /// Climb up the parent chain to get the unit DIE to which this DIE
 /// belongs.
 const DIE *DIE::getUnit() const {
@@ -131,7 +124,7 @@ const DIE *DIE::getUnitOrNull() const {
       return p;
     p = p->getParent();
   }
-  return NULL;
+  return nullptr;
 }
 
 DIEValue *DIE::findAttribute(dwarf::Attribute Attribute) const {
@@ -143,7 +136,7 @@ DIEValue *DIE::findAttribute(dwarf::Attribute Attribute) const {
   for (size_t i = 0; i < Values.size(); ++i)
     if (Abbrevs.getData()[i].getAttribute() == Attribute)
       return Values[i];
-  return NULL;
+  return nullptr;
 }
 
 #ifndef NDEBUG
@@ -385,12 +378,12 @@ void DIEEntry::EmitValue(AsmPrinter *AP, dwarf::Form Form) const {
 
   if (Form == dwarf::DW_FORM_ref_addr) {
     const DwarfDebug *DD = AP->getDwarfDebug();
-    unsigned Addr = Entry->getOffset();
+    unsigned Addr = Entry.getOffset();
     assert(!DD->useSplitDwarf() && "TODO: dwo files can't have relocations.");
     // For DW_FORM_ref_addr, output the offset from beginning of debug info
     // section. Entry->getOffset() returns the offset from start of the
     // compile unit.
-    DwarfCompileUnit *CU = DD->lookupUnit(Entry->getUnit());
+    DwarfCompileUnit *CU = DD->lookupUnit(Entry.getUnit());
     assert(CU && "CUDie should belong to a CU.");
     Addr += CU->getDebugInfoOffset();
     if (AP->MAI->doesDwarfUseRelocationsAcrossSections())
@@ -401,7 +394,7 @@ void DIEEntry::EmitValue(AsmPrinter *AP, dwarf::Form Form) const {
                                     CU->getSectionSym(),
                                     DIEEntry::getRefAddrSize(AP));
   } else
-    AP->EmitInt32(Entry->getOffset());
+    AP->EmitInt32(Entry.getOffset());
 }
 
 unsigned DIEEntry::getRefAddrSize(AsmPrinter *AP) {
@@ -418,7 +411,7 @@ unsigned DIEEntry::getRefAddrSize(AsmPrinter *AP) {
 
 #ifndef NDEBUG
 void DIEEntry::print(raw_ostream &O) const {
-  O << format("Die: 0x%lx", (long)(intptr_t)Entry);
+  O << format("Die: 0x%lx", (long)(intptr_t)&Entry);
 }
 #endif
 
@@ -560,7 +553,7 @@ unsigned DIELocList::SizeOf(AsmPrinter *AP, dwarf::Form Form) const {
 ///
 void DIELocList::EmitValue(AsmPrinter *AP, dwarf::Form Form) const {
   DwarfDebug *DD = AP->getDwarfDebug();
-  MCSymbol *Label = AP->GetTempSymbol("debug_loc", Index);
+  MCSymbol *Label = DD->getDebugLocEntries()[Index].Label;
 
   if (AP->MAI->doesDwarfUseRelocationsAcrossSections() && !DD->useSplitDwarf())
     AP->EmitSectionOffset(Label, DD->getDebugLocSym());

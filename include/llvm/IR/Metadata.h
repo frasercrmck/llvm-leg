@@ -17,6 +17,7 @@
 #define LLVM_IR_METADATA_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/ilist_node.h"
 #include "llvm/ADT/iterator_range.h"
@@ -30,7 +31,7 @@ template<typename ValueSubClass, typename ItemParentClass>
 
 
 enum LLVMConstants : uint32_t {
-  DEBUG_METADATA_VERSION = 1  // Current debug info version number.
+  DEBUG_METADATA_VERSION = 2  // Current debug info version number.
 };
 
 //===----------------------------------------------------------------------===//
@@ -66,6 +67,49 @@ public:
   }
 };
 
+/// AAMDNodes - A collection of metadata nodes that might be associated with a
+/// memory access used by the alias-analysis infrastructure.
+struct AAMDNodes {
+  explicit AAMDNodes(MDNode *T = nullptr, MDNode *S = nullptr,
+                     MDNode *N = nullptr)
+      : TBAA(T), Scope(S), NoAlias(N) {}
+
+  bool operator==(const AAMDNodes &A) const {
+    return TBAA == A.TBAA && Scope == A.Scope && NoAlias == A.NoAlias;
+  }
+
+  bool operator!=(const AAMDNodes &A) const { return !(*this == A); }
+
+  LLVM_EXPLICIT operator bool() const { return TBAA || Scope || NoAlias; }
+
+  /// TBAA - The tag for type-based alias analysis.
+  MDNode *TBAA;
+
+  /// Scope - The tag for alias scope specification (used with noalias).
+  MDNode *Scope;
+
+  /// NoAlias - The tag specifying the noalias scope.
+  MDNode *NoAlias;
+};
+
+// Specialize DenseMapInfo for AAMDNodes.
+template<>
+struct DenseMapInfo<AAMDNodes> {
+  static inline AAMDNodes getEmptyKey() {
+    return AAMDNodes(DenseMapInfo<MDNode *>::getEmptyKey(), 0, 0);
+  }
+  static inline AAMDNodes getTombstoneKey() {
+    return AAMDNodes(DenseMapInfo<MDNode *>::getTombstoneKey(), 0, 0);
+  }
+  static unsigned getHashValue(const AAMDNodes &Val) {
+    return DenseMapInfo<MDNode *>::getHashValue(Val.TBAA) ^
+           DenseMapInfo<MDNode *>::getHashValue(Val.Scope) ^
+           DenseMapInfo<MDNode *>::getHashValue(Val.NoAlias);
+  }
+  static bool isEqual(const AAMDNodes &LHS, const AAMDNodes &RHS) {
+    return LHS == RHS;
+  }
+};
 
 class MDNodeOperand;
 
@@ -170,7 +214,10 @@ public:
   bool isTBAAVtableAccess() const;
 
   /// Methods for metadata merging.
+  static MDNode *concatenate(MDNode *A, MDNode *B);
+  static MDNode *intersect(MDNode *A, MDNode *B);
   static MDNode *getMostGenericTBAA(MDNode *A, MDNode *B);
+  static AAMDNodes getMostGenericAA(const AAMDNodes &A, const AAMDNodes &B);
   static MDNode *getMostGenericFPMath(MDNode *A, MDNode *B);
   static MDNode *getMostGenericRange(MDNode *A, MDNode *B);
 private:
@@ -218,7 +265,7 @@ class NamedMDNode : public ilist_node<NamedMDNode> {
     friend class NamedMDNode;
 
   public:
-    op_iterator_impl() : Node(0), Idx(0) { }
+    op_iterator_impl() : Node(nullptr), Idx(0) { }
 
     bool operator==(const op_iterator_impl &o) const { return Idx == o.Idx; }
     bool operator!=(const op_iterator_impl &o) const { return Idx != o.Idx; }
@@ -272,7 +319,7 @@ public:
   StringRef getName() const;
 
   /// print - Implement operator<< on NamedMDNode.
-  void print(raw_ostream &ROS, AssemblyAnnotationWriter *AAW = 0) const;
+  void print(raw_ostream &ROS) const;
 
   /// dump() - Allow printing of NamedMDNodes from the debugger.
   void dump() const;

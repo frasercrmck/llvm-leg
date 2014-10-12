@@ -20,10 +20,13 @@ namespace llvm {
 /// the well-known calling conventions.
 ///
 namespace CallingConv {
+  /// LLVM IR allows to use arbitrary numbers as calling convention identifiers.
+  typedef unsigned ID;
+
   /// A set of enums which specify the assigned numeric values for known llvm
   /// calling conventions.
   /// @brief LLVM Calling Convention Representation
-  enum ID {
+  enum {
     /// C - The default llvm calling convention, compatible with C.  This
     /// convention is the only calling convention that supports varargs calls.
     /// As with typical C calling conventions, the callee/caller have to
@@ -137,13 +140,7 @@ namespace CallingConv {
     /// convention differs from the more common \c X86_64_SysV convention
     /// in a number of ways, most notably in that XMM registers used to pass
     /// arguments are shadowed by GPRs, and vice versa.
-    X86_64_Win64 = 79,
-
-    /// \brief The calling convention used for __cdecl methods on win32.
-    /// Differs from the C calling convention only in that the order of the
-    /// first parameter and the sret parameter are swapped.
-    X86_CDeclMethod = 80
-
+    X86_64_Win64 = 79
   };
 } // End CallingConv namespace
 

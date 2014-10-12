@@ -11,14 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "inline-cost"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/ConstantFolding.h"
+#include "llvm/Analysis/CodeMetrics.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/CallSite.h"
@@ -34,6 +35,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "inline-cost"
+
 STATISTIC(NumCallsAnalyzed, "Number of call sites analyzed");
 
 namespace {
@@ -47,6 +50,9 @@ class CallAnalyzer : public InstVisitor<CallAnalyzer, bool> {
 
   /// The TargetTransformInfo available for this compilation.
   const TargetTransformInfo &TTI;
+
+  /// The cache of @llvm.assume intrinsics.
+  AssumptionTracker *AT;
 
   // The called function.
   Function &F;
@@ -97,16 +103,13 @@ class CallAnalyzer : public InstVisitor<CallAnalyzer, bool> {
   void disableSROA(Value *V);
   void accumulateSROACost(DenseMap<Value *, int>::iterator CostIt,
                           int InstructionCost);
-  bool handleSROACandidate(bool IsSROAValid,
-                           DenseMap<Value *, int>::iterator CostIt,
-                           int InstructionCost);
   bool isGEPOffsetConstant(GetElementPtrInst &GEP);
   bool accumulateGEPOffset(GEPOperator &GEP, APInt &Offset);
   bool simplifyCallSite(Function *F, CallSite CS);
   ConstantInt *stripAndComputeInBoundsConstantOffsets(Value *&V);
 
   // Custom analysis routines.
-  bool analyzeBlock(BasicBlock *BB);
+  bool analyzeBlock(BasicBlock *BB, SmallPtrSetImpl<const Value *> &EphValues);
 
   // Disable several entry points to the visitor so we don't accidentally use
   // them by declaring but not defining them here.
@@ -143,8 +146,8 @@ class CallAnalyzer : public InstVisitor<CallAnalyzer, bool> {
 
 public:
   CallAnalyzer(const DataLayout *DL, const TargetTransformInfo &TTI,
-               Function &Callee, int Threshold)
-      : DL(DL), TTI(TTI), F(Callee), Threshold(Threshold), Cost(0),
+               AssumptionTracker *AT, Function &Callee, int Threshold)
+      : DL(DL), TTI(TTI), AT(AT), F(Callee), Threshold(Threshold), Cost(0),
         IsCallerRecursive(false), IsRecursiveCall(false),
         ExposesReturnsTwice(false), HasDynamicAlloca(false),
         ContainsNoDuplicateCall(false), HasReturn(false), HasIndirectBr(false),
@@ -225,21 +228,6 @@ void CallAnalyzer::accumulateSROACost(DenseMap<Value *, int>::iterator CostIt,
   SROACostSavings += InstructionCost;
 }
 
-/// \brief Helper for the common pattern of handling a SROA candidate.
-/// Either accumulates the cost savings if the SROA remains valid, or disables
-/// SROA for the candidate.
-bool CallAnalyzer::handleSROACandidate(bool IsSROAValid,
-                                       DenseMap<Value *, int>::iterator CostIt,
-                                       int InstructionCost) {
-  if (IsSROAValid) {
-    accumulateSROACost(CostIt, InstructionCost);
-    return true;
-  }
-
-  disableSROA(CostIt);
-  return false;
-}
-
 /// \brief Check whether a GEP's indices are all constant.
 ///
 /// Respects any simplified values known during the analysis of this callsite.
@@ -287,8 +275,17 @@ bool CallAnalyzer::accumulateGEPOffset(GEPOperator &GEP, APInt &Offset) {
 }
 
 bool CallAnalyzer::visitAlloca(AllocaInst &I) {
-  // FIXME: Check whether inlining will turn a dynamic alloca into a static
+  // Check whether inlining will turn a dynamic alloca into a static
   // alloca, and handle that case.
+  if (I.isArrayAllocation()) {
+    if (Constant *Size = SimplifiedValues.lookup(I.getArraySize())) {
+      ConstantInt *AllocSize = dyn_cast<ConstantInt>(Size);
+      assert(AllocSize && "Allocation size not a constant int?");
+      Type *Ty = I.getAllocatedType();
+      AllocatedSize += Ty->getPrimitiveSizeInBits() * AllocSize->getZExtValue();
+      return Base::visitAlloca(I);
+    }
+  }
 
   // Accumulate the allocated size.
   if (I.isStaticAlloca()) {
@@ -786,7 +783,7 @@ bool CallAnalyzer::visitCallSite(CallSite CS) {
   // during devirtualization and so we want to give it a hefty bonus for
   // inlining, but cap that bonus in the event that inlining wouldn't pan
   // out. Pretend to inline the function, with a custom threshold.
-  CallAnalyzer CA(DL, TTI, *F, InlineConstants::IndirectCallThreshold);
+  CallAnalyzer CA(DL, TTI, AT, *F, InlineConstants::IndirectCallThreshold);
   if (CA.analyzeCall(CS)) {
     // We were able to inline the indirect call! Subtract the cost from the
     // bonus we want to apply, but don't go below zero.
@@ -816,9 +813,29 @@ bool CallAnalyzer::visitBranchInst(BranchInst &BI) {
 bool CallAnalyzer::visitSwitchInst(SwitchInst &SI) {
   // We model unconditional switches as free, see the comments on handling
   // branches.
-  return isa<ConstantInt>(SI.getCondition()) ||
-         dyn_cast_or_null<ConstantInt>(
-             SimplifiedValues.lookup(SI.getCondition()));
+  if (isa<ConstantInt>(SI.getCondition()))
+    return true;
+  if (Value *V = SimplifiedValues.lookup(SI.getCondition()))
+    if (isa<ConstantInt>(V))
+      return true;
+
+  // Otherwise, we need to accumulate a cost proportional to the number of
+  // distinct successor blocks. This fan-out in the CFG cannot be represented
+  // for free even if we can represent the core switch as a jumptable that
+  // takes a single instruction.
+  //
+  // NB: We convert large switches which are just used to initialize large phi
+  // nodes to lookup tables instead in simplify-cfg, so this shouldn't prevent
+  // inlining those. It will prevent inlining in cases where the optimization
+  // does not (yet) fire.
+  SmallPtrSet<BasicBlock *, 8> SuccessorBlocks;
+  SuccessorBlocks.insert(SI.getDefaultDest());
+  for (auto I = SI.case_begin(), E = SI.case_end(); I != E; ++I)
+    SuccessorBlocks.insert(I.getCaseSuccessor());
+  // Add cost corresponding to the number of distinct destinations. The first
+  // we model as free because of fallthrough.
+  Cost += (SuccessorBlocks.size() - 1) * InlineConstants::InstrCost;
+  return false;
 }
 
 bool CallAnalyzer::visitIndirectBrInst(IndirectBrInst &IBI) {
@@ -829,10 +846,7 @@ bool CallAnalyzer::visitIndirectBrInst(IndirectBrInst &IBI) {
   // original function which is extremely undefined behavior.
   // FIXME: This logic isn't really right; we can safely inline functions with
   // indirectbr's as long as no other function or global references the
-  // blockaddress of a block within the current function.  And as a QOI issue,
-  // if someone is using a blockaddress without an indirectbr, and that
-  // reference somehow ends up in another function or global, we probably don't
-  // want to inline this function.
+  // blockaddress of a block within the current function.
   HasIndirectBr = true;
   return false;
 }
@@ -872,7 +886,8 @@ bool CallAnalyzer::visitInstruction(Instruction &I) {
 /// aborts early if the threshold has been exceeded or an impossible to inline
 /// construct has been detected. It returns false if inlining is no longer
 /// viable, and true if inlining remains viable.
-bool CallAnalyzer::analyzeBlock(BasicBlock *BB) {
+bool CallAnalyzer::analyzeBlock(BasicBlock *BB,
+                                SmallPtrSetImpl<const Value *> &EphValues) {
   for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
     // FIXME: Currently, the number of instructions in a function regardless of
     // our ability to simplify them during inline to constants or dead code,
@@ -882,6 +897,10 @@ bool CallAnalyzer::analyzeBlock(BasicBlock *BB) {
     // instructions shouldn't factor into the cost computation, but until then,
     // hack around it here.
     if (isa<DbgInfoIntrinsic>(I))
+      continue;
+
+    // Skip ephemeral values.
+    if (EphValues.count(I))
       continue;
 
     ++NumInstructions;
@@ -934,7 +953,7 @@ bool CallAnalyzer::analyzeBlock(BasicBlock *BB) {
 /// no constant offsets applied.
 ConstantInt *CallAnalyzer::stripAndComputeInBoundsConstantOffsets(Value *&V) {
   if (!DL || !V->getType()->isPointerTy())
-    return 0;
+    return nullptr;
 
   unsigned IntPtrWidth = DL->getPointerSizeInBits();
   APInt Offset = APInt::getNullValue(IntPtrWidth);
@@ -946,7 +965,7 @@ ConstantInt *CallAnalyzer::stripAndComputeInBoundsConstantOffsets(Value *&V) {
   do {
     if (GEPOperator *GEP = dyn_cast<GEPOperator>(V)) {
       if (!GEP->isInBounds() || !accumulateGEPOffset(*GEP, Offset))
-        return 0;
+        return nullptr;
       V = GEP->getPointerOperand();
     } else if (Operator::getOpcode(V) == Instruction::BitCast) {
       V = cast<Operator>(V)->getOperand(0);
@@ -1087,6 +1106,12 @@ bool CallAnalyzer::analyzeCall(CallSite CS) {
   NumConstantOffsetPtrArgs = ConstantOffsetPtrs.size();
   NumAllocaArgs = SROAArgValues.size();
 
+  // FIXME: If a caller has multiple calls to a callee, we end up recomputing
+  // the ephemeral values multiple times (and they're completely determined by
+  // the callee, so this is purely duplicate work).
+  SmallPtrSet<const Value *, 32> EphValues;
+  CodeMetrics::collectEphemeralValues(&F, AT, EphValues);
+
   // The worklist of live basic blocks in the callee *after* inlining. We avoid
   // adding basic blocks of the callee which can be proven to be dead for this
   // particular call site in order to get more accurate cost estimates. This
@@ -1109,9 +1134,18 @@ bool CallAnalyzer::analyzeCall(CallSite CS) {
     if (BB->empty())
       continue;
 
+    // Disallow inlining a blockaddress. A blockaddress only has defined
+    // behavior for an indirect branch in the same function, and we do not
+    // currently support inlining indirect branches. But, the inliner may not
+    // see an indirect branch that ends up being dead code at a particular call
+    // site. If the blockaddress escapes the function, e.g., via a global
+    // variable, inlining may lead to an invalid cross-function reference.
+    if (BB->hasAddressTaken())
+      return false;
+
     // Analyze the cost of this block. If we blow through the threshold, this
     // returns false, and we can bail on out.
-    if (!analyzeBlock(BB)) {
+    if (!analyzeBlock(BB, EphValues)) {
       if (IsRecursiveCall || ExposesReturnsTwice || HasDynamicAlloca ||
           HasIndirectBr)
         return false;
@@ -1199,6 +1233,7 @@ void CallAnalyzer::dump() {
 INITIALIZE_PASS_BEGIN(InlineCostAnalysis, "inline-cost", "Inline Cost Analysis",
                       true, true)
 INITIALIZE_AG_DEPENDENCY(TargetTransformInfo)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_END(InlineCostAnalysis, "inline-cost", "Inline Cost Analysis",
                     true, true)
 
@@ -1210,12 +1245,14 @@ InlineCostAnalysis::~InlineCostAnalysis() {}
 
 void InlineCostAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
+  AU.addRequired<AssumptionTracker>();
   AU.addRequired<TargetTransformInfo>();
   CallGraphSCCPass::getAnalysisUsage(AU);
 }
 
 bool InlineCostAnalysis::runOnSCC(CallGraphSCC &SCC) {
   TTI = &getAnalysis<TargetTransformInfo>();
+  AT = &getAnalysis<AssumptionTracker>();
   return false;
 }
 
@@ -1247,7 +1284,7 @@ InlineCost InlineCostAnalysis::getInlineCost(CallSite CS, Function *Callee,
 
   // Calls to functions with always-inline attributes should be inlined
   // whenever possible.
-  if (Callee->hasFnAttribute(Attribute::AlwaysInline)) {
+  if (CS.hasFnAttr(Attribute::AlwaysInline)) {
     if (isInlineViable(*Callee))
       return llvm::InlineCost::getAlways();
     return llvm::InlineCost::getNever();
@@ -1272,7 +1309,7 @@ InlineCost InlineCostAnalysis::getInlineCost(CallSite CS, Function *Callee,
   DEBUG(llvm::dbgs() << "      Analyzing call of " << Callee->getName()
         << "...\n");
 
-  CallAnalyzer CA(Callee->getDataLayout(), *TTI, *Callee, Threshold);
+  CallAnalyzer CA(Callee->getDataLayout(), *TTI, AT, *Callee, Threshold);
   bool ShouldInline = CA.analyzeCall(CS);
 
   DEBUG(CA.dump());
@@ -1291,8 +1328,9 @@ bool InlineCostAnalysis::isInlineViable(Function &F) {
     F.getAttributes().hasAttribute(AttributeSet::FunctionIndex,
                                    Attribute::ReturnsTwice);
   for (Function::iterator BI = F.begin(), BE = F.end(); BI != BE; ++BI) {
-    // Disallow inlining of functions which contain an indirect branch.
-    if (isa<IndirectBrInst>(BI->getTerminator()))
+    // Disallow inlining of functions which contain indirect branches or
+    // blockaddresses.
+    if (isa<IndirectBrInst>(BI->getTerminator()) || BI->hasAddressTaken())
       return false;
 
     for (BasicBlock::iterator II = BI->begin(), IE = BI->end(); II != IE;

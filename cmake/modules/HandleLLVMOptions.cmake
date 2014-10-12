@@ -25,9 +25,6 @@ if(NOT LLVM_FORCE_USE_OLD_TOOLCHAIN)
       set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
       set(OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
       set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
-      if (ANDROID)
-        set(CMAKE_REQUIRED_LIBRARIES "atomic")
-      endif()
       check_cxx_source_compiles("
 #include <atomic>
 std::atomic<float> x(0.0f);
@@ -56,19 +53,16 @@ if( LLVM_ENABLE_ASSERTIONS )
   if( NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG" )
     add_definitions( -UNDEBUG )
     # Also remove /D NDEBUG to avoid MSVC warnings about conflicting defines.
-    set(REGEXP_NDEBUG "(^| )[/-]D *NDEBUG($| )")
-    string (REGEX REPLACE "${REGEXP_NDEBUG}" " "
-      CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
-    string (REGEX REPLACE "${REGEXP_NDEBUG}" " "
-      CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-    string (REGEX REPLACE "${REGEXP_NDEBUG}" " "
-      CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL}")
-  endif()
-else()
-  if( NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "RELEASE" )
-    if( NOT MSVC_IDE AND NOT XCODE )
-      add_definitions( -DNDEBUG )
-    endif()
+    foreach (flags_var_to_scrub
+        CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_RELWITHDEBINFO
+        CMAKE_CXX_FLAGS_MINSIZEREL
+        CMAKE_C_FLAGS_RELEASE
+        CMAKE_C_FLAGS_RELWITHDEBINFO
+        CMAKE_C_FLAGS_MINSIZEREL)
+      string (REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " "
+        "${flags_var_to_scrub}" "${${flags_var_to_scrub}}")
+    endforeach()
   endif()
 endif()
 
@@ -110,18 +104,6 @@ if(APPLE)
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-flat_namespace -Wl,-undefined -Wl,suppress")
 endif()
 
-function(add_flag_or_print_warning flag)
-  check_c_compiler_flag(${flag} C_SUPPORTS_FLAG)
-  check_cxx_compiler_flag(${flag} CXX_SUPPORTS_FLAG)
-  if (C_SUPPORTS_FLAG AND CXX_SUPPORTS_FLAG)
-    message(STATUS "Building with ${flag}")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}" PARENT_SCOPE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}" PARENT_SCOPE)
-  else()
-    message(WARNING "${flag} is not supported.")
-  endif()
-endfunction()
-
 function(append value)
   foreach(variable ${ARGN})
     set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
@@ -136,12 +118,24 @@ function(append_if condition value)
   endif()
 endfunction()
 
-macro(add_flag_if_supported flag)
-  check_c_compiler_flag(${flag} C_SUPPORTS_FLAG)
-  append_if(C_SUPPORTS_FLAG "${flag}" CMAKE_C_FLAGS)
-  check_cxx_compiler_flag(${flag} CXX_SUPPORTS_FLAG)
-  append_if(CXX_SUPPORTS_FLAG "${flag}" CMAKE_CXX_FLAGS)
+macro(add_flag_if_supported flag name)
+  check_c_compiler_flag("-Werror ${flag}" "C_SUPPORTS_${name}")
+  append_if("C_SUPPORTS_${name}" "${flag}" CMAKE_C_FLAGS)
+  check_cxx_compiler_flag("-Werror ${flag}" "CXX_SUPPORTS_${name}")
+  append_if("CXX_SUPPORTS_${name}" "${flag}" CMAKE_CXX_FLAGS)
 endmacro()
+
+function(add_flag_or_print_warning flag name)
+  check_c_compiler_flag("-Werror ${flag}" "C_SUPPORTS_${name}")
+  check_cxx_compiler_flag("-Werror ${flag}" "CXX_SUPPORTS_${name}")
+  if (C_SUPPORTS_${name} AND CXX_SUPPORTS_${name})
+    message(STATUS "Building with ${flag}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}" PARENT_SCOPE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}" PARENT_SCOPE)
+  else()
+    message(WARNING "${flag} is not supported.")
+  endif()
+endfunction()
 
 if( LLVM_ENABLE_PIC )
   if( XCODE )
@@ -151,7 +145,7 @@ if( LLVM_ENABLE_PIC )
   elseif( WIN32 OR CYGWIN)
     # On Windows all code is PIC. MinGW warns if -fPIC is used.
   else()
-    add_flag_or_print_warning("-fPIC")
+    add_flag_or_print_warning("-fPIC" FPIC)
 
     if( WIN32 OR CYGWIN)
       # MinGW warns if -fvisibility-inlines-hidden is used.
@@ -243,6 +237,7 @@ if( MSVC )
     -wd4146 # Suppress 'unary minus operator applied to unsigned type, result still unsigned'
     -wd4180 # Suppress 'qualifier applied to function type has no meaning; ignored'
     -wd4244 # Suppress ''argument' : conversion from 'type1' to 'type2', possible loss of data'
+    -wd4258 # Suppress ''var' : definition from the for loop is ignored; the definition from the enclosing scope is used'
     -wd4267 # Suppress ''var' : conversion from 'size_t' to 'type', possible loss of data'
     -wd4291 # Suppress ''declaration' : no matching operator delete found; memory will not be freed if initialization throws an exception'
     -wd4345 # Suppress 'behavior change: an object of POD type constructed with an initializer of the form () will be default-initialized'
@@ -287,16 +282,39 @@ elseif( LLVM_COMPILER_IS_GCC_COMPATIBLE )
     endif()
 
     append_if(LLVM_ENABLE_PEDANTIC "-pedantic -Wno-long-long" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
-    check_cxx_compiler_flag("-Werror -Wcovered-switch-default" CXX_SUPPORTS_COVERED_SWITCH_DEFAULT_FLAG)
-    append_if(CXX_SUPPORTS_COVERED_SWITCH_DEFAULT_FLAG "-Wcovered-switch-default" CMAKE_CXX_FLAGS)
-    check_c_compiler_flag("-Werror -Wcovered-switch-default" C_SUPPORTS_COVERED_SWITCH_DEFAULT_FLAG)
-    append_if(C_SUPPORTS_COVERED_SWITCH_DEFAULT_FLAG "-Wcovered-switch-default" CMAKE_C_FLAGS)
+    add_flag_if_supported("-Wcovered-switch-default" COVERED_SWITCH_DEFAULT_FLAG)
     append_if(USE_NO_UNINITIALIZED "-Wno-uninitialized" CMAKE_CXX_FLAGS)
     append_if(USE_NO_MAYBE_UNINITIALIZED "-Wno-maybe-uninitialized" CMAKE_CXX_FLAGS)
-    check_cxx_compiler_flag("-Werror -Wnon-virtual-dtor" CXX_SUPPORTS_NON_VIRTUAL_DTOR_FLAG)
-    append_if(CXX_SUPPORTS_NON_VIRTUAL_DTOR_FLAG "-Wnon-virtual-dtor" CMAKE_CXX_FLAGS)
+
+    # Check if -Wnon-virtual-dtor warns even though the class is marked final.
+    # If it does, don't add it. So it won't be added on clang 3.4 and older.
+    # This also catches cases when -Wnon-virtual-dtor isn't supported by
+    # the compiler at all.
+    set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++11 -Werror=non-virtual-dtor")
+    CHECK_CXX_SOURCE_COMPILES("class base {public: virtual void anchor();protected: ~base();};
+                               class derived final : public base { public: ~derived();};
+                               int main() { return 0; }"
+                              CXX_WONT_WARN_ON_FINAL_NONVIRTUALDTOR)
+    set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
+    append_if(CXX_WONT_WARN_ON_FINAL_NONVIRTUALDTOR
+              "-Wnon-virtual-dtor" CMAKE_CXX_FLAGS)
+
+    # Check if -Wcomment is OK with an // comment ending with '\' if the next
+    # line is also a // comment.
+    set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror -Wcomment")
+    CHECK_C_SOURCE_COMPILES("// \\\\\\n//\\nint main() {return 0;}"
+                            C_WCOMMENT_ALLOWS_LINE_WRAP)
+    set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
+    if (NOT C_WCOMMENT_ALLOWS_LINE_WRAP)
+      append("-Wno-comment" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    endif()
   endif (LLVM_ENABLE_WARNINGS)
   append_if(LLVM_ENABLE_WERROR "-Werror" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  if (NOT LLVM_ENABLE_TIMESTAMPS)
+    add_flag_if_supported("-Werror=date-time" WERROR_DATE_TIME)
+  endif ()
   if (LLVM_ENABLE_CXX1Y)
     check_cxx_compiler_flag("-std=c++1y" CXX_SUPPORTS_CXX1Y)
     append_if(CXX_SUPPORTS_CXX1Y "-std=c++1y" CMAKE_CXX_FLAGS)
@@ -314,19 +332,38 @@ elseif( LLVM_COMPILER_IS_GCC_COMPATIBLE )
       message(FATAL_ERROR "LLVM requires C++11 support but the '-std=c++11' flag isn't supported.")
     endif()
   endif()
+  if (LLVM_ENABLE_MODULES)
+    set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fmodules -fcxx-modules")
+    # Check that we can build code with modules enabled, and that repeatedly
+    # including <cassert> still manages to respect NDEBUG properly.
+    CHECK_CXX_SOURCE_COMPILES("#undef NDEBUG
+                               #include <cassert>
+                               #define NDEBUG
+                               #include <cassert>
+                               int main() { assert(this code is not compiled); }"
+                               CXX_SUPPORTS_MODULES)
+    set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
+    if (CXX_SUPPORTS_MODULES)
+      append_if(CXX_SUPPORTS_MODULES "-fmodules" CMAKE_C_FLAGS)
+      append_if(CXX_SUPPORTS_MODULES "-fmodules -fcxx-modules" CMAKE_CXX_FLAGS)
+    else()
+      message(FATAL_ERROR "LLVM_ENABLE_MODULES is not supported by this compiler")
+    endif()
+  endif(LLVM_ENABLE_MODULES)
 endif( MSVC )
 
 macro(append_common_sanitizer_flags)
   # Append -fno-omit-frame-pointer and turn on debug info to get better
   # stack traces.
-  add_flag_if_supported("-fno-omit-frame-pointer")
+  add_flag_if_supported("-fno-omit-frame-pointer" FNO_OMIT_FRAME_POINTER)
   if (NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG" AND
       NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "RELWITHDEBINFO")
-    add_flag_if_supported("-gline-tables-only")
+    add_flag_if_supported("-gline-tables-only" GLINE_TABLES_ONLY)
   endif()
   # Use -O1 even in debug mode, otherwise sanitizers slowdown is too large.
   if (uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
-    add_flag_if_supported("-O1")
+    add_flag_if_supported("-O1" O1)
   endif()
 endmacro()
 
@@ -335,13 +372,17 @@ if(LLVM_USE_SANITIZER)
   if (LLVM_ON_UNIX)
     if (LLVM_USE_SANITIZER STREQUAL "Address")
       append_common_sanitizer_flags()
-      add_flag_or_print_warning("-fsanitize=address")
+      append("-fsanitize=address" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     elseif (LLVM_USE_SANITIZER MATCHES "Memory(WithOrigins)?")
       append_common_sanitizer_flags()
-      add_flag_or_print_warning("-fsanitize=memory")
+      append("-fsanitize=memory" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
       if(LLVM_USE_SANITIZER STREQUAL "MemoryWithOrigins")
-        add_flag_or_print_warning("-fsanitize-memory-track-origins")
+        append("-fsanitize-memory-track-origins" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
       endif()
+    elseif (LLVM_USE_SANITIZER STREQUAL "Undefined")
+      append_common_sanitizer_flags()
+      append("-fsanitize=undefined -fno-sanitize=vptr,function -fno-sanitize-recover"
+              CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     else()
       message(WARNING "Unsupported value of LLVM_USE_SANITIZER: ${LLVM_USE_SANITIZER}")
     endif()
@@ -376,15 +417,9 @@ if(NOT CYGWIN AND NOT WIN32)
     if (C_SUPPORTS_FNO_FUNCTION_SECTIONS)
       # Don't add -ffunction-section if it can be disabled with -fno-function-sections.
       # Doing so will break sanitizers.
-      check_c_compiler_flag("-Werror -ffunction-sections" C_SUPPORTS_FFUNCTION_SECTIONS)
-      check_cxx_compiler_flag("-Werror -ffunction-sections" CXX_SUPPORTS_FFUNCTION_SECTIONS)
-      append_if(C_SUPPORTS_FFUNCTION_SECTIONS "-ffunction-sections" CMAKE_C_FLAGS)
-      append_if(CXX_SUPPORTS_FFUNCTION_SECTIONS "-ffunction-sections" CMAKE_CXX_FLAGS)
+      add_flag_if_supported("-ffunction-sections" FFUNCTION_SECTIONS)
     endif()
-    check_c_compiler_flag("-Werror -fdata-sections" C_SUPPORTS_FDATA_SECTIONS)
-    check_cxx_compiler_flag("-Werror -fdata-sections" CXX_SUPPORTS_FDATA_SECTIONS)
-    append_if(C_SUPPORTS_FDATA_SECTIONS "-fdata-sections" CMAKE_C_FLAGS)
-    append_if(CXX_SUPPORTS_FDATA_SECTIONS "-fdata-sections" CMAKE_CXX_FLAGS)
+    add_flag_if_supported("-fdata-sections" FDATA_SECTIONS)
   endif()
 endif()
 
@@ -404,4 +439,23 @@ if(MSVC)
   # CL.EXE complains to override flags like "/GR /GR-".
   string(REGEX REPLACE "(^| ) */EH[-cs]+ *( |$)" "\\1 \\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   string(REGEX REPLACE "(^| ) */GR-? *( |$)" "\\1 \\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+endif()
+
+# Provide public options to globally control RTTI and EH
+option(LLVM_ENABLE_EH "Enable Exception handling" OFF)
+option(LLVM_ENABLE_RTTI "Enable run time type information" OFF)
+if(LLVM_ENABLE_EH AND NOT LLVM_ENABLE_RTTI)
+  message(FATAL_ERROR "Exception handling requires RTTI. You must set LLVM_ENABLE_RTTI to ON")
+endif()
+
+# Plugin support
+# FIXME: Make this configurable.
+if(WIN32 OR CYGWIN)
+  if(BUILD_SHARED_LIBS)
+    set(LLVM_ENABLE_PLUGINS ON)
+  else()
+    set(LLVM_ENABLE_PLUGINS OFF)
+  endif()
+else()
+  set(LLVM_ENABLE_PLUGINS ON)
 endif()

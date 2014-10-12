@@ -35,6 +35,7 @@
 
 namespace llvm {
   class APInt;
+  class AssumptionTracker;
   class Constant;
   class ConstantInt;
   class DominatorTree;
@@ -210,7 +211,7 @@ namespace llvm {
       void deleted() override;
       void allUsesReplacedWith(Value *New) override;
     public:
-      SCEVCallbackVH(Value *V, ScalarEvolution *SE = 0);
+      SCEVCallbackVH(Value *V, ScalarEvolution *SE = nullptr);
     };
 
     friend class SCEVCallbackVH;
@@ -220,6 +221,9 @@ namespace llvm {
     /// F - The function we are analyzing.
     ///
     Function *F;
+
+    /// The tracker for @llvm.assume intrinsics in this function.
+    AssumptionTracker *AT;
 
     /// LI - The loop information for the function we are currently analyzing.
     ///
@@ -257,24 +261,13 @@ namespace llvm {
     /// loop exit's branch condition evaluates to the not-taken path.  This is a
     /// temporary pair of exact and max expressions that are eventually
     /// summarized in ExitNotTakenInfo and BackedgeTakenInfo.
-    ///
-    /// If MustExit is true, then the exit must be taken when the BECount
-    /// reaches Exact (and before surpassing Max). If MustExit is false, then
-    /// BECount may exceed Exact or Max if the loop exits via another branch. In
-    /// either case, the loop may exit early via another branch.
-    ///
-    /// MustExit is true for most cases. However, an exit guarded by an
-    /// (in)equality on a nonunit stride may be skipped.
     struct ExitLimit {
       const SCEV *Exact;
       const SCEV *Max;
-      bool MustExit;
 
-      /*implicit*/ ExitLimit(const SCEV *E)
-        : Exact(E), Max(E), MustExit(true) {}
+      /*implicit*/ ExitLimit(const SCEV *E) : Exact(E), Max(E) {}
 
-      ExitLimit(const SCEV *E, const SCEV *M, bool MustExit)
-        : Exact(E), Max(M), MustExit(MustExit) {}
+      ExitLimit(const SCEV *E, const SCEV *M) : Exact(E), Max(M) {}
 
       /// hasAnyInfo - Test whether this ExitLimit contains any computed
       /// information, or whether it's all SCEVCouldNotCompute values.
@@ -291,7 +284,7 @@ namespace llvm {
       const SCEV *ExactNotTaken;
       PointerIntPair<ExitNotTakenInfo*, 1> NextExit;
 
-      ExitNotTakenInfo() : ExitingBlock(0), ExactNotTaken(0) {}
+      ExitNotTakenInfo() : ExitingBlock(nullptr), ExactNotTaken(nullptr) {}
 
       /// isCompleteList - Return true if all loop exits are computable.
       bool isCompleteList() const {
@@ -321,7 +314,7 @@ namespace llvm {
       const SCEV *Max;
 
     public:
-      BackedgeTakenInfo() : Max(0) {}
+      BackedgeTakenInfo() : Max(nullptr) {}
 
       /// Initialize BackedgeTakenInfo from a list of exact exit counts.
       BackedgeTakenInfo(
@@ -749,6 +742,13 @@ namespace llvm {
     bool isLoopBackedgeGuardedByCond(const Loop *L, ICmpInst::Predicate Pred,
                                      const SCEV *LHS, const SCEV *RHS);
 
+    /// \brief Returns the maximum trip count of the loop if it is a single-exit
+    /// loop and we can compute a small maximum for that loop.
+    ///
+    /// Implemented in terms of the \c getSmallConstantTripCount overload with
+    /// the single exiting block passed to it. See that routine for details.
+    unsigned getSmallConstantTripCount(Loop *L);
+
     /// getSmallConstantTripCount - Returns the maximum trip count of this loop
     /// as a normal unsigned value. Returns 0 if the trip count is unknown or
     /// not constant. This "trip count" assumes that control exits via
@@ -757,6 +757,14 @@ namespace llvm {
     /// exits, it may not be the number times that the loop header executes if
     /// the loop exits prematurely via another branch.
     unsigned getSmallConstantTripCount(Loop *L, BasicBlock *ExitingBlock);
+
+    /// \brief Returns the largest constant divisor of the trip count of the
+    /// loop if it is a single-exit loop and we can compute a small maximum for
+    /// that loop.
+    ///
+    /// Implemented in terms of the \c getSmallConstantTripMultiple overload with
+    /// the single exiting block passed to it. See that routine for details.
+    unsigned getSmallConstantTripMultiple(Loop *L);
 
     /// getSmallConstantTripMultiple - Returns the largest constant divisor of
     /// the trip count of this loop as a normal unsigned value, if
@@ -795,7 +803,8 @@ namespace llvm {
 
     /// forgetLoop - This method should be called by the client when it has
     /// changed a loop in a way that may effect ScalarEvolution's ability to
-    /// compute a trip count, or if the loop is deleted.
+    /// compute a trip count, or if the loop is deleted.  This call is
+    /// potentially expensive for large loop bodies.
     void forgetLoop(const Loop *L);
 
     /// forgetValue - This method should be called by the client when it has
@@ -894,10 +903,19 @@ namespace llvm {
     /// indirect operand.
     bool hasOperand(const SCEV *S, const SCEV *Op) const;
 
+    /// Return the size of an element read or written by Inst.
+    const SCEV *getElementSize(Instruction *Inst);
+
+    /// Compute the array dimensions Sizes from the set of Terms extracted from
+    /// the memory access function of this SCEVAddRecExpr.
+    void findArrayDimensions(SmallVectorImpl<const SCEV *> &Terms,
+                             SmallVectorImpl<const SCEV *> &Sizes,
+                             const SCEV *ElementSize) const;
+
     bool runOnFunction(Function &F) override;
     void releaseMemory() override;
     void getAnalysisUsage(AnalysisUsage &AU) const override;
-    void print(raw_ostream &OS, const Module* = 0) const override;
+    void print(raw_ostream &OS, const Module* = nullptr) const override;
     void verifyAnalysis() const override;
 
   private:

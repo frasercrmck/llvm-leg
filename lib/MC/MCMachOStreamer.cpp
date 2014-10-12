@@ -55,12 +55,17 @@ public:
       : MCObjectStreamer(Context, MAB, OS, Emitter),
         LabelSections(label) {}
 
+  /// state management
+  void reset() override {
+    HasSectionLabel.clear();
+    MCObjectStreamer::reset();
+  }
+
   /// @name MCStreamer Interface
   /// @{
 
   void ChangeSection(const MCSection *Sect, const MCExpr *Subsect) override;
   void EmitLabel(MCSymbol *Symbol) override;
-  void EmitDebugLabel(MCSymbol *Symbol) override;
   void EmitEHSymAttributes(const MCSymbol *Symbol, MCSymbol *EHSymbol) override;
   void EmitAssemblerFlag(MCAssemblerFlag Flag) override;
   void EmitLinkerOptions(ArrayRef<std::string> Options) override;
@@ -89,10 +94,10 @@ public:
   }
   void EmitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
                              unsigned ByteAlignment) override;
-  void EmitZerofill(const MCSection *Section, MCSymbol *Symbol = 0,
+  void EmitZerofill(const MCSection *Section, MCSymbol *Symbol = nullptr,
                     uint64_t Size = 0, unsigned ByteAlignment = 0) override;
-  virtual void EmitTBSSSymbol(const MCSection *Section, MCSymbol *Symbol,
-                      uint64_t Size, unsigned ByteAlignment = 0) override;
+  void EmitTBSSSymbol(const MCSection *Section, MCSymbol *Symbol, uint64_t Size,
+                      unsigned ByteAlignment = 0) override;
 
   void EmitFileDirective(StringRef Filename) override {
     // FIXME: Just ignore the .file; it isn't important enough to fail the
@@ -162,9 +167,6 @@ void MCMachOStreamer::EmitLabel(MCSymbol *Symbol) {
   SD.setFlags(SD.getFlags() & ~SF_ReferenceTypeMask);
 }
 
-void MCMachOStreamer::EmitDebugLabel(MCSymbol *Symbol) {
-  EmitLabel(Symbol);
-}
 void MCMachOStreamer::EmitDataRegion(DataRegionData::KindTy Kind) {
   if (!getAssembler().getBackend().hasDataInCodeSupport())
     return;
@@ -172,7 +174,7 @@ void MCMachOStreamer::EmitDataRegion(DataRegionData::KindTy Kind) {
   MCSymbol *Start = getContext().CreateTempSymbol();
   EmitLabel(Start);
   // Record the region for the object writer to use.
-  DataRegionData Data = { Kind, Start, NULL };
+  DataRegionData Data = { Kind, Start, nullptr };
   std::vector<DataRegionData> &Regions = getAssembler().getDataRegions();
   Regions.push_back(Data);
 }
@@ -183,7 +185,7 @@ void MCMachOStreamer::EmitDataRegionEnd() {
   std::vector<DataRegionData> &Regions = getAssembler().getDataRegions();
   assert(Regions.size() && "Mismatched .end_data_region!");
   DataRegionData &Data = Regions.back();
-  assert(Data.End == NULL && "Mismatched .end_data_region!");
+  assert(!Data.End && "Mismatched .end_data_region!");
   // Create a temporary label to mark the end of the data region.
   Data.End = getContext().CreateTempSymbol();
   EmitLabel(Data.End);
@@ -237,10 +239,6 @@ void MCMachOStreamer::EmitThumbFunc(MCSymbol *Symbol) {
   // Remember that the function is a thumb function. Fixup and relocation
   // values will need adjusted.
   getAssembler().setIsThumbFunc(Symbol);
-
-  // Mark the thumb bit on the symbol.
-  MCSymbolData &SD = getAssembler().getOrCreateSymbolData(*Symbol);
-  SD.setFlags(SD.getFlags() | SF_ThumbFunc);
 }
 
 bool MCMachOStreamer::EmitSymbolAttribute(MCSymbol *Symbol,
@@ -352,7 +350,7 @@ void MCMachOStreamer::EmitCommonSymbol(MCSymbol *Symbol, uint64_t Size,
   // FIXME: Darwin 'as' does appear to allow redef of a .comm by itself.
   assert(Symbol->isUndefined() && "Cannot define a symbol twice!");
 
-  AssignSection(Symbol, NULL);
+  AssignSection(Symbol, nullptr);
 
   MCSymbolData &SD = getAssembler().getOrCreateSymbolData(*Symbol);
   SD.setExternal(true);
@@ -422,7 +420,7 @@ void MCMachOStreamer::EmitInstToData(const MCInst &Inst,
 }
 
 void MCMachOStreamer::FinishImpl() {
-  EmitFrames(&getAssembler().getBackend(), true);
+  EmitFrames(&getAssembler().getBackend());
 
   // We have to set the fragment atom associations so we can relax properly for
   // Mach-O.
@@ -430,13 +428,12 @@ void MCMachOStreamer::FinishImpl() {
   // First, scan the symbol table to build a lookup table from fragments to
   // defining symbols.
   DenseMap<const MCFragment*, MCSymbolData*> DefiningSymbolMap;
-  for (MCAssembler::symbol_iterator it = getAssembler().symbol_begin(),
-         ie = getAssembler().symbol_end(); it != ie; ++it) {
-    if (getAssembler().isSymbolLinkerVisible(it->getSymbol()) &&
-        it->getFragment()) {
+  for (MCSymbolData &SD : getAssembler().symbols()) {
+    if (getAssembler().isSymbolLinkerVisible(SD.getSymbol()) &&
+        SD.getFragment()) {
       // An atom defining symbol should never be internal to a fragment.
-      assert(it->getOffset() == 0 && "Invalid offset in atom defining symbol!");
-      DefiningSymbolMap[it->getFragment()] = it;
+      assert(SD.getOffset() == 0 && "Invalid offset in atom defining symbol!");
+      DefiningSymbolMap[SD.getFragment()] = &SD;
     }
   }
 
@@ -444,7 +441,7 @@ void MCMachOStreamer::FinishImpl() {
   // symbol.
   for (MCAssembler::iterator it = getAssembler().begin(),
          ie = getAssembler().end(); it != ie; ++it) {
-    MCSymbolData *CurrentAtom = 0;
+    MCSymbolData *CurrentAtom = nullptr;
     for (MCSectionData::iterator it2 = it->begin(),
            ie2 = it->end(); it2 != ie2; ++it2) {
       if (MCSymbolData *SD = DefiningSymbolMap.lookup(it2))

@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef AMDGPUCODEEMITTER_H
-#define AMDGPUCODEEMITTER_H
+#ifndef LLVM_LIB_TARGET_R600_MCTARGETDESC_AMDGPUMCCODEEMITTER_H
+#define LLVM_LIB_TARGET_R600_MCTARGETDESC_AMDGPUMCCODEEMITTER_H
 
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/Support/raw_ostream.h"
@@ -37,8 +37,14 @@ public:
                                      const MCSubtargetInfo &STI) const {
     return 0;
   }
+
+  virtual unsigned getSOPPBrEncoding(const MCInst &MI, unsigned OpNo,
+                                     SmallVectorImpl<MCFixup> &Fixups,
+                                     const MCSubtargetInfo &STI) const {
+    return 0;
+  }
 };
 
 } // End namespace llvm
 
-#endif // AMDGPUCODEEMITTER_H
+#endif

@@ -226,6 +226,10 @@ class GCCBuiltin<string name> {
   string GCCBuiltinName = name;
 }
 
+class MSBuiltin<string name> {
+  string MSBuiltinName = name;
+}
+
 
 //===--------------- Variable Argument Handling Intrinsics ----------------===//
 //
@@ -250,6 +254,10 @@ def int_gcwrite : Intrinsic<[],
 //
 def int_returnaddress : Intrinsic<[llvm_ptr_ty], [llvm_i32_ty], [IntrNoMem]>;
 def int_frameaddress  : Intrinsic<[llvm_ptr_ty], [llvm_i32_ty], [IntrNoMem]>;
+def int_read_register  : Intrinsic<[llvm_anyint_ty], [llvm_metadata_ty],
+                                   [IntrNoMem], "llvm.read_register">;
+def int_write_register : Intrinsic<[], [llvm_metadata_ty, llvm_anyint_ty],
+                                   [], "llvm.write_register">;
 
 // Note: we treat stacksave/stackrestore as writemem because we don't otherwise
 // model their dependencies on allocas.
@@ -268,6 +276,10 @@ def int_prefetch      : Intrinsic<[],
 def int_pcmarker      : Intrinsic<[], [llvm_i32_ty]>;
 
 def int_readcyclecounter : Intrinsic<[llvm_i64_ty]>;
+
+// The assume intrinsic is marked as arbitrarily writing so that proper
+// control dependencies will be maintained.
+def int_assume        : Intrinsic<[], [llvm_i1_ty], []>;
 
 // Stack Protector Intrinsic - The stackprotector intrinsic writes the stack
 // guard to the correct place on the stack frame.
@@ -361,9 +373,12 @@ let Properties = [IntrNoMem] in {
 // places.
 let Properties = [IntrNoMem] in {
   def int_dbg_declare      : Intrinsic<[],
-                                       [llvm_metadata_ty, llvm_metadata_ty]>;
+                                       [llvm_metadata_ty,
+                                       llvm_metadata_ty,
+                                       llvm_metadata_ty]>;
   def int_dbg_value        : Intrinsic<[],
                                        [llvm_metadata_ty, llvm_i64_ty,
+                                        llvm_metadata_ty,
                                         llvm_metadata_ty]>;
 }
 
@@ -488,10 +503,8 @@ def int_donothing : Intrinsic<[], [], [IntrNoMem]>;
 
 // Intrisics to support half precision floating point format
 let Properties = [IntrNoMem] in {
-def int_convert_to_fp16   : Intrinsic<[llvm_i16_ty], [llvm_float_ty]>,
-                            GCCBuiltin<"__gnu_f2h_ieee">;
-def int_convert_from_fp16 : Intrinsic<[llvm_float_ty], [llvm_i16_ty]>,
-                            GCCBuiltin<"__gnu_h2f_ieee">;
+def int_convert_to_fp16   : Intrinsic<[llvm_i16_ty], [llvm_anyfloat_ty]>;
+def int_convert_from_fp16 : Intrinsic<[llvm_anyfloat_ty], [llvm_i16_ty]>;
 }
 
 // These convert intrinsics are to support various conversions between
@@ -529,7 +542,6 @@ def int_clear_cache : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty],
 include "llvm/IR/IntrinsicsPowerPC.td"
 include "llvm/IR/IntrinsicsX86.td"
 include "llvm/IR/IntrinsicsARM.td"
-include "llvm/IR/IntrinsicsARM64.td"
 include "llvm/IR/IntrinsicsAArch64.td"
 include "llvm/IR/IntrinsicsXCore.td"
 include "llvm/IR/IntrinsicsHexagon.td"

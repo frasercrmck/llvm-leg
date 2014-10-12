@@ -15,6 +15,7 @@
 #include "PPCInstrBuilder.h"
 #include "PPCInstrInfo.h"
 #include "PPCMachineFunctionInfo.h"
+#include "PPCSubtarget.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -34,6 +35,167 @@ static const uint16_t VRRegNo[] = {
  PPC::V16, PPC::V17, PPC::V18, PPC::V19, PPC::V20, PPC::V21, PPC::V22, PPC::V23,
  PPC::V24, PPC::V25, PPC::V26, PPC::V27, PPC::V28, PPC::V29, PPC::V30, PPC::V31
 };
+
+PPCFrameLowering::PPCFrameLowering(const PPCSubtarget &STI)
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown,
+                          (STI.hasQPX() || STI.isBGQ()) ? 32 : 16, 0),
+      Subtarget(STI) {}
+
+// With the SVR4 ABI, callee-saved registers have fixed offsets on the stack.
+const PPCFrameLowering::SpillSlot *PPCFrameLowering::getCalleeSavedSpillSlots(
+    unsigned &NumEntries) const {
+  if (Subtarget.isDarwinABI()) {
+    NumEntries = 1;
+    if (Subtarget.isPPC64()) {
+      static const SpillSlot darwin64Offsets = {PPC::X31, -8};
+      return &darwin64Offsets;
+    } else {
+      static const SpillSlot darwinOffsets = {PPC::R31, -4};
+      return &darwinOffsets;
+    }
+  }
+
+  // Early exit if not using the SVR4 ABI.
+  if (!Subtarget.isSVR4ABI()) {
+    NumEntries = 0;
+    return nullptr;
+  }
+
+  // Note that the offsets here overlap, but this is fixed up in
+  // processFunctionBeforeFrameFinalized.
+
+  static const SpillSlot Offsets[] = {
+      // Floating-point register save area offsets.
+      {PPC::F31, -8},
+      {PPC::F30, -16},
+      {PPC::F29, -24},
+      {PPC::F28, -32},
+      {PPC::F27, -40},
+      {PPC::F26, -48},
+      {PPC::F25, -56},
+      {PPC::F24, -64},
+      {PPC::F23, -72},
+      {PPC::F22, -80},
+      {PPC::F21, -88},
+      {PPC::F20, -96},
+      {PPC::F19, -104},
+      {PPC::F18, -112},
+      {PPC::F17, -120},
+      {PPC::F16, -128},
+      {PPC::F15, -136},
+      {PPC::F14, -144},
+
+      // General register save area offsets.
+      {PPC::R31, -4},
+      {PPC::R30, -8},
+      {PPC::R29, -12},
+      {PPC::R28, -16},
+      {PPC::R27, -20},
+      {PPC::R26, -24},
+      {PPC::R25, -28},
+      {PPC::R24, -32},
+      {PPC::R23, -36},
+      {PPC::R22, -40},
+      {PPC::R21, -44},
+      {PPC::R20, -48},
+      {PPC::R19, -52},
+      {PPC::R18, -56},
+      {PPC::R17, -60},
+      {PPC::R16, -64},
+      {PPC::R15, -68},
+      {PPC::R14, -72},
+
+      // CR save area offset.  We map each of the nonvolatile CR fields
+      // to the slot for CR2, which is the first of the nonvolatile CR
+      // fields to be assigned, so that we only allocate one save slot.
+      // See PPCRegisterInfo::hasReservedSpillSlot() for more information.
+      {PPC::CR2, -4},
+
+      // VRSAVE save area offset.
+      {PPC::VRSAVE, -4},
+
+      // Vector register save area
+      {PPC::V31, -16},
+      {PPC::V30, -32},
+      {PPC::V29, -48},
+      {PPC::V28, -64},
+      {PPC::V27, -80},
+      {PPC::V26, -96},
+      {PPC::V25, -112},
+      {PPC::V24, -128},
+      {PPC::V23, -144},
+      {PPC::V22, -160},
+      {PPC::V21, -176},
+      {PPC::V20, -192}};
+
+  static const SpillSlot Offsets64[] = {
+      // Floating-point register save area offsets.
+      {PPC::F31, -8},
+      {PPC::F30, -16},
+      {PPC::F29, -24},
+      {PPC::F28, -32},
+      {PPC::F27, -40},
+      {PPC::F26, -48},
+      {PPC::F25, -56},
+      {PPC::F24, -64},
+      {PPC::F23, -72},
+      {PPC::F22, -80},
+      {PPC::F21, -88},
+      {PPC::F20, -96},
+      {PPC::F19, -104},
+      {PPC::F18, -112},
+      {PPC::F17, -120},
+      {PPC::F16, -128},
+      {PPC::F15, -136},
+      {PPC::F14, -144},
+
+      // General register save area offsets.
+      {PPC::X31, -8},
+      {PPC::X30, -16},
+      {PPC::X29, -24},
+      {PPC::X28, -32},
+      {PPC::X27, -40},
+      {PPC::X26, -48},
+      {PPC::X25, -56},
+      {PPC::X24, -64},
+      {PPC::X23, -72},
+      {PPC::X22, -80},
+      {PPC::X21, -88},
+      {PPC::X20, -96},
+      {PPC::X19, -104},
+      {PPC::X18, -112},
+      {PPC::X17, -120},
+      {PPC::X16, -128},
+      {PPC::X15, -136},
+      {PPC::X14, -144},
+
+      // VRSAVE save area offset.
+      {PPC::VRSAVE, -4},
+
+      // Vector register save area
+      {PPC::V31, -16},
+      {PPC::V30, -32},
+      {PPC::V29, -48},
+      {PPC::V28, -64},
+      {PPC::V27, -80},
+      {PPC::V26, -96},
+      {PPC::V25, -112},
+      {PPC::V24, -128},
+      {PPC::V23, -144},
+      {PPC::V22, -160},
+      {PPC::V21, -176},
+      {PPC::V20, -192}};
+
+  if (Subtarget.isPPC64()) {
+    NumEntries = array_lengthof(Offsets64);
+
+    return Offsets64;
+  } else {
+    NumEntries = array_lengthof(Offsets);
+
+    return Offsets;
+  }
+}
 
 /// RemoveVRSaveCode - We have found that this function does not need any code
 /// to manipulate the VRSAVE register, even though it uses vector registers.
@@ -92,7 +254,7 @@ static void RemoveVRSaveCode(MachineInstr *MI) {
 // transform this into the appropriate ORI instruction.
 static void HandleVRSaveUpdate(MachineInstr *MI, const TargetInstrInfo &TII) {
   MachineFunction *MF = MI->getParent()->getParent();
-  const TargetRegisterInfo *TRI = MF->getTarget().getRegisterInfo();
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
   DebugLoc dl = MI->getDebugLoc();
 
   unsigned UsedRegMask = 0;
@@ -210,7 +372,7 @@ unsigned PPCFrameLowering::determineFrameLayout(MachineFunction &MF,
   unsigned AlignMask = std::max(MaxAlign, TargetAlign) - 1;
 
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
 
   // If we are a leaf function, and use up to 224 bytes of stack space,
   // don't have a frame pointer, calls, or dynamic alloca then we do not need
@@ -222,7 +384,7 @@ unsigned PPCFrameLowering::determineFrameLayout(MachineFunction &MF,
   if (!DisableRedZone &&
       (Subtarget.isPPC64() ||                      // 32-bit SVR4, no stack-
        !Subtarget.isSVR4ABI() ||                   //   allocated locals.
-	FrameSize == 0) &&
+        FrameSize == 0) &&
       FrameSize <= 224 &&                          // Fits in red zone.
       !MFI->hasVarSizedObjects() &&                // No dynamic alloca.
       !MFI->adjustsStack() &&                      // No calls.
@@ -236,9 +398,10 @@ unsigned PPCFrameLowering::determineFrameLayout(MachineFunction &MF,
   // Get the maximum call frame size of all the calls.
   unsigned maxCallFrameSize = MFI->getMaxCallFrameSize();
 
-  // Maximum call frame needs to be at least big enough for linkage and 8 args.
-  unsigned minCallFrameSize = getMinCallFrameSize(Subtarget.isPPC64(),
-                                                  Subtarget.isDarwinABI());
+  // Maximum call frame needs to be at least big enough for linkage area.
+  unsigned minCallFrameSize = getLinkageSize(Subtarget.isPPC64(),
+                                             Subtarget.isDarwinABI(),
+                                             Subtarget.isELFv2ABI());
   maxCallFrameSize = std::max(maxCallFrameSize, minCallFrameSize);
 
   // If we have dynamic alloca then maxCallFrameSize needs to be aligned so
@@ -281,8 +444,8 @@ bool PPCFrameLowering::needsFP(const MachineFunction &MF) const {
 
   // Naked functions have no stack frame pushed, so we don't have a frame
   // pointer.
-  if (MF.getFunction()->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
-                                                     Attribute::Naked))
+  if (MF.getFunction()->getAttributes().hasAttribute(
+          AttributeSet::FunctionIndex, Attribute::Naked))
     return false;
 
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
@@ -297,9 +460,9 @@ void PPCFrameLowering::replaceFPWithRealFP(MachineFunction &MF) const {
   unsigned FP8Reg = is31 ? PPC::X31 : PPC::X1;
 
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
   bool HasBP = RegInfo->hasBasePointer(MF);
-  unsigned BPReg  = HasBP ? (unsigned) PPC::R30 : FPReg;
+  unsigned BPReg  = HasBP ? (unsigned) RegInfo->getBaseRegister(MF) : FPReg;
   unsigned BP8Reg = HasBP ? (unsigned) PPC::X30 : FPReg;
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();
@@ -335,21 +498,23 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineFrameInfo *MFI = MF.getFrameInfo();
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF.getSubtarget().getInstrInfo());
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
 
   MachineModuleInfo &MMI = MF.getMMI();
   const MCRegisterInfo *MRI = MMI.getContext().getRegisterInfo();
   DebugLoc dl;
   bool needsFrameMoves = MMI.hasDebugInfo() ||
     MF.getFunction()->needsUnwindTableEntry();
+  bool isPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
 
   // Get processor type.
   bool isPPC64 = Subtarget.isPPC64();
   // Get the ABI.
   bool isDarwinABI = Subtarget.isDarwinABI();
   bool isSVR4ABI = Subtarget.isSVR4ABI();
+  bool isELFv2ABI = Subtarget.isELFv2ABI();
   assert((isDarwinABI || isSVR4ABI) &&
          "Currently only Darwin and SVR4 ABIs are supported for PowerPC.");
 
@@ -384,7 +549,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
   bool HasBP = RegInfo->hasBasePointer(MF);
 
   unsigned SPReg       = isPPC64 ? PPC::X1  : PPC::R1;
-  unsigned BPReg       = isPPC64 ? PPC::X30 : PPC::R30;
+  unsigned BPReg       = RegInfo->getBaseRegister(MF);
   unsigned FPReg       = isPPC64 ? PPC::X31 : PPC::R31;
   unsigned LRReg       = isPPC64 ? PPC::LR8 : PPC::LR;
   unsigned ScratchReg  = isPPC64 ? PPC::X0  : PPC::R0;
@@ -426,7 +591,8 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       assert(FPIndex && "No Frame Pointer Save Slot!");
       FPOffset = FFI->getObjectOffset(FPIndex);
     } else {
-      FPOffset = PPCFrameLowering::getFramePointerSaveOffset(isPPC64, isDarwinABI);
+      FPOffset =
+          PPCFrameLowering::getFramePointerSaveOffset(isPPC64, isDarwinABI);
     }
   }
 
@@ -439,7 +605,9 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       BPOffset = FFI->getObjectOffset(BPIndex);
     } else {
       BPOffset =
-        PPCFrameLowering::getBasePointerSaveOffset(isPPC64, isDarwinABI);
+        PPCFrameLowering::getBasePointerSaveOffset(isPPC64,
+                                                   isDarwinABI,
+                                                   isPIC);
     }
   }
 
@@ -460,6 +628,9 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
          "Prologue CR saving supported only in 64-bit mode");
 
   if (!MustSaveCRs.empty()) { // will only occur for PPC64
+    // FIXME: In the ELFv2 ABI, we are not required to save all CR fields.
+    // If only one or two CR fields are clobbered, it could be more
+    // efficient to use mfocrf to selectively save just those fields.
     MachineInstrBuilder MIB =
       BuildMI(MBB, MBBI, dl, TII.get(PPC::MFCR8), TempReg);
     for (unsigned i = 0, e = MustSaveCRs.size(); i != e; ++i)
@@ -562,13 +733,14 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
     assert(NegFrameSize);
     unsigned CFIIndex = MMI.addFrameInst(
         MCCFIInstruction::createDefCfaOffset(nullptr, NegFrameSize));
-    BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION)).addCFIIndex(CFIIndex);
+    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+        .addCFIIndex(CFIIndex);
 
     if (HasFP) {
       unsigned Reg = MRI->getDwarfRegNum(FPReg, true);
       CFIIndex = MMI.addFrameInst(
           MCCFIInstruction::createOffset(nullptr, Reg, FPOffset));
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     }
 
@@ -576,7 +748,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       unsigned Reg = MRI->getDwarfRegNum(BPReg, true);
       CFIIndex = MMI.addFrameInst(
           MCCFIInstruction::createOffset(nullptr, Reg, BPOffset));
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     }
 
@@ -584,7 +756,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       unsigned Reg = MRI->getDwarfRegNum(LRReg, true);
       CFIIndex = MMI.addFrameInst(
           MCCFIInstruction::createOffset(nullptr, Reg, LROffset));
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     }
   }
@@ -601,7 +773,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       unsigned CFIIndex = MMI.addFrameInst(
           MCCFIInstruction::createDefCfaRegister(nullptr, Reg));
 
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     }
   }
@@ -627,9 +799,13 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       // For 64-bit SVR4 when we have spilled CRs, the spill location
       // is SP+8, not a frame-relative slot.
       if (isSVR4ABI && isPPC64 && (PPC::CR2 <= Reg && Reg <= PPC::CR4)) {
+        // In the ELFv1 ABI, only CR2 is noted in CFI and stands in for
+        // the whole CR word.  In the ELFv2 ABI, every CR that was
+        // actually saved gets its own CFI record.
+        unsigned CRReg = isELFv2ABI? Reg : (unsigned) PPC::CR2;
         unsigned CFIIndex = MMI.addFrameInst(MCCFIInstruction::createOffset(
-            nullptr, MRI->getDwarfRegNum(PPC::CR2, true), 8));
-        BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+            nullptr, MRI->getDwarfRegNum(CRReg, true), 8));
+        BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
             .addCFIIndex(CFIIndex);
         continue;
       }
@@ -637,7 +813,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF) const {
       int Offset = MFI->getObjectOffset(CSI[I].getFrameIdx());
       unsigned CFIIndex = MMI.addFrameInst(MCCFIInstruction::createOffset(
           nullptr, MRI->getDwarfRegNum(Reg, true), Offset));
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::CFI_INSTRUCTION))
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
           .addCFIIndex(CFIIndex);
     }
   }
@@ -648,9 +824,9 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   assert(MBBI != MBB.end() && "Returning block has no terminator");
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF.getSubtarget().getInstrInfo());
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
 
   unsigned RetOpcode = MBBI->getOpcode();
   DebugLoc dl;
@@ -675,6 +851,7 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
   // Get the ABI.
   bool isDarwinABI = Subtarget.isDarwinABI();
   bool isSVR4ABI = Subtarget.isSVR4ABI();
+  bool isPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
 
   // Check if the link register (LR) has been saved.
   PPCFunctionInfo *FI = MF.getInfo<PPCFunctionInfo>();
@@ -685,7 +862,7 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
   bool HasBP = RegInfo->hasBasePointer(MF);
 
   unsigned SPReg      = isPPC64 ? PPC::X1  : PPC::R1;
-  unsigned BPReg      = isPPC64 ? PPC::X30 : PPC::R30;
+  unsigned BPReg      = RegInfo->getBaseRegister(MF);
   unsigned FPReg      = isPPC64 ? PPC::X31 : PPC::R31;
   unsigned ScratchReg  = isPPC64 ? PPC::X0  : PPC::R0;
   unsigned TempReg     = isPPC64 ? PPC::X12 : PPC::R12; // another scratch reg
@@ -712,7 +889,8 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
       assert(FPIndex && "No Frame Pointer Save Slot!");
       FPOffset = FFI->getObjectOffset(FPIndex);
     } else {
-      FPOffset = PPCFrameLowering::getFramePointerSaveOffset(isPPC64, isDarwinABI);
+      FPOffset =
+          PPCFrameLowering::getFramePointerSaveOffset(isPPC64, isDarwinABI);
     }
   }
 
@@ -725,7 +903,9 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
       BPOffset = FFI->getObjectOffset(BPIndex);
     } else {
       BPOffset =
-        PPCFrameLowering::getBasePointerSaveOffset(isPPC64, isDarwinABI);
+        PPCFrameLowering::getBasePointerSaveOffset(isPPC64,
+                                                   isDarwinABI,
+                                                   isPIC);
     }
   }
 
@@ -889,7 +1069,7 @@ void
 PPCFrameLowering::processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
                                                    RegScavenger *) const {
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
 
   //  Save and clear the LR state.
   PPCFunctionInfo *FI = MF.getInfo<PPCFunctionInfo>();
@@ -902,6 +1082,7 @@ PPCFrameLowering::processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
   int FPSI = FI->getFramePointerSaveIndex();
   bool isPPC64 = Subtarget.isPPC64();
   bool isDarwinABI  = Subtarget.isDarwinABI();
+  bool isPIC = MF.getTarget().getRelocationModel() == Reloc::PIC_;
   MachineFrameInfo *MFI = MF.getFrameInfo();
 
   // If the frame pointer save index hasn't been defined yet.
@@ -916,7 +1097,7 @@ PPCFrameLowering::processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
 
   int BPSI = FI->getBasePointerSaveIndex();
   if (!BPSI && RegInfo->hasBasePointer(MF)) {
-    int BPOffset = getBasePointerSaveOffset(isPPC64, isDarwinABI);
+    int BPOffset = getBasePointerSaveOffset(isPPC64, isDarwinABI, isPIC);
     // Allocate the frame index for the base pointer save area.
     BPSI = MFI->CreateFixedObject(isPPC64? 8 : 4, BPOffset, true);
     // Save the result.
@@ -930,9 +1111,9 @@ PPCFrameLowering::processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
     MFI->CreateFixedObject(-1 * TCSPDelta, TCSPDelta, true);
   }
 
-  // For 32-bit SVR4, allocate the nonvolatile CR spill slot iff the 
+  // For 32-bit SVR4, allocate the nonvolatile CR spill slot iff the
   // function uses CR 2, 3, or 4.
-  if (!isPPC64 && !isDarwinABI && 
+  if (!isPPC64 && !isDarwinABI &&
       (MRI.isPhysRegUsed(PPC::CR2) ||
        MRI.isPhysRegUsed(PPC::CR3) ||
        MRI.isPhysRegUsed(PPC::CR4))) {
@@ -1020,7 +1201,7 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
   }
 
   PPCFunctionInfo *PFI = MF.getInfo<PPCFunctionInfo>();
-  const TargetRegisterInfo *TRI = MF.getTarget().getRegisterInfo();
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
   int64_t LowerBound = 0;
 
@@ -1055,7 +1236,7 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
   }
 
   const PPCRegisterInfo *RegInfo =
-    static_cast<const PPCRegisterInfo*>(MF.getTarget().getRegisterInfo());
+      static_cast<const PPCRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
   if (RegInfo->hasBasePointer(MF)) {
     HasGPSaveArea = true;
 
@@ -1106,10 +1287,10 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
       unsigned Reg = CSI[i].getReg();
 
       if ((Subtarget.isSVR4ABI() && Reg == PPC::CR2)
-	  // Leave Darwin logic as-is.
-	  || (!Subtarget.isSVR4ABI() &&
-	      (PPC::CRBITRCRegClass.contains(Reg) ||
-	       PPC::CRRCRegClass.contains(Reg)))) {
+          // Leave Darwin logic as-is.
+          || (!Subtarget.isSVR4ABI() &&
+              (PPC::CRBITRCRegClass.contains(Reg) ||
+               PPC::CRRCRegClass.contains(Reg)))) {
         int FI = CSI[i].getFrameIdx();
 
         FFI->setObjectOffset(FI, LowerBound + FFI->getObjectOffset(FI));
@@ -1190,11 +1371,11 @@ PPCFrameLowering::addScavengingSpillSlot(MachineFunction &MF,
   }
 }
 
-bool 
+bool
 PPCFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
-				     MachineBasicBlock::iterator MI,
-				     const std::vector<CalleeSavedInfo> &CSI,
-				     const TargetRegisterInfo *TRI) const {
+                                     MachineBasicBlock::iterator MI,
+                                     const std::vector<CalleeSavedInfo> &CSI,
+                                     const TargetRegisterInfo *TRI) const {
 
   // Currently, this function only handles SVR4 32- and 64-bit ABIs.
   // Return false otherwise to maintain pre-existing behavior.
@@ -1203,11 +1384,11 @@ PPCFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
 
   MachineFunction *MF = MBB.getParent();
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF->getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF->getSubtarget().getInstrInfo());
   DebugLoc DL;
   bool CRSpilled = false;
   MachineInstrBuilder CRMIB;
-  
+
   for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
     unsigned Reg = CSI[i].getReg();
     // Only Darwin actually uses the VRSAVE register, but it can still appear
@@ -1237,21 +1418,21 @@ PPCFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
         CRSpilled = true;
         FuncInfo->setSpillsCR();
 
-	// 32-bit:  FP-relative.  Note that we made sure CR2-CR4 all have
-	// the same frame index in PPCRegisterInfo::hasReservedSpillSlot.
-	CRMIB = BuildMI(*MF, DL, TII.get(PPC::MFCR), PPC::R12)
+        // 32-bit:  FP-relative.  Note that we made sure CR2-CR4 all have
+        // the same frame index in PPCRegisterInfo::hasReservedSpillSlot.
+        CRMIB = BuildMI(*MF, DL, TII.get(PPC::MFCR), PPC::R12)
                   .addReg(Reg, RegState::ImplicitKill);
 
-	MBB.insert(MI, CRMIB);
-	MBB.insert(MI, addFrameReference(BuildMI(*MF, DL, TII.get(PPC::STW))
-					 .addReg(PPC::R12,
-						 getKillRegState(true)),
-					 CSI[i].getFrameIdx()));
+        MBB.insert(MI, CRMIB);
+        MBB.insert(MI, addFrameReference(BuildMI(*MF, DL, TII.get(PPC::STW))
+                                         .addReg(PPC::R12,
+                                                 getKillRegState(true)),
+                                         CSI[i].getFrameIdx()));
       }
     } else {
       const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
       TII.storeRegToStackSlot(MBB, MI, Reg, true,
-			      CSI[i].getFrameIdx(), RC, TRI);
+                              CSI[i].getFrameIdx(), RC, TRI);
     }
   }
   return true;
@@ -1260,12 +1441,12 @@ PPCFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
 static void
 restoreCRs(bool isPPC64, bool is31,
            bool CR2Spilled, bool CR3Spilled, bool CR4Spilled,
-	   MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-	   const std::vector<CalleeSavedInfo> &CSI, unsigned CSIIndex) {
+           MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+           const std::vector<CalleeSavedInfo> &CSI, unsigned CSIIndex) {
 
   MachineFunction *MF = MBB.getParent();
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF->getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF->getSubtarget().getInstrInfo());
   DebugLoc DL;
   unsigned RestoreOp, MoveReg;
 
@@ -1275,12 +1456,12 @@ restoreCRs(bool isPPC64, bool is31,
   else {
     // 32-bit:  FP-relative
     MBB.insert(MI, addFrameReference(BuildMI(*MF, DL, TII.get(PPC::LWZ),
-					     PPC::R12),
-				     CSI[CSIIndex].getFrameIdx()));
+                                             PPC::R12),
+                                     CSI[CSIIndex].getFrameIdx()));
     RestoreOp = PPC::MTOCRF;
     MoveReg = PPC::R12;
   }
-  
+
   if (CR2Spilled)
     MBB.insert(MI, BuildMI(*MF, DL, TII.get(RestoreOp), PPC::CR2)
                .addReg(MoveReg, getKillRegState(!CR3Spilled && !CR4Spilled)));
@@ -1298,7 +1479,7 @@ void PPCFrameLowering::
 eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF.getSubtarget().getInstrInfo());
   if (MF.getTarget().Options.GuaranteedTailCallOpt &&
       I->getOpcode() == PPC::ADJCALLSTACKUP) {
     // Add (actually subtract) back the amount the callee popped on return.
@@ -1335,11 +1516,11 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
   MBB.erase(I);
 }
 
-bool 
+bool
 PPCFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-					MachineBasicBlock::iterator MI,
-				        const std::vector<CalleeSavedInfo> &CSI,
-					const TargetRegisterInfo *TRI) const {
+                                        MachineBasicBlock::iterator MI,
+                                        const std::vector<CalleeSavedInfo> &CSI,
+                                        const TargetRegisterInfo *TRI) const {
 
   // Currently, this function only handles SVR4 32- and 64-bit ABIs.
   // Return false otherwise to maintain pre-existing behavior.
@@ -1348,7 +1529,7 @@ PPCFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
 
   MachineFunction *MF = MBB.getParent();
   const PPCInstrInfo &TII =
-    *static_cast<const PPCInstrInfo*>(MF->getTarget().getInstrInfo());
+      *static_cast<const PPCInstrInfo *>(MF->getSubtarget().getInstrInfo());
   bool CR2Spilled = false;
   bool CR3Spilled = false;
   bool CR4Spilled = false;
@@ -1387,20 +1568,20 @@ PPCFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
       // When we first encounter a non-CR register after seeing at
       // least one CR register, restore all spilled CRs together.
       if ((CR2Spilled || CR3Spilled || CR4Spilled)
-	  && !(PPC::CR2 <= Reg && Reg <= PPC::CR4)) {
+          && !(PPC::CR2 <= Reg && Reg <= PPC::CR4)) {
         bool is31 = needsFP(*MF);
         restoreCRs(Subtarget.isPPC64(), is31,
                    CR2Spilled, CR3Spilled, CR4Spilled,
-		   MBB, I, CSI, CSIIndex);
-	CR2Spilled = CR3Spilled = CR4Spilled = false;
+                   MBB, I, CSI, CSIIndex);
+        CR2Spilled = CR3Spilled = CR4Spilled = false;
       }
 
       // Default behavior for non-CR saves.
       const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
       TII.loadRegFromStackSlot(MBB, I, Reg, CSI[i].getFrameIdx(),
-			       RC, TRI);
+                               RC, TRI);
       assert(I != MBB.begin() &&
-	     "loadRegFromStackSlot didn't insert any code!");
+             "loadRegFromStackSlot didn't insert any code!");
       }
 
     // Insert in reverse order.
@@ -1409,16 +1590,15 @@ PPCFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
     else {
       I = BeforeI;
       ++I;
-    }	    
+    }
   }
 
   // If we haven't yet spilled the CRs, do so now.
   if (CR2Spilled || CR3Spilled || CR4Spilled) {
-    bool is31 = needsFP(*MF); 
+    bool is31 = needsFP(*MF);
     restoreCRs(Subtarget.isPPC64(), is31, CR2Spilled, CR3Spilled, CR4Spilled,
-	       MBB, I, CSI, CSIIndex);
+               MBB, I, CSI, CSIIndex);
   }
 
   return true;
 }
-

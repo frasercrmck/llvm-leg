@@ -634,10 +634,18 @@ define <2 x i32> @test80(i32 %v) {
 ; CHECK-DAG: addi [[R1:[0-9]+]], 3, 3
 ; CHECK-DAG: addi [[R2:[0-9]+]], 1, -16
 ; CHECK-DAG: addi [[R3:[0-9]+]], 3, 2
-; CHECK: std [[R1]], 8([[R2]])
+; CHECK: std [[R1]], -8(1)
 ; CHECK: std [[R3]], -16(1)
 ; CHECK: lxvd2x 34, 0, [[R2]]
 ; CHECK-NOT: stxvd2x
+; CHECK: blr
+}
+
+define <2 x double> @test81(<4 x float> %b) {
+  %w = bitcast <4 x float> %b to <2 x double>
+  ret <2 x double> %w
+
+; CHECK-LABEL: @test81
 ; CHECK: blr
 }
 

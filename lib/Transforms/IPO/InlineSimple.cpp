@@ -11,8 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "inline"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/IR/CallSite.h"
@@ -26,6 +27,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "inline"
+
 namespace {
 
 /// \brief Actual inliner pass implementation.
@@ -37,12 +40,12 @@ class SimpleInliner : public Inliner {
   InlineCostAnalysis *ICA;
 
 public:
-  SimpleInliner() : Inliner(ID), ICA(0) {
+  SimpleInliner() : Inliner(ID), ICA(nullptr) {
     initializeSimpleInlinerPass(*PassRegistry::getPassRegistry());
   }
 
   SimpleInliner(int Threshold)
-      : Inliner(ID, Threshold, /*InsertLifetime*/ true), ICA(0) {
+      : Inliner(ID, Threshold, /*InsertLifetime*/ true), ICA(nullptr) {
     initializeSimpleInlinerPass(*PassRegistry::getPassRegistry());
   }
 
@@ -72,6 +75,8 @@ static int computeThresholdFromOptLevels(unsigned OptLevel,
 char SimpleInliner::ID = 0;
 INITIALIZE_PASS_BEGIN(SimpleInliner, "inline",
                 "Function Integration/Inlining", false, false)
+INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(CallGraphWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(InlineCostAnalysis)
 INITIALIZE_PASS_END(SimpleInliner, "inline",

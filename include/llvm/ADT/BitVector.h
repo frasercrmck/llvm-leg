@@ -34,6 +34,7 @@ class BitVector {
   unsigned Capacity;     // Size of allocated memory in BitWord.
 
 public:
+  typedef unsigned size_type;
   // Encapsulation of a single bit.
   class reference {
     friend class BitVector;
@@ -72,7 +73,7 @@ public:
 
   /// BitVector default ctor - Creates an empty bitvector.
   BitVector() : Size(0), Capacity(0) {
-    Bits = 0;
+    Bits = nullptr;
   }
 
   /// BitVector ctor - Creates a bitvector of specified number of bits. All
@@ -88,7 +89,7 @@ public:
   /// BitVector copy ctor.
   BitVector(const BitVector &RHS) : Size(RHS.size()) {
     if (Size == 0) {
-      Bits = 0;
+      Bits = nullptr;
       Capacity = 0;
       return;
     }
@@ -100,7 +101,7 @@ public:
 
   BitVector(BitVector &&RHS)
     : Bits(RHS.Bits), Size(RHS.Size), Capacity(RHS.Capacity) {
-    RHS.Bits = 0;
+    RHS.Bits = nullptr;
   }
 
   ~BitVector() {
@@ -111,10 +112,10 @@ public:
   bool empty() const { return Size == 0; }
 
   /// size - Returns the number of bits in this bitvector.
-  unsigned size() const { return Size; }
+  size_type size() const { return Size; }
 
   /// count - Returns the number of bits which are set.
-  unsigned count() const {
+  size_type count() const {
     unsigned NumBits = 0;
     for (unsigned i = 0; i < NumBitWords(size()); ++i)
       if (sizeof(BitWord) == 4)
@@ -467,7 +468,7 @@ public:
     Size = RHS.Size;
     Capacity = RHS.Capacity;
 
-    RHS.Bits = 0;
+    RHS.Bits = nullptr;
 
     return *this;
   }

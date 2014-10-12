@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CODEGEN_ASMPRINTER_DIEHASH_H__
-#define CODEGEN_ASMPRINTER_DIEHASH_H__
+#ifndef LLVM_LIB_CODEGEN_ASMPRINTER_DIEHASH_H
+#define LLVM_LIB_CODEGEN_ASMPRINTER_DIEHASH_H
 
 #include "DIE.h"
 #include "llvm/ADT/DenseMap.h"
@@ -89,7 +89,7 @@ class DIEHash {
   };
 
 public:
-  DIEHash(AsmPrinter *A = NULL) : AP(A) {}
+  DIEHash(AsmPrinter *A = nullptr) : AP(A) {}
 
   /// \brief Computes the ODR signature.
   uint64_t computeDIEODRSignature(const DIE &Die);

@@ -45,7 +45,6 @@
 #ifndef LLVM_ADT_HASHING_H
 #define LLVM_ADT_HASHING_H
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/SwapByteOrder.h"
@@ -153,7 +152,7 @@ inline uint64_t fetch64(const char *p) {
   uint64_t result;
   memcpy(&result, p, sizeof(result));
   if (sys::IsBigEndianHost)
-    return sys::SwapByteOrder(result);
+    sys::swapByteOrder(result);
   return result;
 }
 
@@ -161,7 +160,7 @@ inline uint32_t fetch32(const char *p) {
   uint32_t result;
   memcpy(&result, p, sizeof(result));
   if (sys::IsBigEndianHost)
-    return sys::SwapByteOrder(result);
+    sys::swapByteOrder(result);
   return result;
 }
 
@@ -266,7 +265,6 @@ inline uint64_t hash_short(const char *s, size_t length, uint64_t seed) {
 /// keeps 56 bytes of arbitrary state.
 struct hash_state {
   uint64_t h0, h1, h2, h3, h4, h5, h6;
-  uint64_t seed;
 
   /// \brief Create a new hash_state structure and initialize it based on the
   /// seed and the first 64-byte chunk.
@@ -274,7 +272,7 @@ struct hash_state {
   static hash_state create(const char *s, uint64_t seed) {
     hash_state state = {
       0, seed, hash_16_bytes(seed, k1), rotate(seed ^ k1, 49),
-      seed * k1, shift_mix(seed), 0, seed };
+      seed * k1, shift_mix(seed), 0 };
     state.h6 = hash_16_bytes(state.h4, state.h5);
     state.mix(s);
     return state;
@@ -412,7 +410,7 @@ template <typename InputIteratorT>
 hash_code hash_combine_range_impl(InputIteratorT first, InputIteratorT last) {
   const size_t seed = get_execution_seed();
   char buffer[64], *buffer_ptr = buffer;
-  char *const buffer_end = buffer_ptr + array_lengthof(buffer);
+  char *const buffer_end = std::end(buffer);
   while (first != last && store_and_advance(buffer_ptr, buffer_end,
                                             get_hashable_data(*first)))
     ++first;

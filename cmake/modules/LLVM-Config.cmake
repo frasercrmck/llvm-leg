@@ -40,9 +40,9 @@ function(explicit_llvm_config executable)
 
   llvm_map_components_to_libnames(LIBRARIES ${link_components})
   get_target_property(t ${executable} TYPE)
-  if("${t}" STREQUAL "STATIC_LIBRARY")
+  if("x${t}" STREQUAL "xSTATIC_LIBRARY")
     target_link_libraries(${executable} ${cmake_2_8_12_INTERFACE} ${LIBRARIES})
-  elseif("${t}" STREQUAL "SHARED_LIBRARY" OR "${t}" STREQUAL "MODULE_LIBRARY")
+  elseif("x${t}" STREQUAL "xSHARED_LIBRARY" OR "x${t}" STREQUAL "xMODULE_LIBRARY")
     target_link_libraries(${executable} ${cmake_2_8_12_PRIVATE} ${LIBRARIES})
   else()
     # Use plain form for legacy user.
@@ -51,12 +51,14 @@ function(explicit_llvm_config executable)
 endfunction(explicit_llvm_config)
 
 
-# This is a variant intended for the final user:
+# This is Deprecated
 function(llvm_map_components_to_libraries OUT_VAR)
+  message(AUTHOR_WARNING "Using llvm_map_components_to_libraries() is deprecated. Use llvm_map_components_to_libnames() instead")
   explicit_map_components_to_libraries(result ${ARGN})
   set( ${OUT_VAR} ${result} ${sys_result} PARENT_SCOPE )
 endfunction(llvm_map_components_to_libraries)
 
+# This is a variant intended for the final user:
 # Map LINK_COMPONENTS to actual libnames.
 function(llvm_map_components_to_libnames out_libs)
   set( link_components ${ARGN} )
@@ -105,6 +107,9 @@ function(llvm_map_components_to_libnames out_libs)
       if( TARGET LLVM${c}AsmParser )
         list(APPEND expanded_components "LLVM${c}AsmParser")
       endif()
+      if( TARGET LLVM${c}Desc )
+        list(APPEND expanded_components "LLVM${c}Desc")
+      endif()
       if( TARGET LLVM${c}Info )
         list(APPEND expanded_components "LLVM${c}Info")
       endif()
@@ -115,6 +120,12 @@ function(llvm_map_components_to_libnames out_libs)
       # already processed
     elseif( c STREQUAL "nativecodegen" )
       list(APPEND expanded_components "LLVM${LLVM_NATIVE_ARCH}CodeGen")
+      if( TARGET LLVM${LLVM_NATIVE_ARCH}Desc )
+        list(APPEND expanded_components "LLVM${LLVM_NATIVE_ARCH}Desc")
+      endif()
+      if( TARGET LLVM${LLVM_NATIVE_ARCH}Info )
+        list(APPEND expanded_components "LLVM${LLVM_NATIVE_ARCH}Info")
+      endif()
     elseif( c STREQUAL "backend" )
       # same case as in `native'.
     elseif( c STREQUAL "engine" )

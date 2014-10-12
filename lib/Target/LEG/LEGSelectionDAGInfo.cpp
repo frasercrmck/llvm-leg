@@ -11,10 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "LEGTargetMachine.h"
+#include "LEGSelectionDAGInfo.h"
 using namespace llvm;
 
-LEGSelectionDAGInfo::LEGSelectionDAGInfo(const LEGTargetMachine &TM)
-    : TargetSelectionDAGInfo(TM) {}
+#define DEBUG_TYPE "leg-selectiondag-info"
+
+LEGSelectionDAGInfo::LEGSelectionDAGInfo(const DataLayout &DL)
+    : TargetSelectionDAGInfo(&DL) {}
 
 LEGSelectionDAGInfo::~LEGSelectionDAGInfo() {}

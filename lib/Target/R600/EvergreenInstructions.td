@@ -69,11 +69,14 @@ def EXP_IEEE_eg : EXP_IEEE_Common<0x81>;
 def LOG_IEEE_eg : LOG_IEEE_Common<0x83>;
 def RECIP_CLAMPED_eg : RECIP_CLAMPED_Common<0x84>;
 def RECIPSQRT_IEEE_eg : RECIPSQRT_IEEE_Common<0x89>;
+defm : RsqPat<RECIPSQRT_IEEE_eg, f32>;
 def SIN_eg : SIN_Common<0x8D>;
 def COS_eg : COS_Common<0x8E>;
 
 def : POW_Common <LOG_IEEE_eg, EXP_IEEE_eg, MUL>;
 def : Pat<(fsqrt f32:$src), (MUL $src, (RECIPSQRT_CLAMPED_eg $src))>;
+
+defm : Expand24IBitOps<MULLO_INT_eg, ADD_INT>;
 
 //===----------------------------------------------------------------------===//
 // Memory read/write instructions
@@ -254,6 +257,12 @@ def VTX_READ_GLOBAL_128_eg : VTX_READ_128_eg <1,
 
 let Predicates = [isEGorCayman] in {
 
+// Should be predicated on FeatureFP64
+// def FMA_64 : R600_3OP <
+//   0xA, "FMA_64",
+//   [(set f64:$dst, (fma f64:$src0, f64:$src1, f64:$src2))]
+// >;
+
 // BFE_UINT - bit_extract, an optimization for mask and shift
 // Src0 = Input
 // Src1 = Offset
@@ -273,7 +282,7 @@ def BFE_UINT_eg : R600_3OP <0x4, "BFE_UINT",
   VecALU
 >;
 
-def BFE_INT_eg : R600_3OP <0x4, "BFE_INT",
+def BFE_INT_eg : R600_3OP <0x5, "BFE_INT",
   [(set i32:$dst, (AMDGPUbfe_i32 i32:$src0, i32:$src1, i32:$src2))],
   VecALU
 >;
@@ -286,7 +295,14 @@ def BFI_INT_eg : R600_3OP <0x06, "BFI_INT",
   VecALU
 >;
 
-defm : BFIPatterns <BFI_INT_eg>;
+def : Pat<(i32 (sext_inreg i32:$src, i1)),
+  (BFE_INT_eg i32:$src, (i32 ZERO), (i32 ONE_INT))>;
+def : Pat<(i32 (sext_inreg i32:$src, i8)),
+  (BFE_INT_eg i32:$src, (i32 ZERO), (MOV_IMM_I32 8))>;
+def : Pat<(i32 (sext_inreg i32:$src, i16)),
+  (BFE_INT_eg i32:$src, (i32 ZERO), (MOV_IMM_I32 16))>;
+
+defm : BFIPatterns <BFI_INT_eg, MOV_IMM_I32>;
 
 def BFM_INT_eg : R600_2OP <0xA0, "BFM_INT",
   [(set i32:$dst, (AMDGPUbfm i32:$src0, i32:$src1))],
@@ -294,12 +310,16 @@ def BFM_INT_eg : R600_2OP <0xA0, "BFM_INT",
 >;
 
 def MULADD_UINT24_eg : R600_3OP <0x10, "MULADD_UINT24",
-  [(set i32:$dst, (add (mul U24:$src0, U24:$src1), i32:$src2))], VecALU
+  [(set i32:$dst, (AMDGPUmad_u24 i32:$src0, i32:$src1, i32:$src2))], VecALU
 >;
+
+def : UMad24Pat<MULADD_UINT24_eg>;
+
 def BIT_ALIGN_INT_eg : R600_3OP <0xC, "BIT_ALIGN_INT", [], VecALU>;
 def : ROTRPattern <BIT_ALIGN_INT_eg>;
 def MULADD_eg : MULADD_Common<0x14>;
 def MULADD_IEEE_eg : MULADD_IEEE_Common<0x18>;
+def FMA_eg : FMA_Common<0x7>;
 def ASHR_eg : ASHR_Common<0x15>;
 def LSHR_eg : LSHR_Common<0x16>;
 def LSHL_eg : LSHL_Common<0x17>;
@@ -309,10 +329,15 @@ def CNDGE_eg : CNDGE_Common<0x1B>;
 def MUL_LIT_eg : MUL_LIT_Common<0x1F>;
 def LOG_CLAMPED_eg : LOG_CLAMPED_Common<0x82>;
 def MUL_UINT24_eg : R600_2OP <0xB5, "MUL_UINT24",
-  [(set i32:$dst, (mul U24:$src0, U24:$src1))], VecALU
+  [(set i32:$dst, (AMDGPUmul_u24 i32:$src0, i32:$src1))], VecALU
 >;
 def DOT4_eg : DOT4_Common<0xBE>;
 defm CUBE_eg : CUBE_Common<0xC0>;
+
+def BCNT_INT : R600_1OP_Helper <0xAA, "BCNT_INT", ctpop, VecALU>;
+
+def FFBH_UINT : R600_1OP_Helper <0xAB, "FFBH_UINT", ctlz_zero_undef, VecALU>;
+def FFBL_INT : R600_1OP_Helper <0xAC, "FFBL_INT", cttz_zero_undef, VecALU>;
 
 let hasSideEffects = 1 in {
   def MOVA_INT_eg : R600_1OP <0xCC, "MOVA_INT", [], VecALU>;
@@ -334,7 +359,7 @@ def FLT_TO_UINT_eg : FLT_TO_UINT_Common<0x9A> {
 def UINT_TO_FLT_eg : UINT_TO_FLT_Common<0x9C>;
 
 def GROUP_BARRIER : InstR600 <
-    (outs), (ins), "  GROUP_BARRIER", [(int_AMDGPU_barrier_local)], AnyALU>,
+    (outs), (ins), "  GROUP_BARRIER", [(int_AMDGPU_barrier_local), (int_AMDGPU_barrier_global)], AnyALU>,
     R600ALU_Word0,
     R600ALU_Word1_OP2 <0x54> {
 
@@ -362,6 +387,11 @@ def GROUP_BARRIER : InstR600 <
 
   let ALUInst = 1;
 }
+
+def : Pat <
+	(int_AMDGPU_barrier_global),
+	(GROUP_BARRIER)
+>;
 
 //===----------------------------------------------------------------------===//
 // LDS Instructions
@@ -444,21 +474,47 @@ class R600_LDS_1A1D_RET <bits<6> lds_op, string name, list<dag> pattern> :
   let DisableEncoding = "$dst";
 }
 
-class R600_LDS_1A2D <bits<6> lds_op, string name, list<dag> pattern> :
+class R600_LDS_1A2D <bits<6> lds_op, dag outs, string name, list<dag> pattern,
+                     string dst =""> :
     R600_LDS <
-  lds_op,
-  (outs),
+  lds_op, outs,
   (ins R600_Reg32:$src0, REL:$src0_rel, SEL:$src0_sel,
        R600_Reg32:$src1, REL:$src1_rel, SEL:$src1_sel,
        R600_Reg32:$src2, REL:$src2_rel, SEL:$src2_sel,
        LAST:$last, R600_Pred:$pred_sel, BANK_SWIZZLE:$bank_swizzle),
-  "  "#name# "$last $src0$src0_rel, $src1$src1_rel, $src2$src2_rel, $pred_sel",
+  "  "#name# "$last "#dst#"$src0$src0_rel, $src1$src1_rel, $src2$src2_rel, $pred_sel",
   pattern> {
+
+  field string BaseOp;
+
+  let LDS_1A1D = 0;
   let LDS_1A2D = 1;
+}
+
+class R600_LDS_1A2D_NORET <bits<6> lds_op, string name, list<dag> pattern> :
+    R600_LDS_1A2D <lds_op, (outs), name, pattern> {
+  let BaseOp = name;
+}
+
+class R600_LDS_1A2D_RET <bits<6> lds_op, string name, list<dag> pattern> :
+    R600_LDS_1A2D <lds_op, (outs R600_Reg32:$dst), name, pattern> {
+
+  let BaseOp = name;
+  let usesCustomInserter = 1;
+  let DisableEncoding = "$dst";
 }
 
 def LDS_ADD : R600_LDS_1A1D_NORET <0x0, "LDS_ADD", [] >;
 def LDS_SUB : R600_LDS_1A1D_NORET <0x1, "LDS_SUB", [] >;
+def LDS_AND : R600_LDS_1A1D_NORET <0x9, "LDS_AND", [] >;
+def LDS_OR : R600_LDS_1A1D_NORET <0xa, "LDS_OR", [] >;
+def LDS_XOR : R600_LDS_1A1D_NORET <0xb, "LDS_XOR", [] >;
+def LDS_WRXCHG: R600_LDS_1A1D_NORET <0xd, "LDS_WRXCHG", [] >;
+def LDS_CMPST: R600_LDS_1A2D_NORET <0x10, "LDS_CMPST", [] >;
+def LDS_MIN_INT : R600_LDS_1A1D_NORET <0x5, "LDS_MIN_INT", [] >;
+def LDS_MAX_INT : R600_LDS_1A1D_NORET <0x6, "LDS_MAX_INT", [] >;
+def LDS_MIN_UINT : R600_LDS_1A1D_NORET <0x7, "LDS_MIN_UINT", [] >;
+def LDS_MAX_UINT : R600_LDS_1A1D_NORET <0x8, "LDS_MAX_UINT", [] >;
 def LDS_WRITE : R600_LDS_1A1D_NORET <0xD, "LDS_WRITE",
   [(local_store (i32 R600_Reg32:$src1), R600_Reg32:$src0)]
 >;
@@ -473,6 +529,33 @@ def LDS_ADD_RET : R600_LDS_1A1D_RET <0x20, "LDS_ADD",
 >;
 def LDS_SUB_RET : R600_LDS_1A1D_RET <0x21, "LDS_SUB",
   [(set i32:$dst, (atomic_load_sub_local i32:$src0, i32:$src1))]
+>;
+def LDS_AND_RET : R600_LDS_1A1D_RET <0x29, "LDS_AND",
+  [(set i32:$dst, (atomic_load_and_local i32:$src0, i32:$src1))]
+>;
+def LDS_OR_RET : R600_LDS_1A1D_RET <0x2a, "LDS_OR",
+  [(set i32:$dst, (atomic_load_or_local i32:$src0, i32:$src1))]
+>;
+def LDS_XOR_RET : R600_LDS_1A1D_RET <0x2b, "LDS_XOR",
+  [(set i32:$dst, (atomic_load_xor_local i32:$src0, i32:$src1))]
+>;
+def LDS_MIN_INT_RET : R600_LDS_1A1D_RET <0x25, "LDS_MIN_INT",
+  [(set i32:$dst, (atomic_load_min_local i32:$src0, i32:$src1))]
+>;
+def LDS_MAX_INT_RET : R600_LDS_1A1D_RET <0x26, "LDS_MAX_INT",
+  [(set i32:$dst, (atomic_load_max_local i32:$src0, i32:$src1))]
+>;
+def LDS_MIN_UINT_RET : R600_LDS_1A1D_RET <0x27, "LDS_MIN_UINT",
+  [(set i32:$dst, (atomic_load_umin_local i32:$src0, i32:$src1))]
+>;
+def LDS_MAX_UINT_RET : R600_LDS_1A1D_RET <0x28, "LDS_MAX_UINT",
+  [(set i32:$dst, (atomic_load_umax_local i32:$src0, i32:$src1))]
+>;
+def LDS_WRXCHG_RET : R600_LDS_1A1D_RET <0x2d, "LDS_WRXCHG",
+  [(set i32:$dst, (atomic_swap_local i32:$src0, i32:$src1))]
+>;
+def LDS_CMPST_RET : R600_LDS_1A2D_RET <0x30, "LDS_CMPST",
+  [(set i32:$dst, (atomic_cmp_swap_32_local i32:$src0, i32:$src1, i32:$src2))]
 >;
 def LDS_READ_RET : R600_LDS_1A <0x32, "LDS_READ_RET",
   [(set (i32 R600_Reg32:$dst), (local_load R600_Reg32:$src0))]
@@ -507,7 +590,7 @@ def : Pat<(fp_to_uint f32:$src0), (FLT_TO_UINT_eg (TRUNC $src0))>;
 // SHA-256 Patterns
 def : SHA256MaPattern <BFI_INT_eg, XOR_INT>;
 
-def : FROUNDPat <CNDGE_eg>;
+def : FROUNDPat <CNDGE_eg, CNDGT_eg>;
 
 def EG_ExportSwz : ExportSwzInst {
   let Word1{19-16} = 0; // BURST_COUNT

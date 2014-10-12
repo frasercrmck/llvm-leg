@@ -33,7 +33,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 // LEGFrameLowering:
 //===----------------------------------------------------------------------===//
-LEGFrameLowering::LEGFrameLowering(const LEGSubtarget &ST)
+LEGFrameLowering::LEGFrameLowering()
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, 4, 0) {
   // Do nothing
 }
@@ -58,7 +58,7 @@ uint64_t LEGFrameLowering::computeStackSize(MachineFunction &MF) const {
 static unsigned materializeOffset(MachineFunction &MF, MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MBBI,
                                   unsigned Offset) {
-  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   const uint64_t MaxSubImm = 0xfff;
   if (Offset <= MaxSubImm) {
@@ -85,7 +85,7 @@ static unsigned materializeOffset(MachineFunction &MF, MachineBasicBlock &MBB,
 
 void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
   // Compute the stack size, to determine if we need a prologue at all.
-  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   MachineBasicBlock &MBB = MF.front();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
@@ -112,7 +112,7 @@ void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
 void LEGFrameLowering::emitEpilogue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
   // Compute the stack size, to determine if we need an epilogue at all.
-  const TargetInstrInfo &TII = *MF.getTarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   DebugLoc dl = MBBI->getDebugLoc();
   uint64_t StackSize = computeStackSize(MF);

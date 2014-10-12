@@ -1278,8 +1278,10 @@ let isCompare = 1 in {
     def TEST64mi32 : BinOpMI_F<"test", Xi64, X86testpat, MRM0m, 0xF6>;
 
     // When testing the result of EXTRACT_SUBREG sub_8bit_hi, make sure the
-    // register class is constrained to GR8_NOREX.
-    let isPseudo = 1 in
+    // register class is constrained to GR8_NOREX. This pseudo is explicitly
+    // marked side-effect free, since it doesn't have an isel pattern like
+    // other test instructions. 
+    let isPseudo = 1, hasSideEffects = 0 in
     def TEST8ri_NOREX : I<0, Pseudo, (outs), (ins GR8_NOREX:$src, i8imm:$mask),
                           "", [], IIC_BIN_NONMEM>, Sched<[WriteALU]>;
   } // Defs = [EFLAGS]
@@ -1353,49 +1355,57 @@ let Predicates = [HasBMI2] in {
 //===----------------------------------------------------------------------===//
 // ADCX Instruction
 //
-let hasSideEffects = 0, Predicates = [HasADX], Defs = [EFLAGS] in {
+let hasSideEffects = 0, Defs = [EFLAGS], Uses = [EFLAGS],
+    Constraints = "$src0 = $dst", AddedComplexity = 10 in {
   let SchedRW = [WriteALU] in {
-  def ADCX32rr : I<0xF6, MRMSrcReg, (outs GR32:$dst), (ins GR32:$src),
-             "adcx{l}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_NONMEM>, T8PD;
-
-  def ADCX64rr : RI<0xF6, MRMSrcReg, (outs GR64:$dst), (ins GR64:$src),
-             "adcx{q}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_NONMEM>, T8PD, Requires<[In64BitMode]>;
+  def ADCX32rr : I<0xF6, MRMSrcReg, (outs GR32:$dst),
+             (ins GR32:$src0, GR32:$src), "adcx{l}\t{$src, $dst|$dst, $src}",
+             [(set GR32:$dst, EFLAGS,
+                 (X86adc_flag GR32:$src0, GR32:$src, EFLAGS))],
+             IIC_BIN_CARRY_NONMEM>, T8PD, Requires<[HasADX]>;
+  def ADCX64rr : RI<0xF6, MRMSrcReg, (outs GR64:$dst),
+             (ins GR64:$src0, GR64:$src), "adcx{q}\t{$src, $dst|$dst, $src}",
+             [(set GR64:$dst, EFLAGS,
+                 (X86adc_flag GR64:$src0, GR64:$src, EFLAGS))],
+             IIC_BIN_CARRY_NONMEM>, T8PD, Requires<[HasADX, In64BitMode]>;
   } // SchedRW
 
   let mayLoad = 1, SchedRW = [WriteALULd] in {
-  def ADCX32rm : I<0xF6, MRMSrcMem, (outs GR32:$dst), (ins i32mem:$src),
-             "adcx{l}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_MEM>, T8PD;
+  def ADCX32rm : I<0xF6, MRMSrcMem, (outs GR32:$dst),
+             (ins GR32:$src0, i32mem:$src), "adcx{l}\t{$src, $dst|$dst, $src}",
+             [(set GR32:$dst, EFLAGS,
+                 (X86adc_flag GR32:$src0, (loadi32 addr:$src), EFLAGS))],
+             IIC_BIN_CARRY_MEM>, T8PD, Requires<[HasADX]>;
 
-  def ADCX64rm : RI<0xF6, MRMSrcMem, (outs GR64:$dst), (ins i64mem:$src),
-             "adcx{q}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_MEM>, T8PD, Requires<[In64BitMode]>;
+  def ADCX64rm : RI<0xF6, MRMSrcMem, (outs GR64:$dst),
+             (ins GR64:$src0, i64mem:$src), "adcx{q}\t{$src, $dst|$dst, $src}",
+             [(set GR64:$dst, EFLAGS,
+                 (X86adc_flag GR64:$src0, (loadi64 addr:$src), EFLAGS))],
+             IIC_BIN_CARRY_MEM>, T8PD, Requires<[HasADX, In64BitMode]>;
   }
 }
 
 //===----------------------------------------------------------------------===//
 // ADOX Instruction
 //
-let hasSideEffects = 0, Predicates = [HasADX], Defs = [EFLAGS] in {
+let hasSideEffects = 0, Defs = [EFLAGS], Uses = [EFLAGS] in {
   let SchedRW = [WriteALU] in {
   def ADOX32rr : I<0xF6, MRMSrcReg, (outs GR32:$dst), (ins GR32:$src),
              "adox{l}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_NONMEM>, T8XS;
+             [], IIC_BIN_NONMEM>, T8XS, Requires<[HasADX]>;
 
   def ADOX64rr : RI<0xF6, MRMSrcReg, (outs GR64:$dst), (ins GR64:$src),
              "adox{q}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_NONMEM>, T8XS, Requires<[In64BitMode]>;
+             [], IIC_BIN_NONMEM>, T8XS, Requires<[HasADX, In64BitMode]>;
   } // SchedRW
 
   let mayLoad = 1, SchedRW = [WriteALULd] in {
   def ADOX32rm : I<0xF6, MRMSrcMem, (outs GR32:$dst), (ins i32mem:$src),
              "adox{l}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_MEM>, T8XS;
+             [], IIC_BIN_MEM>, T8XS, Requires<[HasADX]>;
 
   def ADOX64rm : RI<0xF6, MRMSrcMem, (outs GR64:$dst), (ins i64mem:$src),
              "adox{q}\t{$src, $dst|$dst, $src}",
-             [], IIC_BIN_MEM>, T8XS, Requires<[In64BitMode]>;
+             [], IIC_BIN_MEM>, T8XS, Requires<[HasADX, In64BitMode]>;
   }
 }

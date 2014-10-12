@@ -7,7 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "t2-reduce-size"
 #include "ARM.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMSubtarget.h"
@@ -24,6 +23,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Target/TargetMachine.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "t2-reduce-size"
 
 STATISTIC(NumNarrows,  "Number of 32-bit instrs reduced to 16-bit ones");
 STATISTIC(Num2Addrs,   "Number of 32-bit instrs reduced to 2addr 16-bit ones");
@@ -334,7 +335,7 @@ static bool VerifyLowRegs(MachineInstr *MI) {
   bool isPCOk = (Opc == ARM::t2LDMIA_RET || Opc == ARM::t2LDMIA     ||
                  Opc == ARM::t2LDMDB     || Opc == ARM::t2LDMIA_UPD ||
                  Opc == ARM::t2LDMDB_UPD);
-  bool isLROk = (Opc == ARM::t2STMIA_UPD || Opc == ARM::t2STMDB_UPD);
+  bool isLROk = (Opc == ARM::t2STMDB_UPD);
   bool isSPOk = isPCOk || isLROk;
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
@@ -915,15 +916,14 @@ bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
 
   // Yes, CPSR could be livein.
   bool LiveCPSR = MBB.isLiveIn(ARM::CPSR);
-  MachineInstr *BundleMI = 0;
+  MachineInstr *BundleMI = nullptr;
 
-  CPSRDef = 0;
+  CPSRDef = nullptr;
   HighLatencyCPSR = false;
 
   // Check predecessors for the latest CPSRDef.
-  for (MachineBasicBlock::pred_iterator
-       I = MBB.pred_begin(), E = MBB.pred_end(); I != E; ++I) {
-    const MBBInfo &PInfo = BlockInfo[(*I)->getNumber()];
+  for (auto *Pred : MBB.predecessors()) {
+    const MBBInfo &PInfo = BlockInfo[Pred->getNumber()];
     if (!PInfo.Visited) {
       // Since blocks are visited in RPO, this must be a back-edge.
       continue;
@@ -984,7 +984,7 @@ bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
     LiveCPSR = UpdateCPSRDef(*MI, LiveCPSR, DefCPSR);
     if (MI->isCall()) {
       // Calls don't really set CPSR.
-      CPSRDef = 0;
+      CPSRDef = nullptr;
       HighLatencyCPSR = false;
       IsSelfLoop = false;
     } else if (DefCPSR) {
@@ -1003,14 +1003,16 @@ bool Thumb2SizeReduce::ReduceMBB(MachineBasicBlock &MBB) {
 
 bool Thumb2SizeReduce::runOnMachineFunction(MachineFunction &MF) {
   const TargetMachine &TM = MF.getTarget();
-  TII = static_cast<const Thumb2InstrInfo*>(TM.getInstrInfo());
+  TII = static_cast<const Thumb2InstrInfo *>(
+      TM.getSubtargetImpl()->getInstrInfo());
   STI = &TM.getSubtarget<ARMSubtarget>();
 
   // Optimizing / minimizing size?
   AttributeSet FnAttrs = MF.getFunction()->getAttributes();
   OptimizeSize = FnAttrs.hasAttribute(AttributeSet::FunctionIndex,
                                       Attribute::OptimizeForSize);
-  MinimizeSize = STI->isMinSize();
+  MinimizeSize =
+      FnAttrs.hasAttribute(AttributeSet::FunctionIndex, Attribute::MinSize);
 
   BlockInfo.clear();
   BlockInfo.resize(MF.getNumBlockIDs());

@@ -15,6 +15,7 @@
 #include "XCore.h"
 #include "XCoreInstrInfo.h"
 #include "XCoreMachineFunctionInfo.h"
+#include "XCoreSubtarget.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -33,10 +34,12 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+using namespace llvm;
+
+#define DEBUG_TYPE "xcore-reg-info"
+
 #define GET_REGINFO_TARGET_DESC
 #include "XCoreGenRegisterInfo.inc"
-
-using namespace llvm;
 
 XCoreRegisterInfo::XCoreRegisterInfo()
   : XCoreGenRegisterInfo(XCore::LR) {
@@ -96,7 +99,7 @@ static void InsertFPConstInst(MachineBasicBlock::iterator II,
   MachineBasicBlock &MBB = *MI.getParent();
   DebugLoc dl = MI.getDebugLoc();
   unsigned ScratchOffset = RS->scavengeRegister(&XCore::GRRegsRegClass, II, 0);
-  RS->setUsed(ScratchOffset);
+  RS->setRegUsed(ScratchOffset);
   TII.loadImmediate(MBB, II, ScratchOffset, Offset);
 
   switch (MI.getOpcode()) {
@@ -168,12 +171,12 @@ static void InsertSPConstInst(MachineBasicBlock::iterator II,
   unsigned ScratchBase;
   if (OpCode==XCore::STWFI) {
     ScratchBase = RS->scavengeRegister(&XCore::GRRegsRegClass, II, 0);
-    RS->setUsed(ScratchBase);
+    RS->setRegUsed(ScratchBase);
   } else
     ScratchBase = Reg;
   BuildMI(MBB, II, dl, TII.get(XCore::LDAWSP_ru6), ScratchBase).addImm(0);
   unsigned ScratchOffset = RS->scavengeRegister(&XCore::GRRegsRegClass, II, 0);
-  RS->setUsed(ScratchOffset);
+  RS->setRegUsed(ScratchOffset);
   TII.loadImmediate(MBB, II, ScratchOffset, Offset);
 
   switch (OpCode) {
@@ -205,21 +208,21 @@ bool XCoreRegisterInfo::needsFrameMoves(const MachineFunction &MF) {
     MF.getFunction()->needsUnwindTableEntry();
 }
 
-const uint16_t* XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF)
+const MCPhysReg* XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF)
                                                                          const {
   // The callee saved registers LR & FP are explicitly handled during
   // emitPrologue & emitEpilogue and related functions.
-  static const uint16_t CalleeSavedRegs[] = {
+  static const MCPhysReg CalleeSavedRegs[] = {
     XCore::R4, XCore::R5, XCore::R6, XCore::R7,
     XCore::R8, XCore::R9, XCore::R10,
     0
   };
-  static const uint16_t CalleeSavedRegsFP[] = {
+  static const MCPhysReg CalleeSavedRegsFP[] = {
     XCore::R4, XCore::R5, XCore::R6, XCore::R7,
     XCore::R8, XCore::R9,
     0
   };
-  const TargetFrameLowering *TFI = MF->getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
   if (TFI->hasFP(*MF))
     return CalleeSavedRegsFP;
   return CalleeSavedRegs;
@@ -227,7 +230,7 @@ const uint16_t* XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF)
 
 BitVector XCoreRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   Reserved.set(XCore::CP);
   Reserved.set(XCore::DP);
@@ -265,9 +268,9 @@ XCoreRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   MachineFunction &MF = *MI.getParent()->getParent();
   const XCoreInstrInfo &TII =
-          *static_cast<const XCoreInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
   int StackSize = MF.getFrameInfo()->getStackSize();
 
@@ -321,7 +324,7 @@ XCoreRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
 
 unsigned XCoreRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   return TFI->hasFP(MF) ? XCore::R10 : XCore::SP;
 }

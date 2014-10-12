@@ -1,4 +1,4 @@
-//=======-------- BlockFrequencyInfo.cpp - Block Frequency Analysis -------===//
+//===- BlockFrequencyInfo.cpp - Block Frequency Analysis ------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/BlockFrequencyInfo.h"
-#include "llvm/Analysis/BlockFrequencyImpl.h"
+#include "llvm/Analysis/BlockFrequencyInfoImpl.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/Passes.h"
@@ -23,6 +23,8 @@
 #include "llvm/Support/GraphWriter.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "block-freq"
 
 #ifndef NDEBUG
 enum GVDAGType {
@@ -106,6 +108,7 @@ struct DOTGraphTraits<BlockFrequencyInfo*> : public DefaultDOTGraphTraits {
 INITIALIZE_PASS_BEGIN(BlockFrequencyInfo, "block-freq",
                       "Block Frequency Analysis", true, true)
 INITIALIZE_PASS_DEPENDENCY(BranchProbabilityInfo)
+INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_END(BlockFrequencyInfo, "block-freq",
                     "Block Frequency Analysis", true, true)
 
@@ -120,14 +123,16 @@ BlockFrequencyInfo::~BlockFrequencyInfo() {}
 
 void BlockFrequencyInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<BranchProbabilityInfo>();
+  AU.addRequired<LoopInfo>();
   AU.setPreservesAll();
 }
 
 bool BlockFrequencyInfo::runOnFunction(Function &F) {
   BranchProbabilityInfo &BPI = getAnalysis<BranchProbabilityInfo>();
+  LoopInfo &LI = getAnalysis<LoopInfo>();
   if (!BFI)
     BFI.reset(new ImplType);
-  BFI->doFunction(&F, &BPI);
+  BFI->doFunction(&F, &BPI, &LI);
 #ifndef NDEBUG
   if (ViewBlockFreqPropagationDAG != GVDT_None)
     view();
@@ -158,7 +163,7 @@ void BlockFrequencyInfo::view() const {
 }
 
 const Function *BlockFrequencyInfo::getFunction() const {
-  return BFI ? BFI->Fn : nullptr;
+  return BFI ? BFI->getFunction() : nullptr;
 }
 
 raw_ostream &BlockFrequencyInfo::

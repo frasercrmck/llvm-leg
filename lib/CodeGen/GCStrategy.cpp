@@ -31,6 +31,7 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -101,13 +102,6 @@ GCStrategy::GCStrategy() :
   UsesMetadata(false)
 {}
 
-GCStrategy::~GCStrategy() {
-  for (iterator I = begin(), E = end(); I != E; ++I)
-    delete *I;
-
-  Functions.clear();
-}
-
 bool GCStrategy::initializeCustomLowering(Module &M) { return false; }
 
 bool GCStrategy::performCustomLowering(Function &F) {
@@ -118,14 +112,13 @@ bool GCStrategy::performCustomLowering(Function &F) {
 
 bool GCStrategy::findCustomSafePoints(GCFunctionInfo& FI, MachineFunction &F) {
   dbgs() << "gc " << getName() << " must override findCustomSafePoints.\n";
-  llvm_unreachable(0);
+  llvm_unreachable(nullptr);
 }
 
 
 GCFunctionInfo *GCStrategy::insertFunctionInfo(const Function &F) {
-  GCFunctionInfo *FI = new GCFunctionInfo(F, *this);
-  Functions.push_back(FI);
-  return FI;
+  Functions.push_back(make_unique<GCFunctionInfo>(F, *this));
+  return Functions.back().get();
 }
 
 // -----------------------------------------------------------------------------
@@ -385,7 +378,7 @@ void GCMachineCodeAnalysis::FindSafePoints(MachineFunction &MF) {
 }
 
 void GCMachineCodeAnalysis::FindStackOffsets(MachineFunction &MF) {
-  const TargetFrameLowering *TFI = TM->getFrameLowering();
+  const TargetFrameLowering *TFI = TM->getSubtargetImpl()->getFrameLowering();
   assert(TFI && "TargetRegisterInfo not available!");
 
   for (GCFunctionInfo::roots_iterator RI = FI->roots_begin();
@@ -411,7 +404,7 @@ bool GCMachineCodeAnalysis::runOnMachineFunction(MachineFunction &MF) {
 
   TM = &MF.getTarget();
   MMI = &getAnalysis<MachineModuleInfo>();
-  TII = TM->getInstrInfo();
+  TII = TM->getSubtargetImpl()->getInstrInfo();
 
   // Find the size of the stack frame.
   FI->setFrameSize(MF.getFrameInfo()->getStackSize());

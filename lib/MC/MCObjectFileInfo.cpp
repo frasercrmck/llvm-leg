@@ -10,6 +10,7 @@
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionCOFF.h"
@@ -17,17 +18,37 @@
 #include "llvm/MC/MCSectionMachO.h"
 using namespace llvm;
 
+static bool useCompactUnwind(const Triple &T) {
+  // Only on darwin.
+  if (!T.isOSDarwin())
+    return false;
+
+  // aarch64 always has it.
+  if (T.getArch() == Triple::aarch64)
+    return true;
+
+  // Use it on newer version of OS X.
+  if (T.isMacOSX() && !T.isMacOSXVersionLT(10, 6))
+    return true;
+
+  // And the iOS simulator.
+  if (T.isiOS() &&
+      (T.getArch() == Triple::x86_64 || T.getArch() == Triple::x86))
+    return true;
+
+  return false;
+}
+
 void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
   // MachO
-  IsFunctionEHFrameSymbolPrivate = false;
   SupportsWeakOmittedEHFrame = false;
 
-  if (T.isOSDarwin() && T.getArch() == Triple::arm64)
+  if (T.isOSDarwin() && T.getArch() == Triple::aarch64)
     SupportsCompactUnwindWithoutEHFrame = true;
 
   PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel
     | dwarf::DW_EH_PE_sdata4;
-  LSDAEncoding = FDEEncoding = FDECFIEncoding = dwarf::DW_EH_PE_pcrel;
+  LSDAEncoding = FDECFIEncoding = dwarf::DW_EH_PE_pcrel;
   TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
     dwarf::DW_EH_PE_sdata4;
 
@@ -44,7 +65,7 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
                            SectionKind::getDataRel());
 
   // BSSSection might not be expected initialized on msvc.
-  BSSSection = 0;
+  BSSSection = nullptr;
 
   TLSDataSection // .tdata
     = Ctx->getMachOSection("__DATA", "__thread_data",
@@ -147,18 +168,16 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
   LSDASection = Ctx->getMachOSection("__TEXT", "__gcc_except_tab", 0,
                                      SectionKind::getReadOnlyWithRel());
 
-  COFFDebugSymbolsSection = 0;
+  COFFDebugSymbolsSection = nullptr;
 
-  if ((T.isMacOSX() && !T.isMacOSXVersionLT(10, 6)) ||
-      (T.isOSDarwin() && T.getArch() == Triple::arm64)) {
+  if (useCompactUnwind(T)) {
     CompactUnwindSection =
-      Ctx->getMachOSection("__LD", "__compact_unwind",
-                           MachO::S_ATTR_DEBUG,
-                           SectionKind::getReadOnly());
+        Ctx->getMachOSection("__LD", "__compact_unwind", MachO::S_ATTR_DEBUG,
+                             SectionKind::getReadOnly());
 
     if (T.getArch() == Triple::x86_64 || T.getArch() == Triple::x86)
       CompactUnwindDwarfEHFrameOnly = 0x04000000;
-    else if (T.getArch() == Triple::arm64)
+    else if (T.getArch() == Triple::aarch64)
       CompactUnwindDwarfEHFrameOnly = 0x03000000;
   }
 
@@ -245,29 +264,41 @@ void MCObjectFileInfo::InitMachOMCObjectFileInfo(Triple T) {
 }
 
 void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
-  if (T.getArch() == Triple::mips ||
-      T.getArch() == Triple::mipsel)
+  switch (T.getArch()) {
+  case Triple::mips:
+  case Triple::mipsel:
     FDECFIEncoding = dwarf::DW_EH_PE_sdata4;
-  else if (T.getArch() == Triple::mips64 ||
-           T.getArch() == Triple::mips64el)
+    break;
+  case Triple::mips64:
+  case Triple::mips64el:
     FDECFIEncoding = dwarf::DW_EH_PE_sdata8;
-  else
+    break;
+  default:
     FDECFIEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
+    break;
+  }
 
-  if (T.getArch() == Triple::x86) {
+  switch (T.getArch()) {
+  case Triple::arm:
+  case Triple::armeb:
+  case Triple::thumb:
+  case Triple::thumbeb:
+    if (Ctx->getAsmInfo()->getExceptionHandlingType() == ExceptionHandling::ARM)
+      break;
+    // Fallthrough if not using EHABI
+  case Triple::ppc:
+  case Triple::x86:
     PersonalityEncoding = (RelocM == Reloc::PIC_)
      ? dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4
      : dwarf::DW_EH_PE_absptr;
     LSDAEncoding = (RelocM == Reloc::PIC_)
       ? dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4
       : dwarf::DW_EH_PE_absptr;
-    FDEEncoding = (RelocM == Reloc::PIC_)
-      ? dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4
-      : dwarf::DW_EH_PE_absptr;
     TTypeEncoding = (RelocM == Reloc::PIC_)
      ? dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4
      : dwarf::DW_EH_PE_absptr;
-  } else if (T.getArch() == Triple::x86_64) {
+    break;
+  case Triple::x86_64:
     if (RelocM == Reloc::PIC_) {
       PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         ((CMModel == CodeModel::Small || CMModel == CodeModel::Medium)
@@ -275,7 +306,6 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
       LSDAEncoding = dwarf::DW_EH_PE_pcrel |
         (CMModel == CodeModel::Small
          ? dwarf::DW_EH_PE_sdata4 : dwarf::DW_EH_PE_sdata8);
-      FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         ((CMModel == CodeModel::Small || CMModel == CodeModel::Medium)
          ? dwarf::DW_EH_PE_sdata4 : dwarf::DW_EH_PE_sdata8);
@@ -285,12 +315,12 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
         ? dwarf::DW_EH_PE_udata4 : dwarf::DW_EH_PE_absptr;
       LSDAEncoding = (CMModel == CodeModel::Small)
         ? dwarf::DW_EH_PE_udata4 : dwarf::DW_EH_PE_absptr;
-      FDEEncoding = dwarf::DW_EH_PE_udata4;
       TTypeEncoding = (CMModel == CodeModel::Small)
         ? dwarf::DW_EH_PE_udata4 : dwarf::DW_EH_PE_absptr;
     }
-  }  else if (T.getArch() == Triple::aarch64 ||
-              T.getArch() == Triple::aarch64_be ) {
+    break;
+  case Triple::aarch64:
+  case Triple::aarch64_be:
     // The small model guarantees static code/data size < 4GB, but not where it
     // will be in memory. Most of these could end up >2GB away so even a signed
     // pc-relative 32-bit address is insufficient, theoretically.
@@ -298,65 +328,71 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
       PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata8;
       LSDAEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata8;
-      FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata8;
     } else {
       PersonalityEncoding = dwarf::DW_EH_PE_absptr;
       LSDAEncoding = dwarf::DW_EH_PE_absptr;
-      FDEEncoding = dwarf::DW_EH_PE_udata4;
       TTypeEncoding = dwarf::DW_EH_PE_absptr;
     }
-  } else if (T.getArch() == Triple::ppc64 || T.getArch() == Triple::ppc64le) {
+    break;
+  case Triple::mips:
+  case Triple::mipsel:
+    // MIPS uses indirect pointer to refer personality functions, so that the
+    // eh_frame section can be read-only.  DW.ref.personality will be generated
+    // for relocation.
+    PersonalityEncoding = dwarf::DW_EH_PE_indirect;
+    break;
+  case Triple::ppc64:
+  case Triple::ppc64le:
     PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
       dwarf::DW_EH_PE_udata8;
     LSDAEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_udata8;
-    FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_udata8;
     TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
       dwarf::DW_EH_PE_udata8;
-  } else if (T.getArch() == Triple::sparc) {
+    break;
+  case Triple::sparc:
     if (RelocM == Reloc::PIC_) {
       LSDAEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
-      FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
     } else {
       LSDAEncoding = dwarf::DW_EH_PE_absptr;
       PersonalityEncoding = dwarf::DW_EH_PE_absptr;
-      FDEEncoding = dwarf::DW_EH_PE_udata4;
       TTypeEncoding = dwarf::DW_EH_PE_absptr;
     }
-  } else if (T.getArch() == Triple::sparcv9) {
+    break;
+  case Triple::sparcv9:
     LSDAEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
     if (RelocM == Reloc::PIC_) {
       PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
-      FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
     } else {
       PersonalityEncoding = dwarf::DW_EH_PE_absptr;
-      FDEEncoding = dwarf::DW_EH_PE_udata4;
       TTypeEncoding = dwarf::DW_EH_PE_absptr;
     }
-  } else if (T.getArch() == Triple::systemz) {
+    break;
+  case Triple::systemz:
     // All currently-defined code models guarantee that 4-byte PC-relative
     // values will be in range.
     if (RelocM == Reloc::PIC_) {
       PersonalityEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
       LSDAEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
-      FDEEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
       TTypeEncoding = dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_pcrel |
         dwarf::DW_EH_PE_sdata4;
     } else {
       PersonalityEncoding = dwarf::DW_EH_PE_absptr;
       LSDAEncoding = dwarf::DW_EH_PE_absptr;
-      FDEEncoding = dwarf::DW_EH_PE_absptr;
       TTypeEncoding = dwarf::DW_EH_PE_absptr;
     }
+    break;
+  default:
+    break;
   }
 
   // Solaris requires different flags for .eh_frame to seemingly every other
@@ -461,7 +497,7 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
                        ELF::SHF_ALLOC,
                        SectionKind::getReadOnly());
 
-  COFFDebugSymbolsSection = 0;
+  COFFDebugSymbolsSection = nullptr;
 
   // Debug Info Sections.
   DwarfAbbrevSection =
@@ -525,6 +561,9 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
   DwarfInfoDWOSection =
     Ctx->getELFSection(".debug_info.dwo", ELF::SHT_PROGBITS, 0,
                        SectionKind::getMetadata());
+  DwarfTypesDWOSection =
+    Ctx->getELFSection(".debug_types.dwo", ELF::SHT_PROGBITS, 0,
+                       SectionKind::getMetadata());
   DwarfAbbrevDWOSection =
     Ctx->getELFSection(".debug_abbrev.dwo", ELF::SHT_PROGBITS, 0,
                        SectionKind::getMetadata());
@@ -544,10 +583,20 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
   DwarfAddrSection =
     Ctx->getELFSection(".debug_addr", ELF::SHT_PROGBITS, 0,
                        SectionKind::getMetadata());
+
+  StackMapSection =
+    Ctx->getELFSection(".llvm_stackmaps", ELF::SHT_PROGBITS,
+                       ELF::SHF_ALLOC,
+                       SectionKind::getMetadata());
+
 }
 
 
 void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
+  bool IsWoA = T.getArch() == Triple::arm || T.getArch() == Triple::thumb;
+
+  CommDirectiveSupportsAlignment = true;
+
   // COFF
   BSSSection =
     Ctx->getCOFFSection(".bss",
@@ -557,6 +606,8 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         SectionKind::getBSS());
   TextSection =
     Ctx->getCOFFSection(".text",
+                        (IsWoA ? COFF::IMAGE_SCN_MEM_16BIT
+                               : (COFF::SectionCharacteristics)0) |
                         COFF::IMAGE_SCN_CNT_CODE |
                         COFF::IMAGE_SCN_MEM_EXECUTE |
                         COFF::IMAGE_SCN_MEM_READ,
@@ -572,9 +623,15 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                         COFF::IMAGE_SCN_MEM_READ,
                         SectionKind::getReadOnly());
-  if (T.isKnownWindowsMSVCEnvironment()) {
+
+  if (T.isKnownWindowsMSVCEnvironment() || T.isWindowsItaniumEnvironment()) {
     StaticCtorSection =
       Ctx->getCOFFSection(".CRT$XCU",
+                          COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+                          COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getReadOnly());
+    StaticDtorSection =
+      Ctx->getCOFFSection(".CRT$XTX",
                           COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                           COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getReadOnly());
@@ -585,16 +642,6 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                           COFF::IMAGE_SCN_MEM_READ |
                           COFF::IMAGE_SCN_MEM_WRITE,
                           SectionKind::getDataRel());
-  }
-
-
-  if (T.isKnownWindowsMSVCEnvironment()) {
-    StaticDtorSection =
-      Ctx->getCOFFSection(".CRT$XTX",
-                          COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
-                          COFF::IMAGE_SCN_MEM_READ,
-                          SectionKind::getReadOnly());
-  } else {
     StaticDtorSection =
       Ctx->getCOFFSection(".dtors",
                           COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
@@ -607,11 +654,16 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
   // though it contains relocatable pointers.  In PIC mode, this is probably a
   // big runtime hit for C++ apps.  Either the contents of the LSDA need to be
   // adjusted or this should be a data section.
-  LSDASection =
-    Ctx->getCOFFSection(".gcc_except_table",
-                        COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
-                        COFF::IMAGE_SCN_MEM_READ,
-                        SectionKind::getReadOnly());
+  assert(T.isOSWindows() && "Windows is the only supported COFF target");
+  if (T.getArch() == Triple::x86_64) {
+    // On Windows 64 with SEH, the LSDA is emitted into the .xdata section
+    LSDASection = 0;
+  } else {
+    LSDASection = Ctx->getCOFFSection(".gcc_except_table",
+                                      COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+                                          COFF::IMAGE_SCN_MEM_READ,
+                                      SectionKind::getReadOnly());
+  }
 
   // Debug info.
   COFFDebugSymbolsSection =
@@ -687,36 +739,50 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         COFF::IMAGE_SCN_MEM_READ,
                         SectionKind::getMetadata());
   DwarfInfoDWOSection =
-      Ctx->getCOFFSection(".debug_info.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                                COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_info.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
+                          SectionKind::getMetadata());
+  DwarfTypesDWOSection =
+      Ctx->getCOFFSection(".debug_types.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                                                  COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
   DwarfAbbrevDWOSection =
-      Ctx->getCOFFSection(".debug_abbrev.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                                  COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_abbrev.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
   DwarfStrDWOSection =
-      Ctx->getCOFFSection(".debug_str.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                               COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_str.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
   DwarfLineDWOSection =
-      Ctx->getCOFFSection(".debug_line.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                                COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_line.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
   DwarfLocDWOSection =
-      Ctx->getCOFFSection(".debug_loc.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                               COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_loc.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
   DwarfStrOffDWOSection =
-      Ctx->getCOFFSection(".debug_str_offsets.dwo", COFF::IMAGE_SCN_MEM_DISCARDABLE |
-                                                  COFF::IMAGE_SCN_MEM_READ,
+      Ctx->getCOFFSection(".debug_str_offsets.dwo",
+                          COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                          COFF::IMAGE_SCN_MEM_READ,
                           SectionKind::getMetadata());
-  DwarfAddrSection = Ctx->getCOFFSection(
-      ".debug_addr", COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_MEM_READ,
-      SectionKind::getMetadata());
+
+  DwarfAddrSection =
+    Ctx->getCOFFSection(".debug_addr",
+                        COFF::IMAGE_SCN_MEM_DISCARDABLE |
+                        COFF::IMAGE_SCN_MEM_READ,
+                        SectionKind::getMetadata());
 
   DrectveSection =
     Ctx->getCOFFSection(".drectve",
-                        COFF::IMAGE_SCN_LNK_INFO,
+                        COFF::IMAGE_SCN_LNK_INFO |
+                        COFF::IMAGE_SCN_LNK_REMOVE,
                         SectionKind::getMetadata());
 
   PDataSection =
@@ -730,6 +796,7 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
                         COFF::IMAGE_SCN_MEM_READ,
                         SectionKind::getDataRel());
+
   TLSDataSection =
     Ctx->getCOFFSection(".tls$",
                         COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
@@ -738,7 +805,7 @@ void MCObjectFileInfo::InitCOFFMCObjectFileInfo(Triple T) {
                         SectionKind::getDataRel());
 }
 
-void MCObjectFileInfo::InitMCObjectFileInfo(StringRef TT, Reloc::Model relocm,
+void MCObjectFileInfo::InitMCObjectFileInfo(StringRef T, Reloc::Model relocm,
                                             CodeModel::Model cm,
                                             MCContext &ctx) {
   RelocM = relocm;
@@ -748,53 +815,47 @@ void MCObjectFileInfo::InitMCObjectFileInfo(StringRef TT, Reloc::Model relocm,
   // Common.
   CommDirectiveSupportsAlignment = true;
   SupportsWeakOmittedEHFrame = true;
-  IsFunctionEHFrameSymbolPrivate = true;
   SupportsCompactUnwindWithoutEHFrame = false;
 
-  PersonalityEncoding = LSDAEncoding = FDEEncoding = FDECFIEncoding =
-    TTypeEncoding = dwarf::DW_EH_PE_absptr;
+  PersonalityEncoding = LSDAEncoding = FDECFIEncoding = TTypeEncoding =
+      dwarf::DW_EH_PE_absptr;
 
   CompactUnwindDwarfEHFrameOnly = 0;
 
-  EHFrameSection = 0;             // Created on demand.
-  CompactUnwindSection = 0;       // Used only by selected targets.
-  DwarfAccelNamesSection = 0;     // Used only by selected targets.
-  DwarfAccelObjCSection = 0;      // Used only by selected targets.
-  DwarfAccelNamespaceSection = 0; // Used only by selected targets.
-  DwarfAccelTypesSection = 0;     // Used only by selected targets.
+  EHFrameSection = nullptr;             // Created on demand.
+  CompactUnwindSection = nullptr;       // Used only by selected targets.
+  DwarfAccelNamesSection = nullptr;     // Used only by selected targets.
+  DwarfAccelObjCSection = nullptr;      // Used only by selected targets.
+  DwarfAccelNamespaceSection = nullptr; // Used only by selected targets.
+  DwarfAccelTypesSection = nullptr;     // Used only by selected targets.
 
-  Triple T(TT);
-  Triple::ArchType Arch = T.getArch();
+  TT = Triple(T);
+
+  Triple::ArchType Arch = TT.getArch();
   // FIXME: Checking for Arch here to filter out bogus triples such as
   // cellspu-apple-darwin. Perhaps we should fix in Triple?
   if ((Arch == Triple::x86 || Arch == Triple::x86_64 ||
        Arch == Triple::arm || Arch == Triple::thumb ||
-       Arch == Triple::arm64 ||
+       Arch == Triple::aarch64 ||
        Arch == Triple::ppc || Arch == Triple::ppc64 ||
        Arch == Triple::UnknownArch) &&
-      (T.isOSDarwin() || T.isOSBinFormatMachO())) {
+      (TT.isOSDarwin() || TT.isOSBinFormatMachO())) {
     Env = IsMachO;
-    InitMachOMCObjectFileInfo(T);
-  } else if ((Arch == Triple::x86 || Arch == Triple::x86_64) &&
-             T.getObjectFormat() != Triple::ELF && T.isOSWindows()) {
+    InitMachOMCObjectFileInfo(TT);
+  } else if ((Arch == Triple::x86 || Arch == Triple::x86_64 ||
+              Arch == Triple::arm || Arch == Triple::thumb) &&
+             (TT.isOSWindows() && TT.getObjectFormat() == Triple::COFF)) {
     Env = IsCOFF;
-    InitCOFFMCObjectFileInfo(T);
+    InitCOFFMCObjectFileInfo(TT);
   } else {
     Env = IsELF;
-    InitELFMCObjectFileInfo(T);
+    InitELFMCObjectFileInfo(TT);
   }
 }
 
 const MCSection *MCObjectFileInfo::getDwarfTypesSection(uint64_t Hash) const {
   return Ctx->getELFSection(".debug_types", ELF::SHT_PROGBITS, ELF::SHF_GROUP,
                             SectionKind::getMetadata(), 0, utostr(Hash));
-}
-
-const MCSection *
-MCObjectFileInfo::getDwarfTypesDWOSection(uint64_t Hash) const {
-  return Ctx->getELFSection(".debug_types.dwo", ELF::SHT_PROGBITS,
-                            ELF::SHF_GROUP, SectionKind::getMetadata(), 0,
-                            utostr(Hash));
 }
 
 void MCObjectFileInfo::InitEHFrameSection() {

@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_EXECUTIONENGINE_RT_DYLD_MEMORY_MANAGER_H
-#define LLVM_EXECUTIONENGINE_RT_DYLD_MEMORY_MANAGER_H
+#ifndef LLVM_EXECUTIONENGINE_RTDYLDMEMORYMANAGER_H
+#define LLVM_EXECUTIONENGINE_RTDYLDMEMORYMANAGER_H
 
 #include "llvm-c/ExecutionEngine.h"
 #include "llvm/ADT/StringRef.h"
@@ -76,9 +76,15 @@ public:
 
   virtual void deregisterEHFrames(uint8_t *Addr, uint64_t LoadAddr, size_t Size);
 
+  /// This method returns the address of the specified function or variable in
+  /// the current process.
+  static uint64_t getSymbolAddressInProcess(const std::string &Name);
+
   /// This method returns the address of the specified function or variable.
   /// It is used to resolve symbols during module linking.
-  virtual uint64_t getSymbolAddress(const std::string &Name);
+  virtual uint64_t getSymbolAddress(const std::string &Name) {
+    return getSymbolAddressInProcess(Name);
+  }
 
   /// This method returns the address of the specified function. As such it is
   /// only useful for resolving library symbols, not code generated symbols.
@@ -114,7 +120,7 @@ public:
   /// operations needed to reliably use the memory are also performed.
   ///
   /// Returns true if an error occurred, false otherwise.
-  virtual bool finalizeMemory(std::string *ErrMsg = 0) = 0;
+  virtual bool finalizeMemory(std::string *ErrMsg = nullptr) = 0;
 };
 
 // Create wrappers for C Binding types (see CBindingWrapping.h).
@@ -123,4 +129,4 @@ DEFINE_SIMPLE_CONVERSION_FUNCTIONS(
 
 } // namespace llvm
 
-#endif // LLVM_EXECUTIONENGINE_RT_DYLD_MEMORY_MANAGER_H
+#endif

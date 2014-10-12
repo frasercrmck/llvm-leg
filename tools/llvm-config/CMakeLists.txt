@@ -16,7 +16,8 @@ set(LLVM_OBJ_ROOT ${LLVM_BINARY_DIR})
 set(LLVM_CPPFLAGS "${CMAKE_CPP_FLAGS} ${CMAKE_CPP_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
 set(LLVM_CFLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
 set(LLVM_CXXFLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${uppercase_CMAKE_BUILD_TYPE}} ${LLVM_DEFINITIONS}")
-set(LLVM_LDFLAGS ${CMAKE_SHARED_LINKER_FLAGS})
+# Use the C++ link flags, since they should be a superset of C link flags.
+set(LLVM_LDFLAGS "${CMAKE_CXX_LINK_FLAGS}")
 set(LLVM_BUILDMODE ${CMAKE_BUILD_TYPE})
 set(LLVM_SYSTEM_LIBS ${SYSTEM_LIBS})
 string(REPLACE ";" " " LLVM_TARGETS_BUILT "${LLVM_TARGETS_TO_BUILD}")
@@ -32,3 +33,18 @@ add_llvm_tool(llvm-config
 
 # Add the dependency on the generation step.
 add_file_dependencies(${CMAKE_CURRENT_SOURCE_DIR}/llvm-config.cpp ${BUILDVARIABLES_OBJPATH})
+
+if(CMAKE_CROSSCOMPILING)
+  set(${project}_LLVM_CONFIG_EXE "${LLVM_NATIVE_BUILD}/bin/llvm-config")
+  set(${project}_LLVM_CONFIG_EXE ${${project}_LLVM_CONFIG_EXE} PARENT_SCOPE)
+
+  add_custom_command(OUTPUT "${${project}_LLVM_CONFIG_EXE}"
+    COMMAND ${CMAKE_COMMAND} --build . --target llvm-config --config $<CONFIGURATION>
+    DEPENDS ${LLVM_NATIVE_BUILD}/CMakeCache.txt
+    WORKING_DIRECTORY ${LLVM_NATIVE_BUILD}
+    COMMENT "Building native llvm-config...")
+  add_custom_target(${project}NativeLLVMConfig DEPENDS ${${project}_LLVM_CONFIG_EXE})
+  add_dependencies(${project}NativeLLVMConfig ConfigureNativeLLVM)
+
+  add_dependencies(llvm-config ${project}NativeLLVMConfig)
+endif(CMAKE_CROSSCOMPILING)

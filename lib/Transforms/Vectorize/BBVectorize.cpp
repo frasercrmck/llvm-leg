@@ -15,7 +15,6 @@
 //===----------------------------------------------------------------------===//
 
 #define BBV_NAME "bb-vectorize"
-#define DEBUG_TYPE BBV_NAME
 #include "llvm/Transforms/Vectorize.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -49,6 +48,8 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
 using namespace llvm;
+
+#define DEBUG_TYPE BBV_NAME
 
 static cl::opt<bool>
 IgnoreTargetInfo("bb-vectorize-ignore-target-info",  cl::init(false),
@@ -120,6 +121,10 @@ NoCasts("bb-vectorize-no-casts", cl::init(false), cl::Hidden,
 static cl::opt<bool>
 NoMath("bb-vectorize-no-math", cl::init(false), cl::Hidden,
   cl::desc("Don't try to vectorize floating-point math intrinsics"));
+
+static cl::opt<bool>
+  NoBitManipulation("bb-vectorize-no-bitmanip", cl::init(false), cl::Hidden,
+  cl::desc("Don't try to vectorize BitManipulation intrinsics"));
 
 static cl::opt<bool>
 NoFMA("bb-vectorize-no-fma", cl::init(false), cl::Hidden,
@@ -202,8 +207,8 @@ namespace {
       DT = &P->getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       SE = &P->getAnalysis<ScalarEvolution>();
       DataLayoutPass *DLP = P->getAnalysisIfAvailable<DataLayoutPass>();
-      DL = DLP ? &DLP->getDataLayout() : 0;
-      TTI = IgnoreTargetInfo ? 0 : &P->getAnalysis<TargetTransformInfo>();
+      DL = DLP ? &DLP->getDataLayout() : nullptr;
+      TTI = IgnoreTargetInfo ? nullptr : &P->getAnalysis<TargetTransformInfo>();
     }
 
     typedef std::pair<Value *, Value *> ValuePair;
@@ -279,7 +284,7 @@ namespace {
     bool trackUsesOfI(DenseSet<Value *> &Users,
                       AliasSetTracker &WriteSet, Instruction *I,
                       Instruction *J, bool UpdateUsers = true,
-                      DenseSet<ValuePair> *LoadMoveSetPairs = 0);
+                      DenseSet<ValuePair> *LoadMoveSetPairs = nullptr);
 
   void computePairsConnectedTo(
              DenseMap<Value *, std::vector<Value *> > &CandidatePairs,
@@ -292,8 +297,8 @@ namespace {
     bool pairsConflict(ValuePair P, ValuePair Q,
              DenseSet<ValuePair> &PairableInstUsers,
              DenseMap<ValuePair, std::vector<ValuePair> >
-               *PairableInstUserMap = 0,
-             DenseSet<VPPair> *PairableInstUserPairSet = 0);
+               *PairableInstUserMap = nullptr,
+             DenseSet<VPPair> *PairableInstUserPairSet = nullptr);
 
     bool pairWillFormCycle(ValuePair P,
              DenseMap<ValuePair, std::vector<ValuePair> > &PairableInstUsers,
@@ -386,8 +391,6 @@ namespace {
                      Instruction *&InsertionPt,
                      Instruction *I, Instruction *J);
 
-    void combineMetadata(Instruction *K, const Instruction *J);
-
     bool vectorizeBB(BasicBlock &BB) {
       if (skipOptnoneFunction(BB))
         return false;
@@ -438,8 +441,8 @@ namespace {
       DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
       SE = &getAnalysis<ScalarEvolution>();
       DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
-      DL = DLP ? &DLP->getDataLayout() : 0;
-      TTI = IgnoreTargetInfo ? 0 : &getAnalysis<TargetTransformInfo>();
+      DL = DLP ? &DLP->getDataLayout() : nullptr;
+      TTI = IgnoreTargetInfo ? nullptr : &getAnalysis<TargetTransformInfo>();
 
       return vectorizeBB(BB);
     }
@@ -674,7 +677,20 @@ namespace {
       case Intrinsic::exp:
       case Intrinsic::exp2:
       case Intrinsic::pow:
+      case Intrinsic::round:
+      case Intrinsic::copysign:
+      case Intrinsic::ceil:
+      case Intrinsic::nearbyint:
+      case Intrinsic::rint:
+      case Intrinsic::trunc:
+      case Intrinsic::floor:
+      case Intrinsic::fabs:
         return Config.VectorizeMath;
+      case Intrinsic::bswap:
+      case Intrinsic::ctpop:
+      case Intrinsic::ctlz:
+      case Intrinsic::cttz:
+        return Config.VectorizeBitManipulations;
       case Intrinsic::fma:
       case Intrinsic::fmuladd:
         return Config.VectorizeFMA;
@@ -878,7 +894,7 @@ namespace {
     }
 
     // We can't vectorize memory operations without target data
-    if (DL == 0 && IsSimpleLoadStore)
+    if (!DL && IsSimpleLoadStore)
       return false;
 
     Type *T1, *T2;
@@ -915,7 +931,7 @@ namespace {
     if (T2->isX86_FP80Ty() || T2->isPPC_FP128Ty() || T2->isX86_MMXTy())
       return false;
 
-    if ((!Config.VectorizePointers || DL == 0) &&
+    if ((!Config.VectorizePointers || !DL) &&
         (T1->getScalarType()->isPointerTy() ||
          T2->getScalarType()->isPointerTy()))
       return false;
@@ -1049,7 +1065,7 @@ namespace {
               (isa<ConstantVector>(JOp) || isa<ConstantDataVector>(JOp))) {
             Op2VK = TargetTransformInfo::OK_NonUniformConstantValue;
             Constant *SplatValue = cast<Constant>(IOp)->getSplatValue();
-            if (SplatValue != NULL &&
+            if (SplatValue != nullptr &&
                 SplatValue == cast<Constant>(JOp)->getSplatValue())
               Op2VK = TargetTransformInfo::OK_UniformConstantValue;
           }
@@ -1079,13 +1095,14 @@ namespace {
       CostSavings = ICost + JCost - VCost;
     }
 
-    // The powi intrinsic is special because only the first argument is
-    // vectorized, the second arguments must be equal.
+    // The powi,ctlz,cttz intrinsics are special because only the first
+    // argument is vectorized, the second arguments must be equal.
     CallInst *CI = dyn_cast<CallInst>(I);
     Function *FI;
     if (CI && (FI = CI->getCalledFunction())) {
       Intrinsic::ID IID = (Intrinsic::ID) FI->getIntrinsicID();
-      if (IID == Intrinsic::powi) {
+      if (IID == Intrinsic::powi || IID == Intrinsic::ctlz ||
+          IID == Intrinsic::cttz) {
         Value *A1I = CI->getArgOperand(1),
               *A1J = cast<CallInst>(J)->getArgOperand(1);
         const SCEV *A1ISCEV = SE->getSCEV(A1I),
@@ -1109,7 +1126,8 @@ namespace {
         assert(CI->getNumArgOperands() == CJ->getNumArgOperands() &&
                "Intrinsic argument counts differ");
         for (unsigned i = 0, ie = CI->getNumArgOperands(); i != ie; ++i) {
-          if (IID == Intrinsic::powi && i == 1)
+          if ((IID == Intrinsic::powi || IID == Intrinsic::ctlz ||
+               IID == Intrinsic::cttz) && i == 1)
             Tys.push_back(CI->getArgOperand(i)->getType());
           else
             Tys.push_back(getVecTypeForPair(CI->getArgOperand(i)->getType(),
@@ -1665,8 +1683,9 @@ namespace {
               C2->first.second == C->first.first ||
               C2->first.second == C->first.second ||
               pairsConflict(C2->first, C->first, PairableInstUsers,
-                            UseCycleCheck ? &PairableInstUserMap : 0,
-                            UseCycleCheck ? &PairableInstUserPairSet : 0)) {
+                            UseCycleCheck ? &PairableInstUserMap : nullptr,
+                            UseCycleCheck ? &PairableInstUserPairSet
+                                          : nullptr)) {
             if (C2->second >= C->second) {
               CanAdd = false;
               break;
@@ -1686,8 +1705,9 @@ namespace {
               T->second == C->first.first ||
               T->second == C->first.second ||
               pairsConflict(*T, C->first, PairableInstUsers,
-                            UseCycleCheck ? &PairableInstUserMap : 0,
-                            UseCycleCheck ? &PairableInstUserPairSet : 0)) {
+                            UseCycleCheck ? &PairableInstUserMap : nullptr,
+                            UseCycleCheck ? &PairableInstUserPairSet
+                                          : nullptr)) {
             CanAdd = false;
             break;
           }
@@ -1704,8 +1724,9 @@ namespace {
               C2->first.second == C->first.first ||
               C2->first.second == C->first.second ||
               pairsConflict(C2->first, C->first, PairableInstUsers,
-                            UseCycleCheck ? &PairableInstUserMap : 0,
-                            UseCycleCheck ? &PairableInstUserPairSet : 0)) {
+                            UseCycleCheck ? &PairableInstUserMap : nullptr,
+                            UseCycleCheck ? &PairableInstUserPairSet
+                                          : nullptr)) {
             CanAdd = false;
             break;
           }
@@ -1720,8 +1741,9 @@ namespace {
               ChosenPairs.begin(), E2 = ChosenPairs.end();
              C2 != E2; ++C2) {
           if (pairsConflict(*C2, C->first, PairableInstUsers,
-                            UseCycleCheck ? &PairableInstUserMap : 0,
-                            UseCycleCheck ? &PairableInstUserPairSet : 0)) {
+                            UseCycleCheck ? &PairableInstUserMap : nullptr,
+                            UseCycleCheck ? &PairableInstUserPairSet
+                                          : nullptr)) {
             CanAdd = false;
             break;
           }
@@ -1802,8 +1824,8 @@ namespace {
       for (DenseMap<Value *, Value *>::iterator C = ChosenPairs.begin(),
            E = ChosenPairs.end(); C != E; ++C) {
         if (pairsConflict(*C, IJ, PairableInstUsers,
-                          UseCycleCheck ? &PairableInstUserMap : 0,
-                          UseCycleCheck ? &PairableInstUserPairSet : 0)) {
+                          UseCycleCheck ? &PairableInstUserMap : nullptr,
+                          UseCycleCheck ? &PairableInstUserPairSet : nullptr)) {
           DoesConflict = true;
           break;
         }
@@ -2373,7 +2395,7 @@ namespace {
         } while ((LIENext =
                    dyn_cast<InsertElementInst>(LIENext->getOperand(0))));
 
-        LIENext = 0;
+        LIENext = nullptr;
         Value *LIEPrev = UndefValue::get(ArgTypeH);
         for (unsigned i = 0; i < numElemL; ++i) {
           if (isa<UndefValue>(VectElemts[i])) continue;
@@ -2441,14 +2463,14 @@ namespace {
     if ((LEE || LSV) && (HEE || HSV) && !IsSizeChangeShuffle) {
       // We can have at most two unique vector inputs.
       bool CanUseInputs = true;
-      Value *I1, *I2 = 0;
+      Value *I1, *I2 = nullptr;
       if (LEE) {
         I1 = LEE->getOperand(0);
       } else {
         I1 = LSV->getOperand(0);
         I2 = LSV->getOperand(1);
         if (I2 == I1 || isa<UndefValue>(I2))
-          I2 = 0;
+          I2 = nullptr;
       }
   
       if (HEE) {
@@ -2764,10 +2786,11 @@ namespace {
 
           ReplacedOperands[o] = Intrinsic::getDeclaration(M, IID, VArgType);
           continue;
-        } else if (IID == Intrinsic::powi && o == 1) {
-          // The second argument of powi is a single integer and we've already
-          // checked that both arguments are equal. As a result, we just keep
-          // I's second argument.
+        } else if ((IID == Intrinsic::powi || IID == Intrinsic::ctlz ||
+                    IID == Intrinsic::cttz) && o == 1) {
+          // The second argument of powi/ctlz/cttz is a single integer/constant
+          // and we've already checked that both arguments are equal.
+          // As a result, we just keep I's second argument.
           ReplacedOperands[o] = I->getOperand(o);
           continue;
         }
@@ -2939,31 +2962,6 @@ namespace {
     }
   }
 
-  // When the first instruction in each pair is cloned, it will inherit its
-  // parent's metadata. This metadata must be combined with that of the other
-  // instruction in a safe way.
-  void BBVectorize::combineMetadata(Instruction *K, const Instruction *J) {
-    SmallVector<std::pair<unsigned, MDNode*>, 4> Metadata;
-    K->getAllMetadataOtherThanDebugLoc(Metadata);
-    for (unsigned i = 0, n = Metadata.size(); i < n; ++i) {
-      unsigned Kind = Metadata[i].first;
-      MDNode *JMD = J->getMetadata(Kind);
-      MDNode *KMD = Metadata[i].second;
-
-      switch (Kind) {
-      default:
-        K->setMetadata(Kind, 0); // Remove unknown metadata
-        break;
-      case LLVMContext::MD_tbaa:
-        K->setMetadata(Kind, MDNode::getMostGenericTBAA(JMD, KMD));
-        break;
-      case LLVMContext::MD_fpmath:
-        K->setMetadata(Kind, MDNode::getMostGenericFPMath(JMD, KMD));
-        break;
-      }
-    }
-  }
-
   // This function fuses the chosen instruction pairs into vector instructions,
   // taking care preserve any needed scalar outputs and, then, it reorders the
   // remaining instructions as needed (users of the first member of the pair
@@ -3113,7 +3111,13 @@ namespace {
       if (!isa<StoreInst>(K))
         K->mutateType(getVecTypeForPair(L->getType(), H->getType()));
 
-      combineMetadata(K, H);
+      unsigned KnownIDs[] = {
+        LLVMContext::MD_tbaa,
+        LLVMContext::MD_alias_scope,
+        LLVMContext::MD_noalias,
+        LLVMContext::MD_fpmath
+      };
+      combineMetadata(K, H, KnownIDs);
       K->intersectOptionalDataWith(H);
 
       for (unsigned o = 0; o < NumOperands; ++o)
@@ -3123,7 +3127,7 @@ namespace {
 
       // Instruction insertion point:
       Instruction *InsertionPt = K;
-      Instruction *K1 = 0, *K2 = 0;
+      Instruction *K1 = nullptr, *K2 = nullptr;
       replaceOutputsOfPair(Context, L, H, K, InsertionPt, K1, K2);
 
       // The use dag of the first original instruction must be moved to after
@@ -3213,6 +3217,7 @@ VectorizeConfig::VectorizeConfig() {
   VectorizePointers = !::NoPointers;
   VectorizeCasts = !::NoCasts;
   VectorizeMath = !::NoMath;
+  VectorizeBitManipulations = !::NoBitManipulation;
   VectorizeFMA = !::NoFMA;
   VectorizeSelect = !::NoSelect;
   VectorizeCmp = !::NoCmp;

@@ -15,7 +15,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "regalloc"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "LiveRangeCalc.h"
 #include "llvm/ADT/DenseSet.h"
@@ -37,10 +36,13 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 using namespace llvm;
+
+#define DEBUG_TYPE "regalloc"
 
 char LiveIntervals::ID = 0;
 char &llvm::LiveIntervalsID = LiveIntervals::ID;
@@ -79,7 +81,7 @@ void LiveIntervals::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 LiveIntervals::LiveIntervals() : MachineFunctionPass(ID),
-  DomTree(0), LRCalc(0) {
+  DomTree(nullptr), LRCalc(nullptr) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
 }
 
@@ -110,8 +112,8 @@ bool LiveIntervals::runOnMachineFunction(MachineFunction &fn) {
   MF = &fn;
   MRI = &MF->getRegInfo();
   TM = &fn.getTarget();
-  TRI = TM->getRegisterInfo();
-  TII = TM->getInstrInfo();
+  TRI = TM->getSubtargetImpl()->getRegisterInfo();
+  TII = TM->getSubtargetImpl()->getInstrInfo();
   AA = &getAnalysis<AliasAnalysis>();
   Indexes = &getAnalysis<SlotIndexes>();
   DomTree = &getAnalysis<MachineDominatorTree>();
@@ -185,6 +187,7 @@ void LiveIntervals::computeVirtRegInterval(LiveInterval &LI) {
   LRCalc->reset(MF, getSlotIndexes(), DomTree, &getVNInfoAllocator());
   LRCalc->createDeadDefs(LI);
   LRCalc->extendToUses(LI);
+  computeDeadValues(&LI, LI, nullptr, nullptr);
 }
 
 void LiveIntervals::computeVirtRegs() {
@@ -411,21 +414,34 @@ bool LiveIntervals::shrinkToUses(LiveInterval *li,
 
   // Handle dead values.
   bool CanSeparate = false;
+  computeDeadValues(li, NewLR, &CanSeparate, dead);
+
+  // Move the trimmed segments back.
+  li->segments.swap(NewLR.segments);
+  DEBUG(dbgs() << "Shrunk: " << *li << '\n');
+  return CanSeparate;
+}
+
+void LiveIntervals::computeDeadValues(LiveInterval *li,
+                                      LiveRange &LR,
+                                      bool *CanSeparate,
+                                      SmallVectorImpl<MachineInstr*> *dead) {
   for (LiveInterval::vni_iterator I = li->vni_begin(), E = li->vni_end();
        I != E; ++I) {
     VNInfo *VNI = *I;
     if (VNI->isUnused())
       continue;
-    LiveRange::iterator LRI = NewLR.FindSegmentContaining(VNI->def);
-    assert(LRI != NewLR.end() && "Missing segment for PHI");
+    LiveRange::iterator LRI = LR.FindSegmentContaining(VNI->def);
+    assert(LRI != LR.end() && "Missing segment for PHI");
     if (LRI->end != VNI->def.getDeadSlot())
       continue;
     if (VNI->isPHIDef()) {
       // This is a dead PHI. Remove it.
       VNI->markUnused();
-      NewLR.removeSegment(LRI->start, LRI->end);
+      LR.removeSegment(LRI->start, LRI->end);
       DEBUG(dbgs() << "Dead PHI at " << VNI->def << " may separate interval\n");
-      CanSeparate = true;
+      if (CanSeparate)
+        *CanSeparate = true;
     } else {
       // This is a dead def. Make sure the instruction knows.
       MachineInstr *MI = getInstructionFromIndex(VNI->def);
@@ -437,11 +453,6 @@ bool LiveIntervals::shrinkToUses(LiveInterval *li,
       }
     }
   }
-
-  // Move the trimmed segments back.
-  li->segments.swap(NewLR.segments);
-  DEBUG(dbgs() << "Shrunk: " << *li << '\n');
-  return CanSeparate;
 }
 
 void LiveIntervals::extendToIndices(LiveRange &LR,
@@ -572,9 +583,9 @@ void LiveIntervals::addKillFlags(const VirtRegMap *VRM) {
         break;
       }
       if (CancelKill)
-        MI->clearRegisterKills(Reg, NULL);
+        MI->clearRegisterKills(Reg, nullptr);
       else
-        MI->addRegisterKilled(Reg, NULL);
+        MI->addRegisterKilled(Reg, nullptr);
     }
   }
 }
@@ -590,17 +601,17 @@ LiveIntervals::intervalIsInOneMBB(const LiveInterval &LI) const {
 
   SlotIndex Start = LI.beginIndex();
   if (Start.isBlock())
-    return NULL;
+    return nullptr;
 
   SlotIndex Stop = LI.endIndex();
   if (Stop.isBlock())
-    return NULL;
+    return nullptr;
 
   // getMBBFromIndex doesn't need to search the MBB table when both indexes
   // belong to proper instructions.
   MachineBasicBlock *MBB1 = Indexes->getMBBFromIndex(Start);
   MachineBasicBlock *MBB2 = Indexes->getMBBFromIndex(Stop);
-  return MBB1 == MBB2 ? MBB1 : NULL;
+  return MBB1 == MBB2 ? MBB1 : nullptr;
 }
 
 bool

@@ -35,6 +35,9 @@ bool llvm::isSafeToDestroyConstant(const Constant *C) {
   if (isa<GlobalValue>(C))
     return false;
 
+  if (isa<ConstantInt>(C) || isa<ConstantFP>(C))
+    return false;
+
   for (const User *U : C->users())
     if (const Constant *CU = dyn_cast<Constant>(U)) {
       if (!isSafeToDestroyConstant(CU))
@@ -45,7 +48,7 @@ bool llvm::isSafeToDestroyConstant(const Constant *C) {
 }
 
 static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
-                             SmallPtrSet<const PHINode *, 16> &PhiUsers) {
+                             SmallPtrSetImpl<const PHINode *> &PhiUsers) {
   for (const Use &U : V->uses()) {
     const User *UR = U.getUser();
     if (const ConstantExpr *CE = dyn_cast<ConstantExpr>(UR)) {
@@ -61,7 +64,7 @@ static bool analyzeGlobalAux(const Value *V, GlobalStatus &GS,
     } else if (const Instruction *I = dyn_cast<Instruction>(UR)) {
       if (!GS.HasMultipleAccessingFunctions) {
         const Function *F = I->getParent()->getParent();
-        if (GS.AccessingFunction == 0)
+        if (!GS.AccessingFunction)
           GS.AccessingFunction = F;
         else if (GS.AccessingFunction != F)
           GS.HasMultipleAccessingFunctions = true;
@@ -176,6 +179,6 @@ bool GlobalStatus::analyzeGlobal(const Value *V, GlobalStatus &GS) {
 
 GlobalStatus::GlobalStatus()
     : IsCompared(false), IsLoaded(false), StoredType(NotStored),
-      StoredOnceValue(0), AccessingFunction(0),
+      StoredOnceValue(nullptr), AccessingFunction(nullptr),
       HasMultipleAccessingFunctions(false), HasNonInstructionUser(false),
       Ordering(NotAtomic) {}

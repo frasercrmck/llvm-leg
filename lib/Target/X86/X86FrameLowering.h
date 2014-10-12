@@ -11,31 +11,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef X86_FRAMELOWERING_H
-#define X86_FRAMELOWERING_H
+#ifndef LLVM_LIB_TARGET_X86_X86FRAMELOWERING_H
+#define LLVM_LIB_TARGET_X86_X86FRAMELOWERING_H
 
-#include "X86Subtarget.h"
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
 
 class MCSymbol;
 class X86TargetMachine;
+class X86Subtarget;
 
 class X86FrameLowering : public TargetFrameLowering {
-  const X86TargetMachine &TM;
-  const X86Subtarget &STI;
 public:
-  explicit X86FrameLowering(const X86TargetMachine &tm, const X86Subtarget &sti)
-    : TargetFrameLowering(StackGrowsDown,
-                          sti.getStackAlignment(),
-                          (sti.is64Bit() ? -8 : -4)),
-      TM(tm), STI(sti) {
-  }
+  explicit X86FrameLowering(StackDirection D, unsigned StackAl, int LAO)
+    : TargetFrameLowering(StackGrowsDown, StackAl, LAO) {}
+
+  static void getStackProbeFunction(const X86Subtarget &STI,
+                                    unsigned &CallOp,
+                                    const char *&Symbol);
 
   void emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
-                                 MachineBasicBlock::iterator MBBI, DebugLoc DL,
-                                 unsigned FramePtr) const;
+                                 MachineBasicBlock::iterator MBBI,
+                                 DebugLoc DL) const;
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
@@ -47,7 +45,12 @@ public:
   void adjustForHiPEPrologue(MachineFunction &MF) const override;
 
   void processFunctionBeforeCalleeSavedScan(MachineFunction &MF,
-                                        RegScavenger *RS = NULL) const override;
+                                     RegScavenger *RS = nullptr) const override;
+
+  bool
+  assignCalleeSavedSpillSlots(MachineFunction &MF,
+                              const TargetRegisterInfo *TRI,
+                              std::vector<CalleeSavedInfo> &CSI) const override;
 
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MI,

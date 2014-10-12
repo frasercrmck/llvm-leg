@@ -43,7 +43,8 @@ public:
 
   /// Given a constant with the SectionKind, return a section that it should be
   /// placed in.
-  const MCSection *getSectionForConstant(SectionKind Kind) const override;
+  const MCSection *getSectionForConstant(SectionKind Kind,
+                                         const Constant *C) const override;
 
   const MCSection *getExplicitSectionGlobal(const GlobalValue *GV,
                                         SectionKind Kind, Mangler &Mang,
@@ -67,10 +68,10 @@ public:
                                     MachineModuleInfo *MMI) const override;
 
   void InitializeELF(bool UseInitArray_);
-  const MCSection *
-    getStaticCtorSection(unsigned Priority = 65535) const override;
-  const MCSection *
-    getStaticDtorSection(unsigned Priority = 65535) const override;
+  const MCSection *getStaticCtorSection(unsigned Priority,
+                                        const MCSymbol *KeySym) const override;
+  const MCSection *getStaticDtorSection(unsigned Priority,
+                                        const MCSymbol *KeySym) const override;
 };
 
 
@@ -100,7 +101,8 @@ public:
                              SectionKind Kind, Mangler &Mang,
                              const TargetMachine &TM) const override;
 
-  const MCSection *getSectionForConstant(SectionKind Kind) const override;
+  const MCSection *getSectionForConstant(SectionKind Kind,
+                                         const Constant *C) const override;
 
   /// The mach-o version of this method defaults to returning a stub reference.
   const MCExpr *
@@ -140,6 +142,11 @@ public:
   void emitModuleFlags(MCStreamer &Streamer,
                        ArrayRef<Module::ModuleFlagEntry> ModuleFlags,
                        Mangler &Mang, const TargetMachine &TM) const override;
+
+  const MCSection *getStaticCtorSection(unsigned Priority,
+                                        const MCSymbol *KeySym) const override;
+  const MCSection *getStaticDtorSection(unsigned Priority,
+                                        const MCSymbol *KeySym) const override;
 };
 
 } // end namespace llvm

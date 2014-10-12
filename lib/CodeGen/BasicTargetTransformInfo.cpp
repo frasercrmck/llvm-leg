@@ -15,12 +15,20 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "basictti"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <utility>
 using namespace llvm;
+
+static cl::opt<unsigned>
+PartialUnrollingThreshold("partial-unrolling-threshold", cl::init(0),
+  cl::desc("Threshold for partial unrolling"), cl::Hidden);
+
+#define DEBUG_TYPE "basictti"
 
 namespace {
 
@@ -31,10 +39,15 @@ class BasicTTI final : public ImmutablePass, public TargetTransformInfo {
   /// are set if the result needs to be inserted and/or extracted from vectors.
   unsigned getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) const;
 
-  const TargetLoweringBase *getTLI() const { return TM->getTargetLowering(); }
+  /// Estimate the cost overhead of SK_Alternate shuffle.
+  unsigned getAltShuffleOverhead(Type *Ty) const;
+
+  const TargetLoweringBase *getTLI() const {
+    return TM->getSubtargetImpl()->getTargetLowering();
+  }
 
 public:
-  BasicTTI() : ImmutablePass(ID), TM(0) {
+  BasicTTI() : ImmutablePass(ID), TM(nullptr) {
     llvm_unreachable("This pass cannot be directly constructed");
   }
 
@@ -79,7 +92,7 @@ public:
   unsigned getJumpBufSize() const override;
   bool shouldBuildLookupTables() const override;
   bool haveFastSqrt(Type *Ty) const override;
-  void getUnrollingPreferences(Loop *L,
+  void getUnrollingPreferences(const Function *F, Loop *L,
                                UnrollingPreferences &UP) const override;
 
   /// @}
@@ -88,10 +101,11 @@ public:
   /// @{
 
   unsigned getNumberOfRegisters(bool Vector) const override;
-  unsigned getMaximumUnrollFactor() const override;
+  unsigned getMaxInterleaveFactor() const override;
   unsigned getRegisterBitWidth(bool Vector) const override;
   unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty, OperandValueKind,
-                                  OperandValueKind) const override;
+                                  OperandValueKind, OperandValueProperties,
+                                  OperandValueProperties) const override;
   unsigned getShuffleCost(ShuffleKind Kind, Type *Tp,
                           int Index, Type *SubTp) const override;
   unsigned getCastInstrCost(unsigned Opcode, Type *Dst,
@@ -175,9 +189,8 @@ unsigned BasicTTI::getJumpBufSize() const {
 
 bool BasicTTI::shouldBuildLookupTables() const {
   const TargetLoweringBase *TLI = getTLI();
-  return TLI->supportJumpTables() &&
-      (TLI->isOperationLegalOrCustom(ISD::BR_JT, MVT::Other) ||
-       TLI->isOperationLegalOrCustom(ISD::BRIND, MVT::Other));
+  return TLI->isOperationLegalOrCustom(ISD::BR_JT, MVT::Other) ||
+         TLI->isOperationLegalOrCustom(ISD::BRIND, MVT::Other);
 }
 
 bool BasicTTI::haveFastSqrt(Type *Ty) const {
@@ -186,7 +199,61 @@ bool BasicTTI::haveFastSqrt(Type *Ty) const {
   return TLI->isTypeLegal(VT) && TLI->isOperationLegalOrCustom(ISD::FSQRT, VT);
 }
 
-void BasicTTI::getUnrollingPreferences(Loop *, UnrollingPreferences &) const { }
+void BasicTTI::getUnrollingPreferences(const Function *F, Loop *L,
+                                       UnrollingPreferences &UP) const {
+  // This unrolling functionality is target independent, but to provide some
+  // motivation for its intended use, for x86:
+
+  // According to the Intel 64 and IA-32 Architectures Optimization Reference
+  // Manual, Intel Core models and later have a loop stream detector
+  // (and associated uop queue) that can benefit from partial unrolling.
+  // The relevant requirements are:
+  //  - The loop must have no more than 4 (8 for Nehalem and later) branches
+  //    taken, and none of them may be calls.
+  //  - The loop can have no more than 18 (28 for Nehalem and later) uops.
+
+  // According to the Software Optimization Guide for AMD Family 15h Processors,
+  // models 30h-4fh (Steamroller and later) have a loop predictor and loop
+  // buffer which can benefit from partial unrolling.
+  // The relevant requirements are:
+  //  - The loop must have fewer than 16 branches
+  //  - The loop must have less than 40 uops in all executed loop branches
+
+  // The number of taken branches in a loop is hard to estimate here, and
+  // benchmarking has revealed that it is better not to be conservative when
+  // estimating the branch count. As a result, we'll ignore the branch limits
+  // until someone finds a case where it matters in practice.
+
+  unsigned MaxOps;
+  const TargetSubtargetInfo *ST = &TM->getSubtarget<TargetSubtargetInfo>(F);
+  if (PartialUnrollingThreshold.getNumOccurrences() > 0)
+    MaxOps = PartialUnrollingThreshold;
+  else if (ST->getSchedModel().LoopMicroOpBufferSize > 0)
+    MaxOps = ST->getSchedModel().LoopMicroOpBufferSize;
+  else
+    return;
+
+  // Scan the loop: don't unroll loops with calls.
+  for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
+       I != E; ++I) {
+    BasicBlock *BB = *I;
+
+    for (BasicBlock::iterator J = BB->begin(), JE = BB->end(); J != JE; ++J)
+      if (isa<CallInst>(J) || isa<InvokeInst>(J)) {
+        ImmutableCallSite CS(J);
+        if (const Function *F = CS.getCalledFunction()) {
+          if (!TopTTI->isLoweredToCall(F))
+            continue;
+        }
+
+        return;
+      }
+  }
+
+  // Enable runtime and partial unrolling up to the specified size.
+  UP.Partial = UP.Runtime = true;
+  UP.PartialThreshold = UP.PartialOptSizeThreshold = MaxOps;
+}
 
 //===----------------------------------------------------------------------===//
 //
@@ -217,13 +284,14 @@ unsigned BasicTTI::getRegisterBitWidth(bool Vector) const {
   return 32;
 }
 
-unsigned BasicTTI::getMaximumUnrollFactor() const {
+unsigned BasicTTI::getMaxInterleaveFactor() const {
   return 1;
 }
 
 unsigned BasicTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
-                                          OperandValueKind,
-                                          OperandValueKind) const {
+                                          OperandValueKind, OperandValueKind,
+                                          OperandValueProperties,
+                                          OperandValueProperties) const {
   // Check if any of the operands are vector operands.
   const TargetLoweringBase *TLI = getTLI();
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
@@ -265,8 +333,28 @@ unsigned BasicTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
   return OpCost;
 }
 
+unsigned BasicTTI::getAltShuffleOverhead(Type *Ty) const {
+  assert(Ty->isVectorTy() && "Can only shuffle vectors");
+  unsigned Cost = 0;
+  // Shuffle cost is equal to the cost of extracting element from its argument
+  // plus the cost of inserting them onto the result vector.
+
+  // e.g. <4 x float> has a mask of <0,5,2,7> i.e we need to extract from index
+  // 0 of first vector, index 1 of second vector,index 2 of first vector and
+  // finally index 3 of second vector and insert them at index <0,1,2,3> of
+  // result vector.
+  for (int i = 0, e = Ty->getVectorNumElements(); i < e; ++i) {
+    Cost += TopTTI->getVectorInstrCost(Instruction::InsertElement, Ty, i);
+    Cost += TopTTI->getVectorInstrCost(Instruction::ExtractElement, Ty, i);
+  }
+  return Cost;
+}
+
 unsigned BasicTTI::getShuffleCost(ShuffleKind Kind, Type *Tp, int Index,
                                   Type *SubTp) const {
+  if (Kind == SK_Alternate) {
+    return getAltShuffleOverhead(Tp);
+  }
   return 1;
 }
 
@@ -297,7 +385,8 @@ unsigned BasicTTI::getCastInstrCost(unsigned Opcode, Type *Dst,
     return 0;
 
   // If the cast is marked as legal (or promote) then assume low cost.
-  if (TLI->isOperationLegalOrPromote(ISD, DstLT.second))
+  if (SrcLT.first == DstLT.first &&
+      TLI->isOperationLegalOrPromote(ISD, DstLT.second))
     return 1;
 
   // Handle scalar conversions.
@@ -379,7 +468,8 @@ unsigned BasicTTI::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
 
   std::pair<unsigned, MVT> LT = TLI->getTypeLegalizationCost(ValTy);
 
-  if (!TLI->isOperationExpand(ISD, LT.second)) {
+  if (!(ValTy->isVectorTy() && !LT.second.isVector()) &&
+      !TLI->isOperationExpand(ISD, LT.second)) {
     // The operation is legal. Assume it costs 1. Multiply
     // by the type-legalization overhead.
     return LT.first * 1;
@@ -415,8 +505,32 @@ unsigned BasicTTI::getMemoryOpCost(unsigned Opcode, Type *Src,
   assert(!Src->isVoidTy() && "Invalid type");
   std::pair<unsigned, MVT> LT = getTLI()->getTypeLegalizationCost(Src);
 
-  // Assume that all loads of legal types cost 1.
-  return LT.first;
+  // Assuming that all loads of legal types cost 1.
+  unsigned Cost = LT.first;
+
+  if (Src->isVectorTy() &&
+      Src->getPrimitiveSizeInBits() < LT.second.getSizeInBits()) {
+    // This is a vector load that legalizes to a larger type than the vector
+    // itself. Unless the corresponding extending load or truncating store is
+    // legal, then this will scalarize.
+    TargetLowering::LegalizeAction LA = TargetLowering::Expand;
+    EVT MemVT = getTLI()->getValueType(Src, true);
+    if (MemVT.isSimple() && MemVT != MVT::Other) {
+      if (Opcode == Instruction::Store)
+        LA = getTLI()->getTruncStoreAction(LT.second, MemVT.getSimpleVT());
+      else
+        LA = getTLI()->getLoadExtAction(ISD::EXTLOAD, MemVT.getSimpleVT());
+    }
+
+    if (LA != TargetLowering::Legal && LA != TargetLowering::Custom) {
+      // This is a vector load/store for some illegal type that is scalarized.
+      // We must account for the cost of building or decomposing the vector.
+      Cost += getScalarizationOverhead(Src, Opcode != Instruction::Store,
+                                            Opcode == Instruction::Store);
+    }
+  }
+
+  return Cost;
 }
 
 unsigned BasicTTI::getIntrinsicInstrCost(Intrinsic::ID IID, Type *RetTy,
@@ -461,7 +575,8 @@ unsigned BasicTTI::getIntrinsicInstrCost(Intrinsic::ID IID, Type *RetTy,
   case Intrinsic::round:   ISD = ISD::FROUND; break;
   case Intrinsic::pow:     ISD = ISD::FPOW;   break;
   case Intrinsic::fma:     ISD = ISD::FMA;    break;
-  case Intrinsic::fmuladd: ISD = ISD::FMA;    break; // FIXME: mul + add?
+  case Intrinsic::fmuladd: ISD = ISD::FMA;    break;
+  // FIXME: We should return 0 whenever getIntrinsicCost == TCC_Free.
   case Intrinsic::lifetime_start:
   case Intrinsic::lifetime_end:
     return 0;
@@ -485,6 +600,12 @@ unsigned BasicTTI::getIntrinsicInstrCost(Intrinsic::ID IID, Type *RetTy,
     // thare the code is twice as expensive.
     return LT.first * 2;
   }
+
+  // If we can't lower fmuladd into an FMA estimate the cost as a floating
+  // point mul followed by an add.
+  if (IID == Intrinsic::fmuladd)
+    return TopTTI->getArithmeticInstrCost(BinaryOperator::FMul, RetTy) +
+           TopTTI->getArithmeticInstrCost(BinaryOperator::FAdd, RetTy);
 
   // Else, assume that we need to scalarize this intrinsic. For math builtins
   // this will emit a costly libcall, adding call overhead and spills. Make it

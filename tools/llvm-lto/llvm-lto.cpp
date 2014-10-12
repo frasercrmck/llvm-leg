@@ -17,6 +17,7 @@
 #include "llvm/LTO/LTOCodeGenerator.h"
 #include "llvm/LTO/LTOModule.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
@@ -36,6 +37,10 @@ DisableInline("disable-inlining", cl::init(false),
 static cl::opt<bool>
 DisableGVNLoadPRE("disable-gvn-loadpre", cl::init(false),
   cl::desc("Do not run the GVN load PRE pass"));
+
+static cl::opt<bool>
+UseDiagnosticHandler("use-diagnostic-handler", cl::init(false),
+  cl::desc("Use a diagnostic handler to test the handler interface"));
 
 static cl::list<std::string>
 InputFilenames(cl::Positional, cl::OneOrMore,
@@ -62,6 +67,25 @@ struct ModuleInfo {
 };
 }
 
+void handleDiagnostics(lto_codegen_diagnostic_severity_t Severity,
+                       const char *Msg, void *) {
+  switch (Severity) {
+  case LTO_DS_NOTE:
+    errs() << "note: ";
+    break;
+  case LTO_DS_REMARK:
+    errs() << "remark: ";
+    break;
+  case LTO_DS_ERROR:
+    errs() << "error: ";
+    break;
+  case LTO_DS_WARNING:
+    errs() << "warning: ";
+    break;
+  }
+  errs() << Msg << "\n";
+}
+
 int main(int argc, char **argv) {
   // Print a stack trace if we signal out.
   sys::PrintStackTraceOnErrorSignal();
@@ -83,7 +107,23 @@ int main(int argc, char **argv) {
 
   LTOCodeGenerator CodeGen;
 
-  CodeGen.setCodePICModel(LTO_CODEGEN_PIC_MODEL_DYNAMIC);
+  if (UseDiagnosticHandler)
+    CodeGen.setDiagnosticHandler(handleDiagnostics, nullptr);
+
+  switch (RelocModel) {
+  case Reloc::Static:
+    CodeGen.setCodePICModel(LTO_CODEGEN_PIC_MODEL_STATIC);
+    break;
+  case Reloc::PIC_:
+    CodeGen.setCodePICModel(LTO_CODEGEN_PIC_MODEL_DYNAMIC);
+    break;
+  case Reloc::DynamicNoPIC:
+    CodeGen.setCodePICModel(LTO_CODEGEN_PIC_MODEL_DYNAMIC_NO_PIC);
+    break;
+  default:
+    CodeGen.setCodePICModel(LTO_CODEGEN_PIC_MODEL_DEFAULT);
+  }
+
   CodeGen.setDebugInfo(LTO_DEBUG_MODEL_DWARF);
   CodeGen.setTargetOptions(Options);
 
@@ -96,7 +136,7 @@ int main(int argc, char **argv) {
   for (unsigned i = BaseArg; i < InputFilenames.size(); ++i) {
     std::string error;
     std::unique_ptr<LTOModule> Module(
-        LTOModule::makeLTOModule(InputFilenames[i].c_str(), Options, error));
+        LTOModule::createFromFile(InputFilenames[i].c_str(), Options, error));
     if (!error.empty()) {
       errs() << argv[0] << ": error loading file '" << InputFilenames[i]
              << "': " << error << "\n";
@@ -130,29 +170,39 @@ int main(int argc, char **argv) {
   for (unsigned i = 0; i < KeptDSOSyms.size(); ++i)
     CodeGen.addMustPreserveSymbol(KeptDSOSyms[i].c_str());
 
+  std::string attrs;
+  for (unsigned i = 0; i < MAttrs.size(); ++i) {
+    if (i > 0)
+      attrs.append(",");
+    attrs.append(MAttrs[i]);
+  }
+
+  if (!attrs.empty())
+    CodeGen.setAttr(attrs.c_str());
+
   if (!OutputFilename.empty()) {
     size_t len = 0;
     std::string ErrorInfo;
     const void *Code = CodeGen.compile(&len, DisableOpt, DisableInline,
                                        DisableGVNLoadPRE, ErrorInfo);
-    if (Code == NULL) {
+    if (!Code) {
       errs() << argv[0]
              << ": error compiling the code: " << ErrorInfo << "\n";
       return 1;
     }
 
-    raw_fd_ostream FileStream(OutputFilename.c_str(), ErrorInfo,
-                              sys::fs::F_None);
-    if (!ErrorInfo.empty()) {
+    std::error_code EC;
+    raw_fd_ostream FileStream(OutputFilename, EC, sys::fs::F_None);
+    if (EC) {
       errs() << argv[0] << ": error opening the file '" << OutputFilename
-             << "': " << ErrorInfo << "\n";
+             << "': " << EC.message() << "\n";
       return 1;
     }
 
     FileStream.write(reinterpret_cast<const char *>(Code), len);
   } else {
     std::string ErrorInfo;
-    const char *OutputName = NULL;
+    const char *OutputName = nullptr;
     if (!CodeGen.compile_to_file(&OutputName, DisableOpt, DisableInline,
                                  DisableGVNLoadPRE, ErrorInfo)) {
       errs() << argv[0]

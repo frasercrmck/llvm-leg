@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_SystemZ_ISELLOWERING_H
-#define LLVM_TARGET_SystemZ_ISELLOWERING_H
+#ifndef LLVM_LIB_TARGET_SYSTEMZ_SYSTEMZISELLOWERING_H
+#define LLVM_LIB_TARGET_SYSTEMZ_SYSTEMZISELLOWERING_H
 
 #include "SystemZ.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -198,7 +198,7 @@ class SystemZTargetMachine;
 
 class SystemZTargetLowering : public TargetLowering {
 public:
-  explicit SystemZTargetLowering(SystemZTargetMachine &TM);
+  explicit SystemZTargetLowering(const TargetMachine &TM);
 
   // Override TargetLowering.
   MVT getScalarShiftAmountTy(EVT LHSTy) const override {
@@ -208,8 +208,9 @@ public:
   bool isFMAFasterThanFMulAndFAdd(EVT VT) const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT) const override;
   bool isLegalAddressingMode(const AddrMode &AM, Type *Ty) const override;
-  bool allowsUnalignedMemoryAccesses(EVT VT, unsigned AS,
-                                     bool *Fast) const override;
+  bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS,
+                                      unsigned Align,
+                                      bool *Fast) const override;
   bool isTruncateFree(Type *, Type *) const override;
   bool isTruncateFree(EVT, EVT) const override;
   const char *getTargetNodeName(unsigned Opcode) const override;
@@ -249,7 +250,6 @@ public:
 
 private:
   const SystemZSubtarget &Subtarget;
-  const SystemZTargetMachine &TM;
 
   // Implement LowerOperation for individual opcodes.
   SDValue lowerSETCC(SDValue Op, SelectionDAG &DAG) const;
@@ -322,4 +322,4 @@ private:
 };
 } // end namespace llvm
 
-#endif // LLVM_TARGET_SystemZ_ISELLOWERING_H
+#endif

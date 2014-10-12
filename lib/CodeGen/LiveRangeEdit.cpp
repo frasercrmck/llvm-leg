@@ -11,7 +11,6 @@
 // is spilled or split.
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "regalloc"
 #include "llvm/CodeGen/LiveRangeEdit.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/CalcSpillWeights.h"
@@ -23,6 +22,8 @@
 #include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "regalloc"
 
 STATISTIC(NumDCEDeleted,     "Number of instructions deleted by DCE");
 STATISTIC(NumDCEFoldedLoads, "Number of single use loads folded after DCE");
@@ -134,7 +135,7 @@ bool LiveRangeEdit::canRematerializeAt(Remat &RM,
   }
 
   // If only cheap remats were requested, bail out early.
-  if (cheapAsAMove && !RM.OrigMI->isAsCheapAsAMove())
+  if (cheapAsAMove && !TII.isAsCheapAsAMove(RM.OrigMI))
     return false;
 
   // Verify that all used registers are available with the same values.
@@ -164,7 +165,7 @@ void LiveRangeEdit::eraseVirtReg(unsigned Reg) {
 
 bool LiveRangeEdit::foldAsLoad(LiveInterval *LI,
                                SmallVectorImpl<MachineInstr*> &Dead) {
-  MachineInstr *DefMI = 0, *UseMI = 0;
+  MachineInstr *DefMI = nullptr, *UseMI = nullptr;
 
   // Check that there is a single def and a single use.
   for (MachineOperand &MO : MRI.reg_nodbg_operands(LI->reg)) {
@@ -197,7 +198,7 @@ bool LiveRangeEdit::foldAsLoad(LiveInterval *LI,
   // We also need to make sure it is safe to move the load.
   // Assume there are stores between DefMI and UseMI.
   bool SawStore = true;
-  if (!DefMI->isSafeToMove(&TII, 0, SawStore))
+  if (!DefMI->isSafeToMove(&TII, nullptr, SawStore))
     return false;
 
   DEBUG(dbgs() << "Try to fold single def: " << *DefMI
@@ -213,7 +214,7 @@ bool LiveRangeEdit::foldAsLoad(LiveInterval *LI,
   DEBUG(dbgs() << "                folded: " << *FoldMI);
   LIS.ReplaceMachineInstrInMaps(UseMI, FoldMI);
   UseMI->eraseFromParent();
-  DefMI->addRegisterDead(LI->reg, 0);
+  DefMI->addRegisterDead(LI->reg, nullptr);
   Dead.push_back(DefMI);
   ++NumDCEFoldedLoads;
   return true;
@@ -236,7 +237,7 @@ void LiveRangeEdit::eliminateDeadDef(MachineInstr *MI, ToShrinkSet &ToShrink) {
 
   // Use the same criteria as DeadMachineInstructionElim.
   bool SawStore = false;
-  if (!MI->isSafeToMove(&TII, 0, SawStore)) {
+  if (!MI->isSafeToMove(&TII, nullptr, SawStore)) {
     DEBUG(dbgs() << "Can't delete: " << Idx << '\t' << *MI);
     return;
   }

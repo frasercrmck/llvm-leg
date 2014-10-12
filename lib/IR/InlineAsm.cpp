@@ -91,6 +91,10 @@ bool InlineAsm::ConstraintInfo::Parse(StringRef Str,
   if (*I == '~') {
     Type = isClobber;
     ++I;
+
+    // '{' must immediately follow '~'.
+    if (I != E && *I != '{')
+      return true;
   } else if (*I == '=') {
     ++I;
     Type = isOutput;
@@ -274,7 +278,7 @@ bool InlineAsm::Verify(FunctionType *Ty, StringRef ConstStr) {
     break;
   default:
     StructType *STy = dyn_cast<StructType>(Ty->getReturnType());
-    if (STy == 0 || STy->getNumElements() != NumOutputs)
+    if (!STy || STy->getNumElements() != NumOutputs)
       return false;
     break;
   }      

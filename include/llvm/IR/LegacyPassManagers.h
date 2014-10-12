@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_PASSMANAGERS_H
-#define LLVM_PASSMANAGERS_H
+#ifndef LLVM_IR_LEGACYPASSMANAGERS_H
+#define LLVM_IR_LEGACYPASSMANAGERS_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -61,7 +61,7 @@
 //
 // [o] class FunctionPassManager;
 //
-// This is a external interface used by JIT to manage FunctionPasses. This
+// This is a external interface used to manage FunctionPasses. This
 // interface relies on FunctionPassManagerImpl to do all the tasks.
 //
 // [o] class FunctionPassManagerImpl : public ModulePass, PMDataManager,
@@ -120,11 +120,11 @@ class PassManagerPrettyStackEntry : public PrettyStackTraceEntry {
   Module *M;
 public:
   explicit PassManagerPrettyStackEntry(Pass *p)
-    : P(p), V(0), M(0) {}  // When P is releaseMemory'd.
+    : P(p), V(nullptr), M(nullptr) {}  // When P is releaseMemory'd.
   PassManagerPrettyStackEntry(Pass *p, Value &v)
-    : P(p), V(&v), M(0) {} // When P is run on V
+    : P(p), V(&v), M(nullptr) {} // When P is run on V
   PassManagerPrettyStackEntry(Pass *p, Module &m)
-    : P(p), V(0), M(&m) {} // When P is run on M
+    : P(p), V(nullptr), M(&m) {} // When P is run on M
 
   /// print - Emit information about this stack frame to OS.
   void print(raw_ostream &OS) const override;
@@ -248,7 +248,7 @@ private:
   DenseMap<Pass *, SmallPtrSet<Pass *, 8> > InversedLastUser;
 
   /// Immutable passes are managed by top level manager.
-  SmallVector<ImmutablePass *, 8> ImmutablePasses;
+  SmallVector<ImmutablePass *, 16> ImmutablePasses;
 
   DenseMap<Pass *, AnalysisUsage *> AnUsageMap;
 };
@@ -263,7 +263,7 @@ private:
 class PMDataManager {
 public:
 
-  explicit PMDataManager() : TPM(NULL), Depth(0) {
+  explicit PMDataManager() : TPM(nullptr), Depth(0) {
     initializeAnalysisInfo();
   }
 
@@ -303,7 +303,7 @@ public:
   void initializeAnalysisInfo() {
     AvailableAnalysis.clear();
     for (unsigned i = 0; i < PMT_Last; ++i)
-      InheritedAnalysis[i] = NULL;
+      InheritedAnalysis[i] = nullptr;
   }
 
   // Return true if P preserves high level analysis used by other
@@ -393,7 +393,7 @@ private:
 
   // Collection of higher level analysis used by the pass managed by
   // this manager.
-  SmallVector<Pass *, 8> HigherLevelAnalysis;
+  SmallVector<Pass *, 16> HigherLevelAnalysis;
 
   unsigned Depth;
 };
@@ -441,7 +441,7 @@ public:
   Pass *getAsPass() override { return this; }
 
   /// Pass Manager itself does not invalidate any analysis info.
-  void getAnalysisUsage(AnalysisUsage &Info) const override{
+  void getAnalysisUsage(AnalysisUsage &Info) const override {
     Info.setPreservesAll();
   }
 

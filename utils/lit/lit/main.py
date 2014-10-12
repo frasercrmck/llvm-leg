@@ -42,8 +42,9 @@ class TestingProgressDisplay(object):
             self.progressBar.update(float(self.completed)/self.numTests,
                                     test.getFullName())
 
-        if not test.result.code.isFailure and \
-                (self.opts.quiet or self.opts.succinct):
+        shouldShow = test.result.code.isFailure or \
+            (not self.opts.quiet and not self.opts.succinct)
+        if not shouldShow:
             return
 
         if self.progressBar:
@@ -168,6 +169,12 @@ def main(builtinParameters = {}):
     group.add_option("", "--no-progress-bar", dest="useProgressBar",
                      help="Do not use curses based progress bar",
                      action="store_false", default=True)
+    group.add_option("", "--show-unsupported", dest="show_unsupported",
+                     help="Show unsupported tests",
+                     action="store_true", default=False)
+    group.add_option("", "--show-xfail", dest="show_xfail",
+                     help="Show tests that were expected to fail",
+                     action="store_true", default=False)
     parser.add_option_group(group)
 
     group = OptionGroup(parser, "Test Execution")
@@ -382,7 +389,12 @@ def main(builtinParameters = {}):
     # Print each test in any of the failing groups.
     for title,code in (('Unexpected Passing Tests', lit.Test.XPASS),
                        ('Failing Tests', lit.Test.FAIL),
-                       ('Unresolved Tests', lit.Test.UNRESOLVED)):
+                       ('Unresolved Tests', lit.Test.UNRESOLVED),
+                       ('Unsupported Tests', lit.Test.UNSUPPORTED),
+                       ('Expected Failing Tests', lit.Test.XFAIL)):
+        if (lit.Test.XFAIL == code and not opts.show_xfail) or \
+           (lit.Test.UNSUPPORTED == code and not opts.show_unsupported):
+            continue
         elts = byCode.get(code)
         if not elts:
             continue
@@ -403,7 +415,7 @@ def main(builtinParameters = {}):
                       ('Unsupported Tests  ', lit.Test.UNSUPPORTED),
                       ('Unresolved Tests   ', lit.Test.UNRESOLVED),
                       ('Unexpected Passes  ', lit.Test.XPASS),
-                      ('Unexpected Failures', lit.Test.FAIL),):
+                      ('Unexpected Failures', lit.Test.FAIL)):
         if opts.quiet and not code.isFailure:
             continue
         N = len(byCode.get(code,[]))

@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "loop-rotate"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/CodeMetrics.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LoopPass.h"
@@ -24,6 +24,7 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
@@ -31,7 +32,11 @@
 #include "llvm/Transforms/Utils/ValueMapper.h"
 using namespace llvm;
 
-#define MAX_HEADER_SIZE 16
+#define DEBUG_TYPE "loop-rotate"
+
+static cl::opt<unsigned>
+DefaultRotationThreshold("rotation-max-header-size", cl::init(16), cl::Hidden,
+       cl::desc("The default maximum header size for automatic loop rotation"));
 
 STATISTIC(NumRotated, "Number of loops rotated");
 namespace {
@@ -39,12 +44,17 @@ namespace {
   class LoopRotate : public LoopPass {
   public:
     static char ID; // Pass ID, replacement for typeid
-    LoopRotate() : LoopPass(ID) {
+    LoopRotate(int SpecifiedMaxHeaderSize = -1) : LoopPass(ID) {
       initializeLoopRotatePass(*PassRegistry::getPassRegistry());
+      if (SpecifiedMaxHeaderSize == -1)
+        MaxHeaderSize = DefaultRotationThreshold;
+      else
+        MaxHeaderSize = unsigned(SpecifiedMaxHeaderSize);
     }
 
     // LCSSA form makes instruction renaming easier.
     void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<AssumptionTracker>();
       AU.addPreserved<DominatorTreeWrapperPass>();
       AU.addRequired<LoopInfo>();
       AU.addPreserved<LoopInfo>();
@@ -61,20 +71,25 @@ namespace {
     bool rotateLoop(Loop *L, bool SimplifiedLatch);
 
   private:
+    unsigned MaxHeaderSize;
     LoopInfo *LI;
     const TargetTransformInfo *TTI;
+    AssumptionTracker *AT;
   };
 }
 
 char LoopRotate::ID = 0;
 INITIALIZE_PASS_BEGIN(LoopRotate, "loop-rotate", "Rotate Loops", false, false)
 INITIALIZE_AG_DEPENDENCY(TargetTransformInfo)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
 INITIALIZE_PASS_END(LoopRotate, "loop-rotate", "Rotate Loops", false, false)
 
-Pass *llvm::createLoopRotatePass() { return new LoopRotate(); }
+Pass *llvm::createLoopRotatePass(int MaxHeaderSize) {
+  return new LoopRotate(MaxHeaderSize);
+}
 
 /// Rotate Loop L as many times as possible. Return true if
 /// the loop is rotated at least once.
@@ -82,8 +97,12 @@ bool LoopRotate::runOnLoop(Loop *L, LPPassManager &LPM) {
   if (skipOptnoneFunction(L))
     return false;
 
+  // Save the loop metadata.
+  MDNode *LoopMD = L->getLoopID();
+
   LI = &getAnalysis<LoopInfo>();
   TTI = &getAnalysis<TargetTransformInfo>();
+  AT = &getAnalysis<AssumptionTracker>();
 
   // Simplify the loop latch before attempting to rotate the header
   // upward. Rotation may not be needed if the loop tail can be folded into the
@@ -96,6 +115,12 @@ bool LoopRotate::runOnLoop(Loop *L, LPPassManager &LPM) {
     MadeChange = true;
     SimplifiedLatch = false;
   }
+
+  // Restore the loop metadata.
+  // NB! We presume LoopRotation DOESN'T ADD its own metadata.
+  if ((MadeChange || SimplifiedLatch) && LoopMD)
+    L->setLoopID(LoopMD);
+
   return MadeChange;
 }
 
@@ -164,7 +189,7 @@ static void RewriteUsesOfClonedInstructions(BasicBlock *OrigHeader,
   }
 }
 
-/// Determine whether the instructions in this range my be safely and cheaply
+/// Determine whether the instructions in this range may be safely and cheaply
 /// speculated. This is not an important enough situation to develop complex
 /// heuristics. We handle a single arithmetic instruction along with any type
 /// conversions.
@@ -212,7 +237,7 @@ static bool shouldSpeculateInstrs(BasicBlock::iterator Begin,
 /// Fold the loop tail into the loop exit by speculating the loop tail
 /// instructions. Typically, this is a single post-increment. In the case of a
 /// simple 2-block loop, hoisting the increment can be much better than
-/// duplicating the entire loop header. In the cast of loops with early exits,
+/// duplicating the entire loop header. In the case of loops with early exits,
 /// rotation will not work anyway, but simplifyLoopLatch will put the loop in
 /// canonical form so downstream passes can handle it.
 ///
@@ -281,7 +306,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
   BasicBlock *OrigLatch = L->getLoopLatch();
 
   BranchInst *BI = dyn_cast<BranchInst>(OrigHeader->getTerminator());
-  if (BI == 0 || BI->isUnconditional())
+  if (!BI || BI->isUnconditional())
     return false;
 
   // If the loop header is not one of the loop exiting blocks then
@@ -292,7 +317,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
 
   // If the loop latch already contains a branch that leaves the loop then the
   // loop is already rotated.
-  if (OrigLatch == 0)
+  if (!OrigLatch)
     return false;
 
   // Rotate if either the loop latch does *not* exit the loop, or if the loop
@@ -303,14 +328,17 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
   // Check size of original header and reject loop if it is very big or we can't
   // duplicate blocks inside it.
   {
+    SmallPtrSet<const Value *, 32> EphValues;
+    CodeMetrics::collectEphemeralValues(L, AT, EphValues);
+
     CodeMetrics Metrics;
-    Metrics.analyzeBasicBlock(OrigHeader, *TTI);
+    Metrics.analyzeBasicBlock(OrigHeader, *TTI, EphValues);
     if (Metrics.notDuplicatable) {
       DEBUG(dbgs() << "LoopRotation: NOT rotating - contains non-duplicatable"
             << " instructions: "; L->dump());
       return false;
     }
-    if (Metrics.NumInsts > MAX_HEADER_SIZE)
+    if (Metrics.NumInsts > MaxHeaderSize)
       return false;
   }
 
@@ -319,7 +347,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
 
   // If the loop could not be converted to canonical form, it must have an
   // indirectbr in it, just give up.
-  if (OrigPreheader == 0)
+  if (!OrigPreheader)
     return false;
 
   // Anything ScalarEvolution may know about this loop or the PHI nodes
@@ -386,6 +414,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
     // With the operands remapped, see if the instruction constant folds or is
     // otherwise simplifyable.  This commonly occurs because the entry from PHI
     // nodes allows icmps and other instructions to fold.
+    // FIXME: Provide DL, TLI, DT, AT to SimplifyInstruction.
     Value *V = SimplifyInstruction(C);
     if (V && LI->replacementPreservesLCSSAForm(C, V)) {
       // If so, then delete the temporary instruction and stick the folded value

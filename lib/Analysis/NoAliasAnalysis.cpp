@@ -15,6 +15,7 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Pass.h"
 using namespace llvm;
 
@@ -36,7 +37,7 @@ namespace {
       // Note: NoAA does not call InitializeAliasAnalysis because it's
       // special and does not support chaining.
       DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
-      DL = DLP ? &DLP->getDataLayout() : 0;
+      DL = DLP ? &DLP->getDataLayout() : nullptr;
     }
 
     AliasResult alias(const Location &LocA, const Location &LocB) override {
@@ -53,6 +54,14 @@ namespace {
     bool pointsToConstantMemory(const Location &Loc, bool OrLocal) override {
       return false;
     }
+    Location getArgLocation(ImmutableCallSite CS, unsigned ArgIdx,
+                            ModRefResult &Mask) override {
+      Mask = ModRef;
+      AAMDNodes AATags;
+      CS->getAAMetadata(AATags);
+      return Location(CS.getArgument(ArgIdx), UnknownSize, AATags);
+    }
+
     ModRefResult getModRefInfo(ImmutableCallSite CS,
                                const Location &Loc) override {
       return ModRef;

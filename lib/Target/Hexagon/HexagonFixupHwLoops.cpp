@@ -40,11 +40,13 @@ namespace {
       initializeHexagonFixupHwLoopsPass(*PassRegistry::getPassRegistry());
     }
 
-    virtual bool runOnMachineFunction(MachineFunction &MF);
+    bool runOnMachineFunction(MachineFunction &MF) override;
 
-    const char *getPassName() const { return "Hexagon Hardware Loop Fixup"; }
+    const char *getPassName() const override {
+      return "Hexagon Hardware Loop Fixup";
+    }
 
-    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
       MachineFunctionPass::getAnalysisUsage(AU);
     }
@@ -158,7 +160,7 @@ bool HexagonFixupHwLoops::fixupLoopInstrs(MachineFunction &MF) {
 void HexagonFixupHwLoops::convertLoopInstr(MachineFunction &MF,
                                            MachineBasicBlock::iterator &MII,
                                            RegScavenger &RS) {
-  const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
+  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
   MachineBasicBlock *MBB = MII->getParent();
   DebugLoc DL = MII->getDebugLoc();
   unsigned Scratch = RS.scavengeRegister(&Hexagon::IntRegsRegClass, MII, 0);

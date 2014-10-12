@@ -104,13 +104,9 @@ private:
     MemOp Mem;
   };
 
-  SystemZOperand(OperandKind kind, SMLoc startLoc, SMLoc endLoc)
-    : Kind(kind), StartLoc(startLoc), EndLoc(endLoc)
-  {}
-
   void addExpr(MCInst &Inst, const MCExpr *Expr) const {
     // Add as immediates when possible.  Null MCExpr = 0.
-    if (Expr == 0)
+    if (!Expr)
       Inst.addOperand(MCOperand::CreateImm(0));
     else if (auto *CE = dyn_cast<MCConstantExpr>(Expr))
       Inst.addOperand(MCOperand::CreateImm(CE->getValue()));
@@ -119,40 +115,44 @@ private:
   }
 
 public:
+  SystemZOperand(OperandKind kind, SMLoc startLoc, SMLoc endLoc)
+      : Kind(kind), StartLoc(startLoc), EndLoc(endLoc) {}
+
   // Create particular kinds of operand.
-  static SystemZOperand *createInvalid(SMLoc StartLoc, SMLoc EndLoc) {
-    return new SystemZOperand(KindInvalid, StartLoc, EndLoc);
+  static std::unique_ptr<SystemZOperand> createInvalid(SMLoc StartLoc,
+                                                       SMLoc EndLoc) {
+    return make_unique<SystemZOperand>(KindInvalid, StartLoc, EndLoc);
   }
-  static SystemZOperand *createToken(StringRef Str, SMLoc Loc) {
-    SystemZOperand *Op = new SystemZOperand(KindToken, Loc, Loc);
+  static std::unique_ptr<SystemZOperand> createToken(StringRef Str, SMLoc Loc) {
+    auto Op = make_unique<SystemZOperand>(KindToken, Loc, Loc);
     Op->Token.Data = Str.data();
     Op->Token.Length = Str.size();
     return Op;
   }
-  static SystemZOperand *createReg(RegisterKind Kind, unsigned Num,
-                                   SMLoc StartLoc, SMLoc EndLoc) {
-    SystemZOperand *Op = new SystemZOperand(KindReg, StartLoc, EndLoc);
+  static std::unique_ptr<SystemZOperand>
+  createReg(RegisterKind Kind, unsigned Num, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<SystemZOperand>(KindReg, StartLoc, EndLoc);
     Op->Reg.Kind = Kind;
     Op->Reg.Num = Num;
     return Op;
   }
-  static SystemZOperand *createAccessReg(unsigned Num, SMLoc StartLoc,
-                                         SMLoc EndLoc) {
-    SystemZOperand *Op = new SystemZOperand(KindAccessReg, StartLoc, EndLoc);
+  static std::unique_ptr<SystemZOperand>
+  createAccessReg(unsigned Num, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<SystemZOperand>(KindAccessReg, StartLoc, EndLoc);
     Op->AccessReg = Num;
     return Op;
   }
-  static SystemZOperand *createImm(const MCExpr *Expr, SMLoc StartLoc,
-                                   SMLoc EndLoc) {
-    SystemZOperand *Op = new SystemZOperand(KindImm, StartLoc, EndLoc);
+  static std::unique_ptr<SystemZOperand>
+  createImm(const MCExpr *Expr, SMLoc StartLoc, SMLoc EndLoc) {
+    auto Op = make_unique<SystemZOperand>(KindImm, StartLoc, EndLoc);
     Op->Imm = Expr;
     return Op;
   }
-  static SystemZOperand *createMem(RegisterKind RegKind, unsigned Base,
-                                   const MCExpr *Disp, unsigned Index,
-                                   const MCExpr *Length, SMLoc StartLoc,
-                                   SMLoc EndLoc) {
-    SystemZOperand *Op = new SystemZOperand(KindMem, StartLoc, EndLoc);
+  static std::unique_ptr<SystemZOperand>
+  createMem(RegisterKind RegKind, unsigned Base, const MCExpr *Disp,
+            unsigned Index, const MCExpr *Length, SMLoc StartLoc,
+            SMLoc EndLoc) {
+    auto Op = make_unique<SystemZOperand>(KindMem, StartLoc, EndLoc);
     Op->Mem.RegKind = RegKind;
     Op->Mem.Base = Base;
     Op->Mem.Index = Index;
@@ -208,7 +208,7 @@ public:
     return (Kind == KindMem &&
             Mem.RegKind == RegKind &&
             (MemKind == BDXMem || !Mem.Index) &&
-            (MemKind == BDLMem) == (Mem.Length != 0));
+            (MemKind == BDLMem) == (Mem.Length != nullptr));
   }
   bool isMemDisp12(RegisterKind RegKind, MemoryKind MemKind) const {
     return isMem(RegKind, MemKind) && inRange(Mem.Disp, 0, 0xfff);
@@ -313,25 +313,24 @@ private:
   bool parseRegister(Register &Reg, RegisterGroup Group, const unsigned *Regs,
                      bool IsAddress = false);
 
-  OperandMatchResultTy
-  parseRegister(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                RegisterGroup Group, const unsigned *Regs, RegisterKind Kind);
+  OperandMatchResultTy parseRegister(OperandVector &Operands,
+                                     RegisterGroup Group, const unsigned *Regs,
+                                     RegisterKind Kind);
 
   bool parseAddress(unsigned &Base, const MCExpr *&Disp,
                     unsigned &Index, const MCExpr *&Length,
                     const unsigned *Regs, RegisterKind RegKind);
 
-  OperandMatchResultTy
-  parseAddress(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-               const unsigned *Regs, RegisterKind RegKind,
-               MemoryKind MemKind);
+  OperandMatchResultTy parseAddress(OperandVector &Operands,
+                                    const unsigned *Regs, RegisterKind RegKind,
+                                    MemoryKind MemKind);
 
-  bool parseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                    StringRef Mnemonic);
+  bool parseOperand(OperandVector &Operands, StringRef Mnemonic);
 
 public:
   SystemZAsmParser(MCSubtargetInfo &sti, MCAsmParser &parser,
-                   const MCInstrInfo &MII)
+                   const MCInstrInfo &MII,
+                   const MCTargetOptions &Options)
       : MCTargetAsmParser(), STI(sti), Parser(parser) {
     MCAsmParserExtension::Initialize(Parser);
 
@@ -342,87 +341,66 @@ public:
   // Override MCTargetAsmParser.
   bool ParseDirective(AsmToken DirectiveID) override;
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
-  bool ParseInstruction(ParseInstructionInfo &Info,
-                        StringRef Name, SMLoc NameLoc,
-                        SmallVectorImpl<MCParsedAsmOperand*> &Operands)
-    override;
+  bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
+                        SMLoc NameLoc, OperandVector &Operands) override;
   bool MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                               SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                               MCStreamer &Out, unsigned &ErrorInfo,
+                               OperandVector &Operands, MCStreamer &Out,
+                               uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
 
   // Used by the TableGen code to parse particular operand types.
-  OperandMatchResultTy
-  parseGR32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseGR32(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GR32Regs, GR32Reg);
   }
-  OperandMatchResultTy
-  parseGRH32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseGRH32(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GRH32Regs, GRH32Reg);
   }
-  OperandMatchResultTy
-  parseGRX32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseGRX32(OperandVector &Operands) {
     llvm_unreachable("GRX32 should only be used for pseudo instructions");
   }
-  OperandMatchResultTy
-  parseGR64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseGR64(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GR64Regs, GR64Reg);
   }
-  OperandMatchResultTy
-  parseGR128(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseGR128(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GR128Regs, GR128Reg);
   }
-  OperandMatchResultTy
-  parseADDR32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseADDR32(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GR32Regs, ADDR32Reg);
   }
-  OperandMatchResultTy
-  parseADDR64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseADDR64(OperandVector &Operands) {
     return parseRegister(Operands, RegGR, SystemZMC::GR64Regs, ADDR64Reg);
   }
-  OperandMatchResultTy
-  parseADDR128(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseADDR128(OperandVector &Operands) {
     llvm_unreachable("Shouldn't be used as an operand");
   }
-  OperandMatchResultTy
-  parseFP32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseFP32(OperandVector &Operands) {
     return parseRegister(Operands, RegFP, SystemZMC::FP32Regs, FP32Reg);
   }
-  OperandMatchResultTy
-  parseFP64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseFP64(OperandVector &Operands) {
     return parseRegister(Operands, RegFP, SystemZMC::FP64Regs, FP64Reg);
   }
-  OperandMatchResultTy
-  parseFP128(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseFP128(OperandVector &Operands) {
     return parseRegister(Operands, RegFP, SystemZMC::FP128Regs, FP128Reg);
   }
-  OperandMatchResultTy
-  parseBDAddr32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseBDAddr32(OperandVector &Operands) {
     return parseAddress(Operands, SystemZMC::GR32Regs, ADDR32Reg, BDMem);
   }
-  OperandMatchResultTy
-  parseBDAddr64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseBDAddr64(OperandVector &Operands) {
     return parseAddress(Operands, SystemZMC::GR64Regs, ADDR64Reg, BDMem);
   }
-  OperandMatchResultTy
-  parseBDXAddr64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseBDXAddr64(OperandVector &Operands) {
     return parseAddress(Operands, SystemZMC::GR64Regs, ADDR64Reg, BDXMem);
   }
-  OperandMatchResultTy
-  parseBDLAddr64(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseBDLAddr64(OperandVector &Operands) {
     return parseAddress(Operands, SystemZMC::GR64Regs, ADDR64Reg, BDLMem);
   }
-  OperandMatchResultTy
-  parseAccessReg(SmallVectorImpl<MCParsedAsmOperand*> &Operands);
-  OperandMatchResultTy
-  parsePCRel(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-             int64_t MinVal, int64_t MaxVal);
-  OperandMatchResultTy
-  parsePCRel16(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parseAccessReg(OperandVector &Operands);
+  OperandMatchResultTy parsePCRel(OperandVector &Operands, int64_t MinVal,
+                                  int64_t MaxVal);
+  OperandMatchResultTy parsePCRel16(OperandVector &Operands) {
     return parsePCRel(Operands, -(1LL << 16), (1LL << 16) - 1);
   }
-  OperandMatchResultTy
-  parsePCRel32(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+  OperandMatchResultTy parsePCRel32(OperandVector &Operands) {
     return parsePCRel(Operands, -(1LL << 32), (1LL << 32) - 1);
   }
 };
@@ -496,9 +474,8 @@ bool SystemZAsmParser::parseRegister(Register &Reg, RegisterGroup Group,
 
 // Parse a register and add it to Operands.  The other arguments are as above.
 SystemZAsmParser::OperandMatchResultTy
-SystemZAsmParser::parseRegister(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                                RegisterGroup Group, const unsigned *Regs,
-                                RegisterKind Kind) {
+SystemZAsmParser::parseRegister(OperandVector &Operands, RegisterGroup Group,
+                                const unsigned *Regs, RegisterKind Kind) {
   if (Parser.getTok().isNot(AsmToken::Percent))
     return MatchOperand_NoMatch;
 
@@ -526,7 +503,7 @@ bool SystemZAsmParser::parseAddress(unsigned &Base, const MCExpr *&Disp,
   // Parse the optional base and index.
   Index = 0;
   Base = 0;
-  Length = 0;
+  Length = nullptr;
   if (getLexer().is(AsmToken::LParen)) {
     Parser.Lex();
 
@@ -565,9 +542,8 @@ bool SystemZAsmParser::parseAddress(unsigned &Base, const MCExpr *&Disp,
 // Parse a memory operand and add it to Operands.  The other arguments
 // are as above.
 SystemZAsmParser::OperandMatchResultTy
-SystemZAsmParser::parseAddress(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                               const unsigned *Regs, RegisterKind RegKind,
-                               MemoryKind MemKind) {
+SystemZAsmParser::parseAddress(OperandVector &Operands, const unsigned *Regs,
+                               RegisterKind RegKind, MemoryKind MemKind) {
   SMLoc StartLoc = Parser.getTok().getLoc();
   unsigned Base, Index;
   const MCExpr *Disp;
@@ -621,9 +597,9 @@ bool SystemZAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
   return false;
 }
 
-bool SystemZAsmParser::
-ParseInstruction(ParseInstructionInfo &Info, StringRef Name, SMLoc NameLoc,
-                 SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+bool SystemZAsmParser::ParseInstruction(ParseInstructionInfo &Info,
+                                        StringRef Name, SMLoc NameLoc,
+                                        OperandVector &Operands) {
   Operands.push_back(SystemZOperand::createToken(Name, NameLoc));
 
   // Read the remaining operands.
@@ -654,9 +630,8 @@ ParseInstruction(ParseInstructionInfo &Info, StringRef Name, SMLoc NameLoc,
   return false;
 }
 
-bool SystemZAsmParser::
-parseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-             StringRef Mnemonic) {
+bool SystemZAsmParser::parseOperand(OperandVector &Operands,
+                                    StringRef Mnemonic) {
   // Check if the current operand has a custom associated parser, if so, try to
   // custom parse the operand, or fallback to the general approach.
   OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic);
@@ -699,11 +674,11 @@ parseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
   return false;
 }
 
-bool SystemZAsmParser::
-MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                        SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-                        MCStreamer &Out, unsigned &ErrorInfo,
-                        bool MatchingInlineAsm) {
+bool SystemZAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
+                                               OperandVector &Operands,
+                                               MCStreamer &Out,
+                                               uint64_t &ErrorInfo,
+                                               bool MatchingInlineAsm) {
   MCInst Inst;
   unsigned MatchResult;
 
@@ -721,7 +696,7 @@ MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     // Special case the error message for the very common case where only
     // a single subtarget feature is missing
     std::string Msg = "instruction requires:";
-    unsigned Mask = 1;
+    uint64_t Mask = 1;
     for (unsigned I = 0; I < sizeof(ErrorInfo) * 8 - 1; ++I) {
       if (ErrorInfo & Mask) {
         Msg += " ";
@@ -734,11 +709,11 @@ MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 
   case Match_InvalidOperand: {
     SMLoc ErrorLoc = IDLoc;
-    if (ErrorInfo != ~0U) {
+    if (ErrorInfo != ~0ULL) {
       if (ErrorInfo >= Operands.size())
         return Error(IDLoc, "too few operands for instruction");
 
-      ErrorLoc = ((SystemZOperand*)Operands[ErrorInfo])->getStartLoc();
+      ErrorLoc = ((SystemZOperand &)*Operands[ErrorInfo]).getStartLoc();
       if (ErrorLoc == SMLoc())
         ErrorLoc = IDLoc;
     }
@@ -752,13 +727,13 @@ MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   llvm_unreachable("Unexpected match type");
 }
 
-SystemZAsmParser::OperandMatchResultTy SystemZAsmParser::
-parseAccessReg(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
+SystemZAsmParser::OperandMatchResultTy
+SystemZAsmParser::parseAccessReg(OperandVector &Operands) {
   if (Parser.getTok().isNot(AsmToken::Percent))
     return MatchOperand_NoMatch;
 
   Register Reg;
-  if (parseRegister(Reg, RegAccess, 0))
+  if (parseRegister(Reg, RegAccess, nullptr))
     return MatchOperand_ParseFail;
 
   Operands.push_back(SystemZOperand::createAccessReg(Reg.Num,
@@ -767,9 +742,9 @@ parseAccessReg(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   return MatchOperand_Success;
 }
 
-SystemZAsmParser::OperandMatchResultTy SystemZAsmParser::
-parsePCRel(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
-           int64_t MinVal, int64_t MaxVal) {
+SystemZAsmParser::OperandMatchResultTy
+SystemZAsmParser::parsePCRel(OperandVector &Operands, int64_t MinVal,
+                             int64_t MaxVal) {
   MCContext &Ctx = getContext();
   MCStreamer &Out = getStreamer();
   const MCExpr *Expr;

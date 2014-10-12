@@ -20,12 +20,13 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/system_error.h"
 #include <cctype>
 #include <cerrno>
 #include <sys/stat.h>
+#include <system_error>
 
 // <fcntl.h> may provide O_BINARY.
 #if defined(HAVE_FCNTL_H)
@@ -87,8 +88,8 @@ void raw_ostream::SetBuffered() {
 
 void raw_ostream::SetBufferAndMode(char *BufferStart, size_t Size,
                                    BufferKind Mode) {
-  assert(((Mode == Unbuffered && BufferStart == 0 && Size == 0) ||
-          (Mode != Unbuffered && BufferStart && Size)) &&
+  assert(((Mode == Unbuffered && !BufferStart && Size == 0) ||
+          (Mode != Unbuffered && BufferStart && Size != 0)) &&
          "stream must be unbuffered or have at least one byte");
   // Make sure the current buffer is free of content (we can't flush here; the
   // child buffer management logic will be in write_impl).
@@ -394,6 +395,62 @@ raw_ostream &raw_ostream::operator<<(const format_object_base &Fmt) {
   }
 }
 
+raw_ostream &raw_ostream::operator<<(const FormattedString &FS) {
+  unsigned Len = FS.Str.size(); 
+  int PadAmount = FS.Width - Len;
+  if (FS.RightJustify && (PadAmount > 0))
+    this->indent(PadAmount);
+  this->operator<<(FS.Str);
+  if (!FS.RightJustify && (PadAmount > 0))
+    this->indent(PadAmount);
+  return *this;
+}
+
+raw_ostream &raw_ostream::operator<<(const FormattedNumber &FN) {
+  if (FN.Hex) {
+    unsigned Nibbles = (64 - countLeadingZeros(FN.HexValue)+3)/4;
+    unsigned Width = (FN.Width > Nibbles+2) ? FN.Width : Nibbles+2;
+        
+    char NumberBuffer[20] = "0x0000000000000000";
+    char *EndPtr = NumberBuffer+Width;
+    char *CurPtr = EndPtr;
+    const char A = FN.Upper ? 'A' : 'a';
+    unsigned long long N = FN.HexValue;
+    while (N) {
+      uintptr_t x = N % 16;
+      *--CurPtr = (x < 10 ? '0' + x : A + x - 10);
+      N /= 16;
+    }
+
+    return write(NumberBuffer, Width);
+  } else {
+    // Zero is a special case.
+    if (FN.DecValue == 0) {
+      this->indent(FN.Width-1);
+      return *this << '0';
+    }
+    char NumberBuffer[32];
+    char *EndPtr = NumberBuffer+sizeof(NumberBuffer);
+    char *CurPtr = EndPtr;
+    bool Neg = (FN.DecValue < 0);
+    uint64_t N = Neg ? -static_cast<uint64_t>(FN.DecValue) : FN.DecValue;
+    while (N) {
+      *--CurPtr = '0' + char(N % 10);
+      N /= 10;
+    }
+    int Len = EndPtr - CurPtr;
+    int Pad = FN.Width - Len;
+    if (Neg) 
+      --Pad;
+    if (Pad > 0)
+      this->indent(Pad);
+    if (Neg)
+      *this << '-';
+    return write(CurPtr, Len);
+  }
+}
+
+
 /// indent - Insert 'NumSpaces' spaces.
 raw_ostream &raw_ostream::indent(unsigned NumSpaces) {
   static const char Spaces[] = "                                "
@@ -426,20 +483,14 @@ void format_object_base::home() {
 //  raw_fd_ostream
 //===----------------------------------------------------------------------===//
 
-/// raw_fd_ostream - Open the specified file for writing. If an error
-/// occurs, information about the error is put into ErrorInfo, and the
-/// stream should be immediately destroyed; the string will be empty
-/// if no error occurred.
-raw_fd_ostream::raw_fd_ostream(const char *Filename, std::string &ErrorInfo,
+raw_fd_ostream::raw_fd_ostream(StringRef Filename, std::error_code &EC,
                                sys::fs::OpenFlags Flags)
     : Error(false), UseAtomicWrites(false), pos(0) {
-  assert(Filename != 0 && "Filename is null");
-  ErrorInfo.clear();
-
+  EC = std::error_code();
   // Handle "-" as stdout. Note that when we do this, we consider ourself
   // the owner of stdout. This means that we can do things like close the
   // file descriptor when we're done and set the "binary" flag globally.
-  if (Filename[0] == '-' && Filename[1] == 0) {
+  if (Filename == "-") {
     FD = STDOUT_FILENO;
     // If user requested binary then put stdout into binary mode if
     // possible.
@@ -450,11 +501,9 @@ raw_fd_ostream::raw_fd_ostream(const char *Filename, std::string &ErrorInfo,
     return;
   }
 
-  error_code EC = sys::fs::openFileForWrite(Filename, FD, Flags);
+  EC = sys::fs::openFileForWrite(Filename, FD, Flags);
 
   if (EC) {
-    ErrorInfo = "Error opening output file '" + std::string(Filename) + "': " +
-                EC.message();
     ShouldClose = false;
     return;
   }
@@ -487,12 +536,8 @@ raw_fd_ostream::raw_fd_ostream(int fd, bool shouldClose, bool unbuffered)
 raw_fd_ostream::~raw_fd_ostream() {
   if (FD >= 0) {
     flush();
-    if (ShouldClose)
-      while (::close(FD) != 0)
-        if (errno != EINTR) {
-          error_detected();
-          break;
-        }
+    if (ShouldClose && sys::Process::SafelyCloseFileDescriptor(FD))
+      error_detected();
   }
 
 #ifdef __MINGW32__
@@ -566,11 +611,8 @@ void raw_fd_ostream::close() {
   assert(ShouldClose);
   ShouldClose = false;
   flush();
-  while (::close(FD) != 0)
-    if (errno != EINTR) {
-      error_detected();
-      break;
-    }
+  if (sys::Process::SafelyCloseFileDescriptor(FD))
+    error_detected();
   FD = -1;
 }
 
@@ -660,7 +702,7 @@ bool raw_fd_ostream::has_colors() const {
 /// Use it like: outs() << "foo" << "bar";
 raw_ostream &llvm::outs() {
   // Set buffer settings to model stdout behavior.
-  // Delete the file descriptor when the program exists, forcing error
+  // Delete the file descriptor when the program exits, forcing error
   // detection. If you don't want this behavior, don't use outs().
   static raw_fd_ostream S(STDOUT_FILENO, true);
   return S;
@@ -729,24 +771,17 @@ void raw_svector_ostream::resync() {
 }
 
 void raw_svector_ostream::write_impl(const char *Ptr, size_t Size) {
-  // If we're writing bytes from the end of the buffer into the smallvector, we
-  // don't need to copy the bytes, just commit the bytes because they are
-  // already in the right place.
   if (Ptr == OS.end()) {
-    assert(OS.size() + Size <= OS.capacity() && "Invalid write_impl() call!");
-    OS.set_size(OS.size() + Size);
+    // Grow the buffer to include the scratch area without copying.
+    size_t NewSize = OS.size() + Size;
+    assert(NewSize <= OS.capacity() && "Invalid write_impl() call!");
+    OS.set_size(NewSize);
   } else {
-    assert(GetNumBytesInBuffer() == 0 &&
-           "Should be writing from buffer if some bytes in it");
-    // Otherwise, do copy the bytes.
-    OS.append(Ptr, Ptr+Size);
+    assert(!GetNumBytesInBuffer());
+    OS.append(Ptr, Ptr + Size);
   }
 
-  // Grow the vector if necessary.
-  if (OS.capacity() - OS.size() < 64)
-    OS.reserve(OS.capacity() * 2);
-
-  // Update the buffer position.
+  OS.reserve(OS.size() + 64);
   SetBuffer(OS.end(), OS.capacity() - OS.size());
 }
 

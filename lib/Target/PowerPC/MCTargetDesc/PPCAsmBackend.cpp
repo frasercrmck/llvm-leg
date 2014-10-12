@@ -9,7 +9,9 @@
 
 #include "MCTargetDesc/PPCMCTargetDesc.h"
 #include "MCTargetDesc/PPCFixupKinds.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCELF.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCMachObjectWriter.h"
@@ -77,9 +79,11 @@ public:
   PPCAsmBackend(const Target &T, bool isLittle) : MCAsmBackend(), TheTarget(T),
     IsLittleEndian(isLittle) {}
 
-  unsigned getNumFixupKinds() const { return PPC::NumTargetFixupKinds; }
+  unsigned getNumFixupKinds() const override {
+    return PPC::NumTargetFixupKinds;
+  }
 
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const {
+  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
     const static MCFixupKindInfo InfosBE[PPC::NumTargetFixupKinds] = {
       // name                    offset  bits  flags
       { "fixup_ppc_br24",        6,      24,   MCFixupKindInfo::FKF_IsPCRel },
@@ -110,7 +114,7 @@ public:
   }
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const {
+                  uint64_t Value, bool IsPCRel) const override {
     Value = adjustFixupValue(Fixup.getKind(), Value);
     if (!Value) return;           // Doesn't change encoding.
 
@@ -126,7 +130,31 @@ public:
     }
   }
 
-  bool mayNeedRelaxation(const MCInst &Inst) const {
+  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
+                         const MCFixup &Fixup, const MCFragment *DF,
+                         const MCValue &Target, uint64_t &Value,
+                         bool &IsResolved) override {
+    switch ((PPC::Fixups)Fixup.getKind()) {
+    default: break;
+    case PPC::fixup_ppc_br24:
+    case PPC::fixup_ppc_br24abs:
+      // If the target symbol has a local entry point we must not attempt
+      // to resolve the fixup directly.  Emit a relocation and leave
+      // resolution of the final target address to the linker.
+      if (const MCSymbolRefExpr *A = Target.getSymA()) {
+        const MCSymbolData &Data = Asm.getSymbolData(A->getSymbol());
+        // The "other" values are stored in the last 6 bits of the second byte.
+        // The traditional defines for STO values assume the full byte and thus
+        // the shift to pack it.
+        unsigned Other = MCELF::getOther(Data) << 2;
+        if ((Other & ELF::STO_PPC64_LOCAL_MASK) != 0)
+          IsResolved = false;
+      }
+      break;
+    }
+  }
+
+  bool mayNeedRelaxation(const MCInst &Inst) const override {
     // FIXME.
     return false;
   }
@@ -134,18 +162,18 @@ public:
   bool fixupNeedsRelaxation(const MCFixup &Fixup,
                             uint64_t Value,
                             const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const {
+                            const MCAsmLayout &Layout) const override {
     // FIXME.
     llvm_unreachable("relaxInstruction() unimplemented");
   }
 
 
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const {
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {
     // FIXME.
     llvm_unreachable("relaxInstruction() unimplemented");
   }
 
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const {
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override {
     uint64_t NumNops = Count / 4;
     for (uint64_t i = 0; i != NumNops; ++i)
       OW->Write32(0x60000000);
@@ -180,7 +208,7 @@ namespace {
   public:
     DarwinPPCAsmBackend(const Target &T) : PPCAsmBackend(T, false) { }
 
-    MCObjectWriter *createObjectWriter(raw_ostream &OS) const {
+    MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
       bool is64 = getPointerSize() == 8;
       return createPPCMachObjectWriter(
           OS,
@@ -197,7 +225,7 @@ namespace {
       PPCAsmBackend(T, IsLittleEndian), OSABI(OSABI) { }
 
 
-    MCObjectWriter *createObjectWriter(raw_ostream &OS) const {
+    MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
       bool is64 = getPointerSize() == 8;
       return createPPCELFObjectWriter(OS, is64, isLittleEndian(), OSABI);
     }

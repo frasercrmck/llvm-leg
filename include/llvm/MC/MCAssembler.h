@@ -52,7 +52,6 @@ public:
   enum FragmentType {
     FT_Align,
     FT_Data,
-    FT_Compressed,
     FT_CompactEncodedInst,
     FT_Fill,
     FT_Relaxable,
@@ -87,7 +86,7 @@ private:
   /// @}
 
 protected:
-  MCFragment(FragmentType _Kind, MCSectionData *_Parent = 0);
+  MCFragment(FragmentType _Kind, MCSectionData *_Parent = nullptr);
 
 public:
   // Only for sentinel.
@@ -138,7 +137,7 @@ class MCEncodedFragment : public MCFragment {
 
   uint8_t BundlePadding;
 public:
-  MCEncodedFragment(MCFragment::FragmentType FType, MCSectionData *SD = 0)
+  MCEncodedFragment(MCFragment::FragmentType FType, MCSectionData *SD = nullptr)
     : MCFragment(FType, SD), BundlePadding(0)
   {
   }
@@ -162,7 +161,6 @@ public:
         return false;
       case MCFragment::FT_Relaxable:
       case MCFragment::FT_CompactEncodedInst:
-      case MCFragment::FT_Compressed:
       case MCFragment::FT_Data:
         return true;
     }
@@ -177,7 +175,7 @@ class MCEncodedFragmentWithFixups : public MCEncodedFragment {
 
 public:
   MCEncodedFragmentWithFixups(MCFragment::FragmentType FType,
-                              MCSectionData *SD = 0)
+                              MCSectionData *SD = nullptr)
     : MCEncodedFragment(FType, SD)
   {
   }
@@ -197,8 +195,7 @@ public:
 
   static bool classof(const MCFragment *F) {
     MCFragment::FragmentType Kind = F->getKind();
-    return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data ||
-           Kind == MCFragment::FT_Compressed;
+    return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data;
   }
 };
 
@@ -217,13 +214,8 @@ class MCDataFragment : public MCEncodedFragmentWithFixups {
 
   /// Fixups - The list of fixups in this fragment.
   SmallVector<MCFixup, 4> Fixups;
-protected:
-  MCDataFragment(MCFragment::FragmentType FType, MCSectionData *SD = 0)
-      : MCEncodedFragmentWithFixups(FType, SD), HasInstructions(false),
-        AlignToBundleEnd(false) {}
-
 public:
-  MCDataFragment(MCSectionData *SD = 0)
+  MCDataFragment(MCSectionData *SD = nullptr)
     : MCEncodedFragmentWithFixups(FT_Data, SD),
       HasInstructions(false), AlignToBundleEnd(false)
   {
@@ -255,19 +247,8 @@ public:
   const_fixup_iterator fixup_end() const override {return Fixups.end();}
 
   static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_Data ||
-           F->getKind() == MCFragment::FT_Compressed;
+    return F->getKind() == MCFragment::FT_Data;
   }
-};
-
-class MCCompressedFragment: public MCDataFragment {
-  mutable SmallVector<char, 32> CompressedContents;
-public:
-  MCCompressedFragment(MCSectionData *SD = nullptr)
-      : MCDataFragment(FT_Compressed, SD) {}
-  const SmallVectorImpl<char> &getCompressedContents() const;
-  using MCDataFragment::getContents;
-  SmallVectorImpl<char> &getContents() override;
 };
 
 /// This is a compact (memory-size-wise) fragment for holding an encoded
@@ -283,7 +264,7 @@ class MCCompactEncodedInstFragment : public MCEncodedFragment {
 
   SmallVector<char, 4> Contents;
 public:
-  MCCompactEncodedInstFragment(MCSectionData *SD = 0)
+  MCCompactEncodedInstFragment(MCSectionData *SD = nullptr)
     : MCEncodedFragment(FT_CompactEncodedInst, SD), AlignToBundleEnd(false)
   {
   }
@@ -326,7 +307,7 @@ class MCRelaxableFragment : public MCEncodedFragmentWithFixups {
 public:
   MCRelaxableFragment(const MCInst &_Inst,
                       const MCSubtargetInfo &_STI,
-                      MCSectionData *SD = 0)
+                      MCSectionData *SD = nullptr)
     : MCEncodedFragmentWithFixups(FT_Relaxable, SD), Inst(_Inst), STI(_STI) {
   }
 
@@ -382,7 +363,7 @@ class MCAlignFragment : public MCFragment {
 
 public:
   MCAlignFragment(unsigned _Alignment, int64_t _Value, unsigned _ValueSize,
-                  unsigned _MaxBytesToEmit, MCSectionData *SD = 0)
+                  unsigned _MaxBytesToEmit, MCSectionData *SD = nullptr)
     : MCFragment(FT_Align, SD), Alignment(_Alignment),
       Value(_Value),ValueSize(_ValueSize),
       MaxBytesToEmit(_MaxBytesToEmit), EmitNops(false) {}
@@ -423,7 +404,7 @@ class MCFillFragment : public MCFragment {
 
 public:
   MCFillFragment(int64_t _Value, unsigned _ValueSize, uint64_t _Size,
-                 MCSectionData *SD = 0)
+                 MCSectionData *SD = nullptr)
     : MCFragment(FT_Fill, SD),
       Value(_Value), ValueSize(_ValueSize), Size(_Size) {
     assert((!ValueSize || (Size % ValueSize) == 0) &&
@@ -456,7 +437,8 @@ class MCOrgFragment : public MCFragment {
   int8_t Value;
 
 public:
-  MCOrgFragment(const MCExpr &_Offset, int8_t _Value, MCSectionData *SD = 0)
+  MCOrgFragment(const MCExpr &_Offset, int8_t _Value,
+                MCSectionData *SD = nullptr)
     : MCFragment(FT_Org, SD),
       Offset(&_Offset), Value(_Value) {}
 
@@ -485,7 +467,8 @@ class MCLEBFragment : public MCFragment {
 
   SmallString<8> Contents;
 public:
-  MCLEBFragment(const MCExpr &Value_, bool IsSigned_, MCSectionData *SD = 0)
+  MCLEBFragment(const MCExpr &Value_, bool IsSigned_,
+                MCSectionData *SD = nullptr)
     : MCFragment(FT_LEB, SD),
       Value(&Value_), IsSigned(IsSigned_) { Contents.push_back(0); }
 
@@ -521,7 +504,7 @@ class MCDwarfLineAddrFragment : public MCFragment {
 
 public:
   MCDwarfLineAddrFragment(int64_t _LineDelta, const MCExpr &_AddrDelta,
-                      MCSectionData *SD = 0)
+                      MCSectionData *SD = nullptr)
     : MCFragment(FT_Dwarf, SD),
       LineDelta(_LineDelta), AddrDelta(&_AddrDelta) { Contents.push_back(0); }
 
@@ -552,7 +535,8 @@ class MCDwarfCallFrameFragment : public MCFragment {
   SmallString<8> Contents;
 
 public:
-  MCDwarfCallFrameFragment(const MCExpr &_AddrDelta,  MCSectionData *SD = 0)
+  MCDwarfCallFrameFragment(const MCExpr &_AddrDelta,
+                           MCSectionData *SD = nullptr)
     : MCFragment(FT_DwarfFrame, SD),
       AddrDelta(&_AddrDelta) { Contents.push_back(0); }
 
@@ -633,7 +617,7 @@ private:
 public:
   // Only for use as sentinel.
   MCSectionData();
-  MCSectionData(const MCSection &Section, MCAssembler *A = 0);
+  MCSectionData(const MCSection &Section, MCAssembler *A = nullptr);
 
   const MCSection &getSection() const { return *Section; }
 
@@ -743,7 +727,7 @@ public:
   // Only for use as sentinel.
   MCSymbolData();
   MCSymbolData(const MCSymbol &_Symbol, MCFragment *_Fragment, uint64_t _Offset,
-               MCAssembler *A = 0);
+               MCAssembler *A = nullptr);
 
   /// @name Accessors
   /// @{
@@ -818,7 +802,7 @@ public:
 
   /// @}
 
-  void dump();
+  void dump() const;
 };
 
 // FIXME: This really doesn't belong here. See comments below.
@@ -849,6 +833,9 @@ public:
 
   typedef SymbolDataListType::const_iterator const_symbol_iterator;
   typedef SymbolDataListType::iterator symbol_iterator;
+
+  typedef iterator_range<symbol_iterator> symbol_range;
+  typedef iterator_range<const_symbol_iterator> const_symbol_range;
 
   typedef std::vector<std::string> FileNameVectorType;
   typedef FileNameVectorType::const_iterator const_file_name_iterator;
@@ -915,7 +902,7 @@ private:
   // here. Maybe when the relocation stuff moves to target specific,
   // this can go with it? The streamer would need some target specific
   // refactoring too.
-  SmallPtrSet<const MCSymbol*, 64> ThumbFuncs;
+  mutable SmallPtrSet<const MCSymbol*, 64> ThumbFuncs;
 
   /// \brief The bundle alignment size currently set in the assembler.
   ///
@@ -1008,9 +995,7 @@ public:
                         const MCAsmLayout &Layout) const;
 
   /// Check whether a given symbol has been flagged with .thumb_func.
-  bool isThumbFunc(const MCSymbol *Func) const {
-    return ThumbFuncs.count(Func);
-  }
+  bool isThumbFunc(const MCSymbol *Func) const;
 
   /// Flag a function symbol as the target of a .thumb_func directive.
   void setIsThumbFunc(const MCSymbol *Func) { ThumbFuncs.insert(Func); }
@@ -1115,6 +1100,9 @@ public:
   symbol_iterator symbol_end() { return Symbols.end(); }
   const_symbol_iterator symbol_end() const { return Symbols.end(); }
 
+  symbol_range symbols() { return make_range(symbol_begin(), symbol_end()); }
+  const_symbol_range symbols() const { return make_range(symbol_begin(), symbol_end()); }
+
   size_t symbol_size() const { return Symbols.size(); }
 
   /// @}
@@ -1203,7 +1191,7 @@ public:
   }
 
   MCSectionData &getOrCreateSectionData(const MCSection &Section,
-                                        bool *Created = 0) {
+                                        bool *Created = nullptr) {
     MCSectionData *&Entry = SectionMap[&Section];
 
     if (Created) *Created = !Entry;
@@ -1214,22 +1202,27 @@ public:
   }
 
   bool hasSymbolData(const MCSymbol &Symbol) const {
-    return SymbolMap.lookup(&Symbol) != 0;
+    return SymbolMap.lookup(&Symbol) != nullptr;
   }
 
-  MCSymbolData &getSymbolData(const MCSymbol &Symbol) const {
+  MCSymbolData &getSymbolData(const MCSymbol &Symbol) {
+    return const_cast<MCSymbolData &>(
+        static_cast<const MCAssembler &>(*this).getSymbolData(Symbol));
+  }
+
+  const MCSymbolData &getSymbolData(const MCSymbol &Symbol) const {
     MCSymbolData *Entry = SymbolMap.lookup(&Symbol);
     assert(Entry && "Missing symbol data!");
     return *Entry;
   }
 
   MCSymbolData &getOrCreateSymbolData(const MCSymbol &Symbol,
-                                      bool *Created = 0) {
+                                      bool *Created = nullptr) {
     MCSymbolData *&Entry = SymbolMap[&Symbol];
 
     if (Created) *Created = !Entry;
     if (!Entry)
-      Entry = new MCSymbolData(Symbol, 0, 0, this);
+      Entry = new MCSymbolData(Symbol, nullptr, 0, this);
 
     return *Entry;
   }

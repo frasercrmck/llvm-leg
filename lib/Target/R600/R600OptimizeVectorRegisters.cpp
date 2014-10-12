@@ -27,10 +27,10 @@
 /// to reduce MOV count.
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "vec-merger"
 #include "llvm/Support/Debug.h"
 #include "AMDGPU.h"
 #include "R600InstrInfo.h"
+#include "AMDGPUSubtarget.h"
 #include "llvm/CodeGen/DFAPacketizer.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -41,6 +41,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "vec-merger"
 
 namespace {
 
@@ -107,9 +109,9 @@ private:
 public:
   static char ID;
   R600VectorRegMerger(TargetMachine &tm) : MachineFunctionPass(ID),
-  TII(0) { }
+  TII(nullptr) { }
 
-  void getAnalysisUsage(AnalysisUsage &AU) const {
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addRequired<MachineDominatorTree>();
     AU.addPreserved<MachineDominatorTree>();
@@ -118,11 +120,11 @@ public:
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
-  const char *getPassName() const {
+  const char *getPassName() const override {
     return "R600 Vector Registers Merge Pass";
   }
 
-  bool runOnMachineFunction(MachineFunction &Fn);
+  bool runOnMachineFunction(MachineFunction &Fn) override;
 };
 
 char R600VectorRegMerger::ID = 0;
@@ -278,9 +280,8 @@ bool R600VectorRegMerger::tryMergeUsingCommonSlot(RegSeqInfo &RSI,
       continue;
     if (PreviousRegSeqByReg[MOp->getReg()].empty())
       continue;
-    std::vector<MachineInstr *> MIs = PreviousRegSeqByReg[MOp->getReg()];
-    for (unsigned i = 0, e = MIs.size(); i < e; i++) {
-      CompatibleRSI = PreviousRegSeq[MIs[i]];
+    for (MachineInstr *MI : PreviousRegSeqByReg[MOp->getReg()]) {
+      CompatibleRSI = PreviousRegSeq[MI];
       if (RSI == CompatibleRSI)
         continue;
       if (tryMergeVector(&CompatibleRSI, &RSI, RemapChan))
@@ -313,7 +314,7 @@ void R600VectorRegMerger::trackRSI(const RegSeqInfo &RSI) {
 }
 
 bool R600VectorRegMerger::runOnMachineFunction(MachineFunction &Fn) {
-  TII = static_cast<const R600InstrInfo *>(Fn.getTarget().getInstrInfo());
+  TII = static_cast<const R600InstrInfo *>(Fn.getSubtarget().getInstrInfo());
   MRI = &(Fn.getRegInfo());
   for (MachineFunction::iterator MBB = Fn.begin(), MBBe = Fn.end();
        MBB != MBBe; ++MBB) {

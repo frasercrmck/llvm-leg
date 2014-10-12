@@ -23,7 +23,7 @@ class TempEnvVar {
   TempEnvVar(const char *name, const char *value)
       : name(name) {
     const char *old_value = getenv(name);
-    EXPECT_EQ(NULL, old_value) << old_value;
+    EXPECT_EQ(nullptr, old_value) << old_value;
 #if HAVE_SETENV
     setenv(name, value, true);
 #else
@@ -153,14 +153,14 @@ class StrDupSaver : public cl::StringSaver {
 };
 
 typedef void ParserFunction(StringRef Source, llvm::cl::StringSaver &Saver,
-                            SmallVectorImpl<const char *> &NewArgv);
-
+                            SmallVectorImpl<const char *> &NewArgv,
+                            bool MarkEOLs);
 
 void testCommandLineTokenizer(ParserFunction *parse, const char *Input,
                               const char *const Output[], size_t OutputSize) {
   SmallVector<const char *, 0> Actual;
   StrDupSaver Saver;
-  parse(Input, Saver, Actual);
+  parse(Input, Saver, Actual, /*MarkEOLs=*/false);
   EXPECT_EQ(OutputSize, Actual.size());
   for (unsigned I = 0, E = Actual.size(); I != E; ++I) {
     if (I < OutputSize)
@@ -211,5 +211,24 @@ TEST(CommandLineTest, AliasesWithArguments) {
     Alias.removeArgument();
   }
 }
+
+void testAliasRequired(int argc, const char *const *argv) {
+  StackOption<std::string> Option("option", cl::Required);
+  cl::alias Alias("o", llvm::cl::aliasopt(Option));
+
+  cl::ParseCommandLineOptions(argc, argv);
+  EXPECT_EQ("x", Option);
+  EXPECT_EQ(1, Option.getNumOccurrences());
+
+  Alias.removeArgument();
+}
+
+TEST(CommandLineTest, AliasRequired) {
+  const char *opts1[] = { "-tool", "-option=x" };
+  const char *opts2[] = { "-tool", "-o", "x" };
+  testAliasRequired(array_lengthof(opts1), opts1);
+  testAliasRequired(array_lengthof(opts2), opts2);
+}
+
 
 }  // anonymous namespace

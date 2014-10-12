@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SCHEDULEDAGSDNODES_H
-#define SCHEDULEDAGSDNODES_H
+#ifndef LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
+#define LLVM_LIB_CODEGEN_SELECTIONDAG_SCHEDULEDAGSDNODES_H
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -139,7 +139,7 @@ namespace llvm {
     public:
       RegDefIter(const SUnit *SU, const ScheduleDAGSDNodes *SD);
 
-      bool IsValid() const { return Node != NULL; }
+      bool IsValid() const { return Node != nullptr; }
 
       MVT GetValue() const {
         assert(IsValid() && "bad iterator");

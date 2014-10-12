@@ -64,14 +64,14 @@ private:
   ValueHandleBase(const ValueHandleBase&) LLVM_DELETED_FUNCTION;
 public:
   explicit ValueHandleBase(HandleBaseKind Kind)
-    : PrevPair(0, Kind), Next(0), VP(0, 0) {}
+    : PrevPair(nullptr, Kind), Next(nullptr), VP(nullptr, 0) {}
   ValueHandleBase(HandleBaseKind Kind, Value *V)
-    : PrevPair(0, Kind), Next(0), VP(V, 0) {
+    : PrevPair(nullptr, Kind), Next(nullptr), VP(V, 0) {
     if (isValid(VP.getPointer()))
       AddToUseList();
   }
   ValueHandleBase(HandleBaseKind Kind, const ValueHandleBase &RHS)
-    : PrevPair(0, Kind), Next(0), VP(RHS.VP) {
+    : PrevPair(nullptr, Kind), Next(nullptr), VP(RHS.VP) {
     if (isValid(VP.getPointer()))
       AddToExistingUseList(RHS.getPrevPtr());
   }
@@ -189,6 +189,7 @@ class AssertingVH
   : public ValueHandleBase
 #endif
   {
+  friend struct DenseMapInfo<AssertingVH<ValueTy> >;
 
 #ifndef NDEBUG
   ValueTy *getValPtr() const {
@@ -214,7 +215,7 @@ public:
   AssertingVH(ValueTy *P) : ValueHandleBase(Assert, GetAsValue(P)) {}
   AssertingVH(const AssertingVH &RHS) : ValueHandleBase(Assert, RHS) {}
 #else
-  AssertingVH() : ThePtr(0) {}
+  AssertingVH() : ThePtr(nullptr) {}
   AssertingVH(ValueTy *P) : ThePtr(P) {}
 #endif
 
@@ -248,11 +249,19 @@ struct DenseMapInfo<AssertingVH<T> > {
   static unsigned getHashValue(const AssertingVH<T> &Val) {
     return PointerInfo::getHashValue(Val);
   }
+#ifndef NDEBUG
+  static bool isEqual(const AssertingVH<T> &LHS, const AssertingVH<T> &RHS) {
+    // Avoid downcasting AssertingVH<T> to T*, as empty/tombstone keys may not
+    // be properly aligned pointers to T*.
+    return LHS.ValueHandleBase::getValPtr() == RHS.ValueHandleBase::getValPtr();
+  }
+#else
   static bool isEqual(const AssertingVH<T> &LHS, const AssertingVH<T> &RHS) {
     return LHS == RHS;
   }
+#endif
 };
-  
+
 template <typename T>
 struct isPodLike<AssertingVH<T> > {
 #ifdef NDEBUG
@@ -366,7 +375,7 @@ public:
   ///
   /// All implementations must remove the reference from this object to the
   /// Value that's being destroyed.
-  virtual void deleted() { setValPtr(NULL); }
+  virtual void deleted() { setValPtr(nullptr); }
 
   /// Called when this->getValPtr()->replaceAllUsesWith(new_value) is called,
   /// _before_ any of the uses have actually been replaced.  If WeakVH were

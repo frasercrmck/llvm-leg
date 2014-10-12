@@ -11,10 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HEXAGONASMPRINTER_H
-#define HEXAGONASMPRINTER_H
+#ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONMACHINESCHEDULER_H
+#define LLVM_LIB_TARGET_HEXAGON_HEXAGONMACHINESCHEDULER_H
 
-#include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/PriorityQueue.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
@@ -57,7 +56,9 @@ class VLIWResourceModel {
 public:
 VLIWResourceModel(const TargetMachine &TM, const TargetSchedModel *SM) :
     SchedModel(SM), TotalPackets(0) {
-    ResourcesModel = TM.getInstrInfo()->CreateTargetScheduleState(&TM,NULL);
+  ResourcesModel =
+      TM.getSubtargetImpl()->getInstrInfo()->CreateTargetScheduleState(
+          *TM.getSubtargetImpl());
 
     // This hard requirement could be relaxed,
     // but for now do not let it proceed.
@@ -94,13 +95,14 @@ VLIWResourceModel(const TargetMachine &TM, const TargetSchedModel *SM) :
 /// top-level schedule() driver.
 class VLIWMachineScheduler : public ScheduleDAGMILive {
 public:
-  VLIWMachineScheduler(MachineSchedContext *C, MachineSchedStrategy *S):
-    ScheduleDAGMILive(C, S) {}
+  VLIWMachineScheduler(MachineSchedContext *C,
+                       std::unique_ptr<MachineSchedStrategy> S)
+      : ScheduleDAGMILive(C, std::move(S)) {}
 
   /// Schedule - This is called back from ScheduleDAGInstrs::Run() when it's
   /// time to do some work.
-  virtual void schedule() override;
-  /// Perform platform specific DAG postprocessing.
+  void schedule() override;
+  /// Perform platform-specific DAG postprocessing.
   void postprocessDAG();
 };
 
@@ -120,7 +122,7 @@ class ConvergingVLIWScheduler : public MachineSchedStrategy {
     // Best scheduling cost.
     int SCost;
 
-    SchedCandidate(): SU(NULL), SCost(0) {}
+    SchedCandidate(): SU(nullptr), SCost(0) {}
   };
   /// Represent the type of SchedCandidate found within a single queue.
   enum CandResult {
@@ -153,9 +155,9 @@ class ConvergingVLIWScheduler : public MachineSchedStrategy {
     /// Pending queues extend the ready queues with the same ID and the
     /// PendingFlag set.
     VLIWSchedBoundary(unsigned ID, const Twine &Name):
-      DAG(0), SchedModel(0), Available(ID, Name+".A"),
+      DAG(nullptr), SchedModel(nullptr), Available(ID, Name+".A"),
       Pending(ID << ConvergingVLIWScheduler::LogMaxQID, Name+".P"),
-      CheckPending(false), HazardRec(0), ResourceModel(0),
+      CheckPending(false), HazardRec(nullptr), ResourceModel(nullptr),
       CurrCycle(0), IssueCount(0),
       MinReadyCycle(UINT_MAX), MaxMinLatency(0) {}
 
@@ -203,18 +205,19 @@ public:
     LogMaxQID = 2
   };
 
-  ConvergingVLIWScheduler():
-    DAG(0), SchedModel(0), Top(TopQID, "TopQ"), Bot(BotQID, "BotQ") {}
+  ConvergingVLIWScheduler()
+    : DAG(nullptr), SchedModel(nullptr), Top(TopQID, "TopQ"),
+      Bot(BotQID, "BotQ") {}
 
-  virtual void initialize(ScheduleDAGMI *dag) override;
+  void initialize(ScheduleDAGMI *dag) override;
 
-  virtual SUnit *pickNode(bool &IsTopNode) override;
+  SUnit *pickNode(bool &IsTopNode) override;
 
-  virtual void schedNode(SUnit *SU, bool IsTopNode) override;
+  void schedNode(SUnit *SU, bool IsTopNode) override;
 
-  virtual void releaseTopNode(SUnit *SU) override;
+  void releaseTopNode(SUnit *SU) override;
 
-  virtual void releaseBottomNode(SUnit *SU) override;
+  void releaseBottomNode(SUnit *SU) override;
 
   unsigned ReportPackets() {
     return Top.ResourceModel->getTotalPackets() +

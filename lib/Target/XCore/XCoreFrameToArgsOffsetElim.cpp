@@ -13,6 +13,7 @@
 
 #include "XCore.h"
 #include "XCoreInstrInfo.h"
+#include "XCoreSubtarget.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -26,9 +27,9 @@ namespace {
     static char ID;
     XCoreFTAOElim() : MachineFunctionPass(ID) {}
 
-    virtual bool runOnMachineFunction(MachineFunction &Fn);
+    bool runOnMachineFunction(MachineFunction &Fn) override;
 
-    virtual const char *getPassName() const {
+    const char *getPassName() const override {
       return "XCore FRAME_TO_ARGS_OFFSET Elimination";
     }
   };
@@ -43,7 +44,7 @@ FunctionPass *llvm::createXCoreFrameToArgsOffsetEliminationPass() {
 
 bool XCoreFTAOElim::runOnMachineFunction(MachineFunction &MF) {
   const XCoreInstrInfo &TII =
-          *static_cast<const XCoreInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
   unsigned StackSize = MF.getFrameInfo()->getStackSize();
   for (MachineFunction::iterator MFI = MF.begin(), E = MF.end(); MFI != E;
        ++MFI) {
