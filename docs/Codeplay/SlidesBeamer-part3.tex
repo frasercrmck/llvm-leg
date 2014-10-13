@@ -231,3 +231,185 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
 \end{itemize}
 
 \end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Custom SelectionDAG nodes}
+
+\begin{itemize}
+    \item To represent target-specific operations in the DAG
+    \begin{itemize}
+        \item Example: 32-bit immediate move on ARM
+    \end{itemize}
+    \item Add a value in the \texttt{LEGISD} enum
+    \item Add to \texttt{LEGTargetLowering::getTargetNodeName()}
+    \item Add TableGen node definition:
+\end{itemize}
+
+\begin{block}{LEGOperators.td}
+\begin{lstlisting}
+def MoveImm32Ty : SDTypeProfile<1, 1, [
+  SDTCisSameAs<0, 1>, SDTCisInt<0>
+]>;
+
+def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Custom DAG lowering}
+
+\begin{itemize}
+    \item To implement an operation in a more efficient way
+    \begin{itemize}
+        \item E.g. by replacing it with a custom DAG node
+    \end{itemize}
+    \item To work around target limitations
+    \begin{itemize}
+        \item E.g. by replacing it with multiple DAG nodes
+    \end{itemize}
+    \item Add support to \texttt{LEGISelLowering::LowerOperation}
+    \item Set the operation action to 'custom' on given type:
+\end{itemize}
+
+\begin{block}{LEGISelLowering.cpp}
+\begin{lstlisting}
+LEGISelLowering::LEGISelLowering(/* ... */) {
+  /* ... */
+  setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Creating SelectionDAG nodes}
+
+\begin{itemize}
+    \item Simply call \texttt{DAG.getNode()} with these arguments:
+    \begin{itemize}
+        \item Node ID (e.g. \texttt{LEGISD::MOVi32}), type, operand(s)
+    \end{itemize}
+    \item Nodes are target-independent (\texttt{ISD}) or not (\texttt{LEGISD})
+    \item Use \texttt{DAG.getMachineNode()} in LEGISelDAGToDAG
+\end{itemize}
+
+\begin{block}{LEGISelLowering.cpp}
+\begin{lstlisting}
+SDValue LEGTargetLowering::LowerConstant(SDValue Op,
+                                         SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  ConstantSDNode *Val = cast<ConstantSDNode>(Op.getNode());
+  SDValue TargetVal = DAG.getTargetConstant(Val->getZExtVaue(),
+                                            MVT::i32);
+  return DAG.getNode(LEGISD::MOVi32, VT, TargetVal);
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Example: implement 32-bit immediate load with high/low pairs:
+    \begin{itemize}
+        \item MOVW: load 16-bit 'low' immediate and clear high 16 bits
+        \item MOVT: load 16-bit 'high' immediate
+    \end{itemize}
+    \item The final value is defined by the second instruction
+    \item Different ways to implement this:
+    \begin{itemize}
+        \item At the DAG level, in LEGISelDAGToDAG.cpp
+        \item Using a pseudo-instruction (placeholder)
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item The two instructions must be ordered:
+    \begin{itemize}
+        \item Because MOVW clears the high 16 bits
+        \item Achieved by having MOVT reading MOVW's output
+    \end{itemize}
+    \item Source and destination registers must be the same
+    \begin{itemize}
+        \item Use 'Constraints' in Tablegen (unless using pseudo)
+    \end{itemize}
+\end{itemize}
+
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def MOVTi16 : InstLEG<(outs GRRegs:$dst),
+                      (ins GRRegs:$src1, i32imm:$src2),
+                      "movw $dst, $src2",
+                      [/* No pattern */]> {
+  let Constraints = "$src1 = $dst";
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Define a pseudo instruction, can be selected from the custom DAG node we previously defined
+    \item The pseudo is lowered by a target hook
+\end{itemize}
+
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
+                     [(set i32:$dst, (movei32 i32imm:$src))]> {
+  let isPseudo = 1;
+}
+\end{lstlisting}
+\end{block}
+
+% FIXME split into two slides: pseudo and lowering
+\begin{block}{LEGInstrInfo.cpp}
+\begin{lstlisting}
+bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
+   if (MI->getOpcode() != LEG::MOVi32) return false;
+   BuildMI(..., get(LEG::MOVWi16), Dst).addImm(Lo);
+   BuildMI(..., get(LEG::MOVTi16), Dst).addReg(Dst).addImm(Hi);
+   MBB.erase(MI);
+   return true;
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Example IR:
+\end{itemize}
+
+\begin{block}{ex5.ll}
+\lstinputlisting[firstline=6,lastline=9]{examples/ex5.ll}
+\end{block}
+
+\begin{block}{ex5.s}
+\lstinputlisting[firstline=7,lastline=12]{examples/ex5.s}
+\end{block}
+
+\end{frame}
