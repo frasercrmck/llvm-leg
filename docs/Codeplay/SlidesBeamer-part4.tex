@@ -13,17 +13,17 @@ Background
 \begin{itemize}
     \item Find which pass introduces the issue:
     \begin{itemize}
-        \item $llc\ -print-after-all$
+        \item \texttt{llc -print-after-all}
     \end{itemize}
     \item Find the LLVM source file and category for this pass:
     \begin{itemize}
-        \item $\#define\ DEBUG\_TYPE\ "codegen-dce"$
+        \item \texttt{\#define DEBUG\_TYPE "codegen-dce"}
     \end{itemize}
     \item Dump the log:
     \begin{itemize}
-        \item $llc\ foo.ll -debug-only\ codegen-dce\ 2>\&1 > foo.log$
+        \item \texttt{llc foo.ll -debug-only codegen-dce 2>\&1 > foo.log}
     \end{itemize}
-    \item Compare (diff) the '-print-after-all' or '-debug-only' good and bad outputs to see where it goes wrong
+    \item Compare (diff) the \texttt{-print-after-all} or \texttt{-debug-only} good and bad outputs to see where it goes wrong
 \end{itemize}
 
 \end{frame}
@@ -33,15 +33,15 @@ Background
 \begin{frame}{Debugging LLVM}
 
 \begin{itemize}
-    \item MIs, BBs, functions, almost anything → call X.dump()
-    \item DAGs, CFGs → call X.viewGraph() (pops up xdot)
-    \item Or from the terminal: llc foo.ll -view-isel-dags
+    \item MIs, BBs, functions, almost anything → call \texttt{X.dump()}
+    \item DAGs, CFGs → call \texttt{X.viewGraph()} (pops up xdot)
+    \item Or from the terminal: \texttt{llc foo.ll -view-isel-dags}
     \begin{itemize}
         \item Try -view-dag1-combine-dags, -view-legalize-dags, -view-sched-dags, etc.
     \end{itemize}
     \item To view graphs, make sure you build LLVM in debug mode!
     \begin{itemize}
-        \item Turn on LLVM\_ENABLE\_ASSERTIONS (i.e. NDEBUG should not be defined)
+        \item Turn on \texttt{LLVM\_ENABLE\_ASSERTIONS} (i.e. \texttt{NDEBUG} should not be defined)
     \end{itemize}
 \end{itemize}
 
@@ -54,8 +54,8 @@ Background
 \begin{itemize}
     \item When LLVM doesn't know how to map ('lower') a DAG node to an actual instruction
     \begin{itemize}
-        \item Missing pattern in LEGInstrInfo.td?
-        \item Without a pattern, lowering needs to be done in LEGISelDAGToDag::Select()
+        \item Missing pattern in \texttt{LEGInstrInfo.td}?
+        \item Without a pattern, lowering needs to be done in \texttt{LEGISelDAGToDag::Select()}
     \end{itemize}
     \item Check the graph!
 \end{itemize}
@@ -78,7 +78,7 @@ Background
     \end{itemize}
     \item DCE does not touch instructions with side-effects:
     \begin{itemize}
-        \item mayLoad, mayStore, isTerminator, hasSideEffects
+        \item \texttt{mayLoad}, \texttt{mayStore}, \texttt{isTerminator}, \texttt{hasSideEffects}
     \end{itemize}
 \end{itemize}
 
