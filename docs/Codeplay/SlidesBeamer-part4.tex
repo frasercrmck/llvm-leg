@@ -1,0 +1,120 @@
+\section{Part 4: Troubleshooting and tips}
+
+\begin{frame}{Part 4}
+
+Background
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{When something goes wrong}
+
+\begin{itemize}
+    \item Find which pass introduces the issue:
+    \begin{itemize}
+        \item $llc\ -print-after-all$
+    \end{itemize}
+    \item Find the LLVM source file and category for this pass:
+    \begin{itemize}
+        \item $\#define\ DEBUG\_TYPE\ "codegen-dce"$
+    \end{itemize}
+    \item Dump the log:
+    \begin{itemize}
+        \item $llc\ foo.ll -debug-only\ codegen-dce\ 2>\&1 > foo.log$
+    \end{itemize}
+    \item Compare (diff) the '-print-after-all' or '-debug-only' good and bad outputs to see where it goes wrong
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Debugging LLVM}
+
+\begin{itemize}
+    \item MIs, BBs, functions, almost anything → call X.dump()
+    \item DAGs, CFGs → call X.viewGraph() (pops up xdot)
+    \item Or from the terminal: llc foo.ll -view-isel-dags
+    \begin{itemize}
+        \item Try -view-dag1-combine-dags, -view-legalize-dags, -view-sched-dags, etc.
+    \end{itemize}
+    \item To view graphs, make sure you build LLVM in debug mode!
+    \begin{itemize}
+        \item Turn on LLVM\_ENABLE\_ASSERTIONS (i.e. NDEBUG should not be defined)
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{"Cannot select"}
+
+\begin{itemize}
+    \item When LLVM doesn't know how to map ('lower') a DAG node to an actual instruction
+    \begin{itemize}
+        \item Missing pattern in LEGInstrInfo.td?
+        \item Without a pattern, lowering needs to be done in LEGISelDAGToDag::Select()
+    \end{itemize}
+    \item Check the graph!
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{The dog ate my homework}
+
+\begin{itemize}
+    \item Why did my code disappear?
+    \begin{itemize}
+        \item Missing chain/glue in the DAG
+        \item Dead code elimination may have removed it
+    \end{itemize}
+    \item DCE does not touch instructions whose value is used by other instructions:
+    \begin{itemize}
+        \item Root your use/def chains using a MI that has side-effects
+    \end{itemize}
+    \item DCE does not touch instructions with side-effects:
+    \begin{itemize}
+        \item mayLoad, mayStore, isTerminator, hasSideEffects
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Useful in-tree resources}
+
+\begin{itemize}
+    \item include/llvm/Target/Target*.h
+    \begin{itemize}
+        \item Shows all target-specific hooks that can be overridden, with useful comments
+    \end{itemize}
+    \item include/llvm/Target/Target*.td
+    \begin{itemize}
+        \item Shows all TableGen fields you can use in your target files
+    \end{itemize}
+    \item include/llvm/CodeGen/ISDOpcodes.h
+    \begin{itemize}
+        \item Lists all SelectionDAG nodes and descriptions of what they mean
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{You're not alone!}
+
+\begin{itemize}
+    \item "Writing an LLVM Backend" at \url{llvm.org/docs/WritingAnLLVMBackend.html}
+    \item Other backends 
+    \item TableGen backend documentation
+    \item LLVM-Dev mailing lists
+    \item Anton Korobeynikov's 2009 and 2012 "Building a backend in 24 hours" tutorials
+\end{itemize}
+
+\end{frame}
