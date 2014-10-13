@@ -374,3 +374,172 @@ In function: main
 \end{itemize}
 
 \end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item Let's define this move instruction:
+\end{itemize}
+
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def MOVWi16 : InstLEG<(outs GRRegs:$dst),
+                      (ins i32imm:$src),
+                      "movw $dst, $src",
+                      [(set i32:$dst, i32imm:$src)]> {
+  let isMoveImm = 1;
+}
+\end{lstlisting}
+\end{block}
+
+\begin{itemize}
+    \item The previous example translates to:
+\end{itemize}
+
+\begin{block}{ex2-ADDrr-MOVW.s}
+\lstinputlisting[firstline=7,lastline=8]{examples/ex2-ADDrr-MOVW.s}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item What if instructions take immediates?
+\end{itemize}
+
+% FIXME color formatting
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def LEGimm8 : Operand<i32>, ImmLeaf<i32, [{
+  return Imm >= 0 && Imm < 256;
+}]>;
+
+def ADDri : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, i32imm:$src2),
+                    "add $dst, $src1, $src2",
+                    [(set i32:$dst, (add i32:$src1, 
+                                     LEGimm8:$src2))]>;
+\end{lstlisting}
+\end{block}
+
+\begin{block}{ex2-ADDri.s}
+\lstinputlisting[firstline=7,lastline=7]{examples/ex2-ADDri.s}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Matching multiple DAG nodes}
+
+\begin{itemize}
+    \item DAG nodes can be nested inside selection patterns
+    \begin{itemize}
+        \item The output of one node is the input of another
+    \end{itemize}
+    \item Allows operations to be combined
+    \begin{itemize}
+        \item Reduces the number of generated instructions
+        \item Possibly improves performance or power consumption
+    \end{itemize}
+    \item Example: multiply and add instruction (ex3.ll)
+\end{itemize}
+
+% FIXME color formatting
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def MLA : InstLEG<(outs GRRegs:$dst),
+                  (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
+                  "mla $dst, $src1, $src2, $src3",
+                  [(set i32:$dst,
+                   (add (mul i32:$src1, i32:$src2), i32:$src3))]>;
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Matching multiple DAG nodes}
+
+% FIXME center image, add dotted line circles, arrows
+% FIXME also add text "With MLA pattern" and assembly output, "Without" etc
+\includegraphics[width = 0.80\textwidth]{examples/ex3-selection1.png}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Frame lowering}
+
+\begin{itemize}
+    \item Hooks invoked when values are stored on the stack
+    \begin{itemize}
+        \item In debug builds (-O0), but not only
+    \end{itemize}
+    \item Adjust the stack at the beginning ('prologue') and end ('epilogue') of functions
+    \begin{itemize}
+        \item LEGFrameLowering::emitPrologue()
+        \item LEGFrameLowering::emitEpilogue()
+    \end{itemize}
+    \item Usually by increasing or decreasing the stack pointer
+    \item May need to align the stack pointer too
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Frame lowering}
+
+\begin{itemize}
+    \item Example that uses the stack:
+\end{itemize}
+
+\begin{block}{ex4.ll}
+\lstinputlisting[firstline=7,lastline=10]{examples/ex4.ll}
+\end{block}
+
+\begin{itemize}
+    \item Output when compiled with -O2:
+\end{itemize}
+
+\begin{block}{ex4-O2.s}
+\lstinputlisting[firstline=7,lastline=11]{examples/ex4-O2.s}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Frame lowering}
+
+\begin{itemize}
+    \item When compiling with  -O0, hooks need to be defined
+    \item Emit load/store instructions with frame indices
+    \item Minimal implementation:
+\end{itemize}
+
+\begin{block}{LEGFrameLowering.cpp}
+\begin{lstlisting}
+// LEGInstrInfo::storeRegToStackSlot()
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STR))
+  .addReg(SrcReg, getKillRegState(KillSrc))
+  .addFrameIndex(FrameIndex).addImm(0);
+
+// LEGInstrInfo::loadRegFromStackSlot()
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
+  .addFrameIndex(FrameIndex).addImm(0);
+
+// LEGInstrInfo::copyPhysReg()
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
+  .addReg(SrcReg, getKillRegState(KillSrc));
+\end{lstlisting}
+\end{block}
+
+\end{frame}
