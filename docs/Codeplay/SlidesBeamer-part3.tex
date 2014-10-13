@@ -1,0 +1,233 @@
+\section{Part 3: How-tos for specific tasks}
+
+\begin{frame}{Part 3}
+
+Background
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Instruction encoding}
+
+\begin{frame}{Instruction encoding}
+
+\begin{itemize}
+    \item A few new classes:
+    \begin{itemize}
+        \item LEGAsmBackend
+        \item LEGMCCodeEmitter
+        \item LEGObjectWriter
+        \item An MCObjectStreamer (again, stock)
+    \end{itemize}
+    \item You will also need your LEGAsmPrinter
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item Example encoding:
+\end{itemize}
+
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline 
+31...28 & 27...25 & 24...21 & 20 & 19...16 & 15...12 & 11...4 & 3...0\tabularnewline
+\hline 
+1110 & 000 & opcode & 0 & src1 & dst & 00000000 & src2\tabularnewline
+\hline 
+\end{tabular}
+
+\begin{itemize}
+    \item How can we achieve this?
+\end{itemize}
+
+% FIXME add color formatting
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def ADDrr : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, GRRegs:$src2),
+                    "add $dst, $src1, $src2",
+                    [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item TableGen recognises the 'Inst' field:
+\end{itemize}
+
+\begin{block}{LEGInstrFormats.td}
+\begin{lstlisting}
+class InstLEG< ... > : Instruction {
+  field bits<32> Inst;
+  ...
+}
+\end{lstlisting}
+\end{block}
+
+\begin{itemize}
+    \item Used to define the binary encoding of each instruction in TableGen:
+\end{itemize}
+
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def ADDrr : InstLEG< ... > {
+  let Inst{31-25} = 0b110000;
+  let Inst{24-21} = 0b1100;      // Opcode
+  let Inst{20}    = 0b0;
+  let Inst{11-4}  = 0b00000000;
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item For operand-based encoding, need bit fields with the same names as the operands:
+\end{itemize}
+
+% FIXME add color formatting
+\begin{block}{LEGInstrInfo.td}
+\begin{lstlisting}
+def ADDrr : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, GRRegs:$src2) ... > {
+  bits<4> src1; bits<4> src2; bits<4> dst;
+  let Inst{31-25} = 0b110000;
+  let Inst{24-21} = 0b1100;      // Opcode
+  let Inst{20}    = 0b0;
+  let Inst{19-16} = src1;        // Operand 1
+  let Inst{15-12} = dst;         // Destination
+  let Inst{11-4}  = 0b00000000;
+  let Inst{3-0}   = src2;        // Operand 2
+\end{lstlisting}
+\end{block}
+
+\begin{itemize}
+    \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} will be called on each operand
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item Returns the encoding of each operand...
+\end{itemize}
+
+\begin{block}{LEGMCCodeEmitter.cpp}
+\begin{lstlisting}
+unsigned LEGMCCodeEmitter::
+getMachineOpValue(const MCInst &MI, const MCOperand MO,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
+  if (MO.isReg()) {
+    return
+      CTX.getRegisterInfo()->getEncodingValue(MO.getReg());
+  } if (MO.isImm()) {
+    return static_cast<unsigned>(MO.getImm());
+  }
+  /* ... */
+}
+\end{lstlisting}
+\end{block}
+
+...placed, masked, and shifted into position
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Relocations and fixups}
+
+\begin{itemize}
+    \item For values that require fixing up, record the relocation into Fixups and return zero.
+\end{itemize}
+
+\begin{block}{LEGMCCodeEmitter.cpp}
+\begin{lstlisting}
+unsigned LEGMCCodeEmitter::
+getMachineOpValue(const MCInst &MI, const MCOperand MO,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
+  /* ... */
+
+  assert(MO.isExpr()); // MO must be an expression
+  
+  const MCExpr *Expr = MO.getExpr();
+  const MCExpr::ExprKind Kind = Expr->getFixupKind();
+
+  Fixups.push_back(MCFixup::Create(0, Expr, Kind));
+  return 0;
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Relocations and fixups}
+
+\begin{itemize}
+    \item Defining a target-specific fixup:
+\end{itemize}
+
+\begin{block}{LEGFixups.h}
+\begin{lstlisting}
+enum Fixups {
+  fixup_leg_pcrel = FirstTargetFixupKind,
+  
+  LastTargetFixupKind,
+  NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
+};
+\end{lstlisting}
+\end{block}
+
+\begin{block}{LEGAsmBackend.cpp}
+\begin{lstlisting}
+const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
+  const static MCFixupKindInfo I[LEG::NumTargetFixupKinds] = {
+    // Name          Offset Size Flags
+    { "fixup_leg_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+  };
+  /* ... */
+  return I[K - FirstTargetFixupKind];
+}
+\end{lstlisting}
+\end{block}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Relocations and fixups}
+
+\begin{itemize}
+    \item We must then implement some hooks
+    \item These are called at the end once the section layouts have been finalized
+    \item \texttt{LEGAsmBackend::processFixupValue()}
+    \begin{itemize}
+        \item Adjusts the fixup value, e.g., splitting the value across non-contiguous fields
+    \end{itemize}
+    \item \texttt{LEGAsmBackend::applyFixup()}
+    \begin{itemize}
+        \item Patches the fixed-up value into the binary stream
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
