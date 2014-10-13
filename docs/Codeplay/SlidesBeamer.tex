@@ -1,25 +1,73 @@
-\documentclass[pdf]{beamer}
+% This presentation is based on a Beamer theme from Seth Brown, distributed
+% under the following license:
+%
+% ----------------------------------------------------------------------------
+% This program can be redistributed and/or modified under the terms
+% of the GNU Public License, version 3.
+%
+% Seth Brown, Ph.D.
+% sethbrown@drbunsen.org
 
-\usetheme{CambridgeUS}
+\documentclass{beamer}
+
+\usepackage{graphicx} % graphics
+\usepackage{epsfig} % eps graphics
+\usepackage{hyperref} % urls
+\usepackage{booktabs, caption} % table styling
 \usepackage[utf8x]{inputenc}
 \usepackage{listings}
 \lstset{basicstyle={\footnotesize}}
-\usepackage{graphicx}
 
-\mode<presentation>{}
+% suppress navigation bar
+\beamertemplatenavigationsymbolsempty
+
+\mode<presentation>
+{
+  \usetheme{codeplay}
+  \setbeamercovered{transparent}
+  \setbeamertemplate{items}[circle]
+}
+
+% set fonts
+\usepackage{fontspec}
+\setsansfont{Calibri}
+\setmonofont{Consolas}
+\setbeamerfont{frametitle}{size=\LARGE,series=\bfseries}
+
+% color definitions
+\usepackage{color}
+\definecolor{uiwhite}{RGB}{255, 255, 255}
+
+% caption styling
+\DeclareCaptionFont{uiwhite}{\color{uiwhite}}
+\captionsetup{labelfont={uiwhite},textfont=uiwhite}
+
+% title slide definition
 \title{Building an LLVM Backend}
 \subtitle{LLVM 2014 tutorial}
-\author{Fraser Cormak \\ Pierre-Andre Saulais \\ Codeplay Software \\ @codeplaysoft}
+\author{Fraser Cormak \\ Pierre-Andre Saulais}
+\institute{Codeplay Software @codeplaysoft}
+
+\date{\today}
 
 \begin{document}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\setbeamertemplate{background}
+{\includegraphics[width=\paperwidth,height=\paperheight]{dark_background_title.png}}
+\setbeamertemplate{footline}[default]
 
 \begin{frame}
-\titlepage
+\vspace{2cm}
+  \titlepage
+  \vspace{10cm}
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Set the background for the rest of the slides.
+\setbeamertemplate{background}
+ {\includegraphics[width=\paperwidth,height=\paperheight]{dark_background.png}}
+\setbeamertemplate{footline}[codeplaytheme]
 
 \section{Introduction}
 

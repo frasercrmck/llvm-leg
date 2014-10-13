@@ -1,0 +1,45 @@
+% This program can be redistributed and/or modified under the terms
+% of the GNU Public License, version 3.
+
+\mode<presentation>
+
+\newif\ifbeamer@secheader
+\beamer@secheaderfalse
+
+\DeclareOptionBeamer{secheader}{\beamer@secheadertrue}
+\ProcessOptionsBeamer
+
+\useoutertheme{codeplay}
+
+% color definitions
+\definecolor{uipoppy}{RGB}{225,64,0}
+
+% set the title color
+\setbeamercolor{title}{fg=white}
+
+% set colors for specific elements
+\setbeamercolor{normal text}{fg=white}
+\setbeamercolor{block}{fg=white}
+\setbeamercolor{block title}{fg=white}
+\setbeamercolor{block item}{fg=white}
+\setbeamercolor{itemize item}{fg=white}
+\setbeamercolor{itemize subitem}{fg=white}
+\setbeamercolor{itemize subsubitem}{fg=white}
+
+% frame title styling
+\setbeamertemplate{frametitle}{\vspace{0.4cm} \color{white}  \insertframetitle}
+
+\usesubitemizeitemtemplate{%
+    \tiny\raise1.5pt\hbox{\color{beamerstructure}$\blacktriangleright$}%
+}
+\usesubsubitemizeitemtemplate{%
+    \tiny\raise1.5pt\hbox{\color{beamerstructure}$\bigstar$}%
+}
+
+
+\setbeamersize{text margin left=1em,text margin right=1em}
+
+\ifbeamer@secheader\else\setbeamertemplate{headline}[default]\fi
+
+\mode
+<all>
