@@ -46,14 +46,13 @@ Background
 \end{itemize}
 
 % FIXME add color formatting
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -65,29 +64,27 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \item TableGen recognises the 'Inst' field:
 \end{itemize}
 
-\begin{block}{LEGInstrFormats.td}
-\begin{lstlisting}
+\begin{codebox}
 class InstLEG< ... > : Instruction {
   field bits<32> Inst;
   ...
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrFormats.td}
 
 \begin{itemize}
     \item Used to define the binary encoding of each instruction in TableGen:
 \end{itemize}
 
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG< ... > {
   let Inst{31-25} = 0b110000;
   let Inst{24-21} = 0b1100;      // Opcode
   let Inst{20}    = 0b0;
   let Inst{11-4}  = 0b00000000;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -100,8 +97,7 @@ def ADDrr : InstLEG< ... > {
 \end{itemize}
 
 % FIXME add color formatting
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2) ... > {
   bits<4> src1; bits<4> src2; bits<4> dst;
@@ -112,8 +108,8 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
   let Inst{15-12} = dst;         // Destination
   let Inst{11-4}  = 0b00000000;
   let Inst{3-0}   = src2;        // Operand 2
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
     \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} will be called on each operand
@@ -129,8 +125,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \item Returns the encoding of each operand...
 \end{itemize}
 
-\begin{block}{LEGMCCodeEmitter.cpp}
-\begin{lstlisting}
+\begin{codebox}
 unsigned LEGMCCodeEmitter::
 getMachineOpValue(const MCInst &MI, const MCOperand MO,
                   SmallVectorImpl<MCFixup> &Fixups,
@@ -143,8 +138,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
   }
   /* ... */
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGMCCodeEmitter.cpp}
 
 ...placed, masked, and shifted into position
 
@@ -158,8 +153,7 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
     \item For values that require fixing up, record the relocation into Fixups and return zero.
 \end{itemize}
 
-\begin{block}{LEGMCCodeEmitter.cpp}
-\begin{lstlisting}
+\begin{codebox}
 unsigned LEGMCCodeEmitter::
 getMachineOpValue(const MCInst &MI, const MCOperand MO,
                   SmallVectorImpl<MCFixup> &Fixups,
@@ -174,8 +168,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
   Fixups.push_back(MCFixup::Create(0, Expr, Kind));
   return 0;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGMCCodeEmitter.cpp}
 
 \end{frame}
 
@@ -187,19 +181,17 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
     \item Defining a target-specific fixup:
 \end{itemize}
 
-\begin{block}{LEGFixups.h}
-\begin{lstlisting}
+\begin{codebox}
 enum Fixups {
   fixup_leg_pcrel = FirstTargetFixupKind,
   
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
 };
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGFixups.h}
 
-\begin{block}{LEGAsmBackend.cpp}
-\begin{lstlisting}
+\begin{codebox}
 const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
   const static MCFixupKindInfo I[LEG::NumTargetFixupKinds] = {
     // Name          Offset Size Flags
@@ -208,8 +200,8 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
   /* ... */
   return I[K - FirstTargetFixupKind];
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGAsmBackend.cpp}
 
 \end{frame}
 
@@ -246,15 +238,14 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
     \item Add TableGen node definition:
 \end{itemize}
 
-\begin{block}{LEGOperators.td}
-\begin{lstlisting}
+\begin{codebox}
 def MoveImm32Ty : SDTypeProfile<1, 1, [
   SDTCisSameAs<0, 1>, SDTCisInt<0>
 ]>;
 
 def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGOperators.td}
 
 \end{frame}
 
@@ -275,14 +266,13 @@ def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
     \item Set the operation action to 'custom' on given type:
 \end{itemize}
 
-\begin{block}{LEGISelLowering.cpp}
-\begin{lstlisting}
+\begin{codebox}
 LEGISelLowering::LEGISelLowering(/* ... */) {
   /* ... */
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
 
 \end{frame}
 
@@ -299,8 +289,7 @@ LEGISelLowering::LEGISelLowering(/* ... */) {
     \item Use \texttt{DAG.getMachineNode()} in LEGISelDAGToDAG
 \end{itemize}
 
-\begin{block}{LEGISelLowering.cpp}
-\begin{lstlisting}
+\begin{codebox}
 SDValue LEGTargetLowering::LowerConstant(SDValue Op,
                                          SelectionDAG &DAG) const {
   EVT VT = Op.getValueType();
@@ -309,8 +298,8 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
                                             MVT::i32);
   return DAG.getNode(LEGISD::MOVi32, VT, TargetVal);
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
 
 \end{frame}
 
@@ -350,16 +339,15 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
     \end{itemize}
 \end{itemize}
 
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def MOVTi16 : InstLEG<(outs GRRegs:$dst),
                       (ins GRRegs:$src1, i32imm:$src2),
                       "movw $dst, $src2",
                       [/* No pattern */]> {
   let Constraints = "$src1 = $dst";
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -372,18 +360,16 @@ def MOVTi16 : InstLEG<(outs GRRegs:$dst),
     \item The pseudo is lowered by a target hook
 \end{itemize}
 
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
                      [(set i32:$dst, (movei32 i32imm:$src))]> {
   let isPseudo = 1;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 % FIXME split into two slides: pseudo and lowering
-\begin{block}{LEGInstrInfo.cpp}
-\begin{lstlisting}
+\begin{codebox}
 bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
    if (MI->getOpcode() != LEG::MOVi32) return false;
    BuildMI(..., get(LEG::MOVWi16), Dst).addImm(Lo);
@@ -391,8 +377,8 @@ bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
    MBB.erase(MI);
    return true;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
 
 \end{frame}
 
@@ -400,12 +386,12 @@ bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
 
 \begin{frame}{Lowering to multiple instructions}
 
-\begin{itemize}
-    \item Example IR:
-\end{itemize}
+Example IR:
 
 \examplebox[firstline=6,lastline=9]{ex5.ll}
 
-\examplebox[firstline=7,lastline=12]{ex5.s}
+Outputs:
+
+\examplebox[firstline=7,lastline=12,gobble=1]{ex5.s}
 
 \end{frame}
