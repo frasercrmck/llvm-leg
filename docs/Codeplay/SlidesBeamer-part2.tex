@@ -204,11 +204,11 @@ CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 \begin{frame}{Calling convention lowering: LowerReturn()}
 
 \begin{itemize}
-    \item Similar to LowerFormalArguments(), but the other way around
-    \item Define another, 'RetCC\_LEG, TableGen calling convention
+    \item Similar to \texttt{LowerFormalArguments()}, but the other way around
+    \item Define another, \texttt{RetCC\_LEG}, TableGen calling convention
     \item Call 'AnalyzeReturn()' with it
     \item Walk the return value locations and issue DAG nodes
-    \item Return LEGISD::RET instruction
+    \item Return \texttt{LEGISD::RET} instruction
 \end{itemize}
 
 \end{frame}
@@ -218,7 +218,7 @@ CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 \begin{frame}{Calling convention lowering: LowerCall()}
 
 \begin{itemize}
-    \item Hybrid of LowerFormalArguments() and LowerReturn()
+    \item Hybrid of \texttt{LowerFormalArguments()} and \texttt{LowerReturn()}
     \item Not explicitly covered here
 \end{itemize}
 
@@ -229,7 +229,7 @@ CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 \begin{frame}{Describing instructions: Overview}
 
 \begin{itemize}
-    \item Let's start with a simple instruction: ADDrr
+    \item Let's start with a simple instruction: \texttt{ADDrr}
     \item Define it in lib/Target/LEG/LEGInstrInfo.td
     \item What we need to specify:
     \begin{itemize}
