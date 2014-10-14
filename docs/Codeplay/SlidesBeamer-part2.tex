@@ -382,16 +382,16 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 
 What if instructions take immediates?
 
-\begin{codebox}[commandchars=\\\{\}]
-def \codeempha{LEGimm8} : Operand<i32>, ImmLeaf<i32, [{
+\begin{codebox}[commandchars=\\¬|]
+def \codeempha¬LEGimm8| : Operand<i32>, ImmLeaf<i32, [{
   return Imm >= 0 && Imm < 256;
 }]>;
 
 def ADDri : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, \codeempha{i32imm}:$src2),
+                    (ins GRRegs:$src1, \codeempha¬i32imm|:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, 
-                                     \codeempha{LEGimm8}:$src2))]>;
+                                     \codeempha¬LEGimm8|:$src2))]>;
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 
