@@ -100,7 +100,7 @@ int foo(int a, int b) {
 \end{itemize}
 
 \begin{codebox}[commandchars=\\\[\]]
-target datalayout = "e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i64:32-f64:32-a:0:32-n32"
+target datalayout = "e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i64:32-f64-..."
 target triple = "leg"
 
 define i32 @foo(i32 %a, i32 %b) {
@@ -129,8 +129,8 @@ define i32 @foo(i32 %a, i32 %b) {
         % FIXME color formatting for chain and glue
         \begin{itemize}
             \item Data
-            \item Order ("chain")
-            \item Scheduling ("glue")
+            \item \codeemphb{Order ("chain")}
+            \item \codeempha{Scheduling ("glue")}
         \end{itemize}
         \item Typed values
     \end{itemize}

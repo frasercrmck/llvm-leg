@@ -39,12 +39,11 @@ How can we achieve this?
 
 \vspace{1ex}
 
-% FIXME add color formatting
-\begin{codebox}
+\begin{codebox}[commandchars=\\\{\}]
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
-                    [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+                    \codeempha{[(set i32:$dst, (add i32:$src1, i32:$src2))]}>;
 \end{codebox}
 \codecaption[-10.2ex]{LEGInstrInfo.td}
 
@@ -90,18 +89,17 @@ def ADDrr : InstLEG< ... > {
     \item For operand-based encoding, need bit fields with the same names as the operands:
 \end{itemize}
 
-% FIXME add color formatting
-\begin{codebox}
-def ADDrr : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, GRRegs:$src2) ... > {
-  bits<4> src1; bits<4> src2; bits<4> dst;
+\begin{codebox}[commandchars=\\\[\]]
+def ADDrr : InstLEG<(outs GRRegs:\codeemphc[$dst]),
+                    (ins GRRegs:\codeempha[$src1], GRRegs:\codeemphb[$src2]) ... > {
+  bits<4> \codeempha[src1]; bits<4> \codeemphb[src2]; bits<4> \codeemphc[dst];
   let Inst{31-25} = 0b110000;
   let Inst{24-21} = 0b1100;      // Opcode
   let Inst{20}    = 0b0;
-  let Inst{19-16} = src1;        // Operand 1
-  let Inst{15-12} = dst;         // Destination
+  let Inst{19-16} = \codeempha[src1];        // Operand 1
+  let Inst{15-12} = \codeemphc[dst];         // Destination
   let Inst{11-4}  = 0b00000000;
-  let Inst{3-0}   = src2;        // Operand 2
+  let Inst{3-0}   = \codeemphb[src2];        // Operand 2
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 

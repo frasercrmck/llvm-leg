@@ -121,15 +121,14 @@ def CC_LEG : CallingConv<[
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{Calling convention lowering:
-The big picture}
+\begin{frame}[fragile]{Calling convention lowering: The big picture}
 
 \begin{columns}[t]
 \column{.5\textwidth}
-    \begin{codebox}
-define i32 @foo(i32 %a, i32 %b) {
-    %c = add nsw i32 %a, %b
-    ret i32 %c
+    \begin{codebox}[commandchars=\\\[\]]
+define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
+    \codeemphc[%c] = add nsw i32 \codeempha[%a], \codeemphb[%b]
+    ret i32 \codeemphc[%c]
 }
     \end{codebox}
     \codecaption{ex1.ll}
@@ -140,7 +139,7 @@ define i32 @foo(i32 %a, i32 %b) {
             \item LowerReturn()
     \end{itemize}
 \column{.5\textwidth}
-    % FIXME Add 'a', 'b', 'c' circles and color formatting of the .ll example
+    % FIXME Add 'a', 'b', 'c' circles
     \begin{block}{}
         \includegraphics[width = 0.8\textwidth]{examples/ex1-entry-selection-dag.png}
     \end{block}
@@ -186,13 +185,13 @@ define i32 @foo(i32 %a, i32 %b) {
     \end{itemize}
 \end{itemize}
 
-\begin{codebox}
+\begin{codebox}[commandchars=\\\[\]]
 // LEGTargetLowering::LowerFormalArguments()
 SmallVector<CCValAssign, 16> ArgLocs;
 CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
                getTargetMachine(), ArgLocs,
                *DAG.getContext());
-CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
+CCInfo.AnalyzeFormalArguments(Ins, \codeempha[CC_LEG]);
 ...
 \end{codebox}
 \codecaption{LEGISelLowering.cpp}
@@ -256,10 +255,9 @@ CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
     \end{itemize}
 \end{itemize}
 
-% FIXME formatting, move to file
-\begin{codebox}
-def ADDrr : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, GRRegs:$src2),
+\begin{codebox}[commandchars=\\\{\}]
+def ADDrr : InstLEG<\codeempha{(outs GRRegs:$dst)},
+                    \codeempha{(ins GRRegs:$src1, GRRegs:$src2)},
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
@@ -285,12 +283,11 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \end{itemize}
 \end{itemize}
 
-% FIXME formatting, move to file
-\begin{codebox}
+\begin{codebox}[commandchars=\\\{\}]
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
-                    [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+                    \codeempha{[(set i32:$dst, (add i32:$src1, i32:$src2))]}>;
 \end{codebox}
 \codecaption[-10.2ex]{LEGInstrInfo.td}
 
@@ -315,11 +312,10 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \end{codebox}
 \codecaption{ex1.s}
 
-% FIXME formatting, move to file
-\begin{codebox}
+\begin{codebox}[commandchars=\\\{\}]
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
-                    "add $dst, $src1, $src2",
+                    \codeempha{"add $dst, $src1, $src2"},
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
 \codecaption[-10.2ex]{LEGInstrInfo.td}
@@ -386,17 +382,16 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 
 What if instructions take immediates?
 
-% FIXME color formatting
-\begin{codebox}
-def LEGimm8 : Operand<i32>, ImmLeaf<i32, [{
+\begin{codebox}[commandchars=\\\{\}]
+def \codeempha{LEGimm8} : Operand<i32>, ImmLeaf<i32, [{
   return Imm >= 0 && Imm < 256;
 }]>;
 
 def ADDri : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, i32imm:$src2),
+                    (ins GRRegs:$src1, \codeempha{i32imm}:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, 
-                                     LEGimm8:$src2))]>;
+                                     \codeempha{LEGimm8}:$src2))]>;
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 
@@ -423,13 +418,12 @@ Output:
     \item Example: multiply and add instruction (ex3.ll)
 \end{itemize}
 
-% FIXME color formatting
-\begin{codebox}
+\begin{codebox}[commandchars=\\\{\}]
 def MLA : InstLEG<(outs GRRegs:$dst),
                   (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
                   "mla $dst, $src1, $src2, $src3",
                   [(set i32:$dst,
-                   (add (mul i32:$src1, i32:$src2), i32:$src3))]>;
+                   \codeempha{(add \codeemphb{(mul i32:$src1, i32:$src2)}, i32:$src3))}]>;
 \end{codebox}
 \codecaption[-12.2ex]{LEGInstrInfo.td}
 
@@ -546,18 +540,17 @@ class InstLEG<... , string asmstr> : Instruction {
 \end{codebox}
 \codecaption{LEGInstrFormats.t}
 
-% FIXME add color formatting
-\begin{codebox}
+\begin{codebox}[commandchars=\\\[\]]
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
-                    "add $dst, $src1, $src2"> {
+                    \codeempha["add $dst, $src1, $src2"]> {
   ...
 }
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
-    \item 'LEGInstPrinter::printOperand' will be called on each operand.
+    \item \texttt{LEGInstPrinter::printOperand} will be called on each operand.
 \end{itemize}
 
 \end{frame}
@@ -567,7 +560,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \begin{frame}[fragile]{Instruction printer}
 
 \begin{itemize}
-    \item LEGInstPrinter::printOperand is given the stream to print to.
+    \item \texttt{LEGInstPrinter::printOperand} is given the stream to print to.
 \end{itemize}
 
 \begin{codebox}

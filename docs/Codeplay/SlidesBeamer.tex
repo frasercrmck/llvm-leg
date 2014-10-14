@@ -10,9 +10,8 @@
 
 \documentclass[t]{beamer}
 
-\usepackage{graphicx} % graphics
 \usepackage{hyperref} % urls
-\usepackage{booktabs, caption} % table styling
+\usepackage{graphicx} % graphics
 \usepackage[utf8x]{inputenc}
 \usepackage{fancyvrb}
 \usepackage{tcolorbox}
@@ -24,7 +23,8 @@
 {
   \usetheme{codeplay}
   \setbeamercovered{transparent}
-  \setbeamertemplate{items}[circle]
+  \setbeamertemplate{itemize item}[circle]
+  \setbeamertemplate{itemize subitem}{\tiny\raise1.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
 }
 
 % set fonts
@@ -41,10 +41,8 @@
 \definecolor{uilightgray}{RGB}{123,123,123}
 \definecolor{uicyan}{RGB}{0,255,255}
 \definecolor{uipink}{RGB}{255,153,255}
-
-% caption styling
-\DeclareCaptionFont{uiwhite}{\color{uiwhite}}
-\captionsetup{labelfont={uiwhite},textfont=uiwhite}
+\definecolor{uipalegreen}{RGB}{153,255,153}
+\hypersetup{colorlinks,urlcolor=uicyan,linkcolor=uiwhite}
 
 % title slide definition
 \title{Building an LLVM Backend}
@@ -56,7 +54,9 @@
 
 % Code box formatting
 \fvset{fontsize=\scriptsize,tabsize=4}
-\tcbset{colback=uigray,colframe=uilightgray,colupper=uiwhite,left=1pt,right=1pt,top=1pt,bottom=1pt,arc=0pt,toprule=1pt,bottomrule=1pt,leftrule=1pt,rightrule=1pt}
+\tcbset{colback=uigray,colframe=uilightgray,colupper=uiwhite,
+        left=1pt,right=1pt,top=1pt,bottom=1pt,arc=0pt,
+        toprule=1pt,bottomrule=1pt,leftrule=1pt,rightrule=1pt}
 
 \newenvironment{codebox}
  {\VerbatimEnvironment
@@ -77,6 +77,8 @@
 \newcommand{\examplebox}[2][firstline=1]{\sourcebox[#1]{examples/#2}{#2}}
 
 \newcommand{\codeempha}[1]{\textcolor{uipink}{#1}}
+\newcommand{\codeemphb}[1]{\textcolor{uicyan}{#1}}
+\newcommand{\codeemphc}[1]{\textcolor{uipalegreen}{#1}}
 
 % Create a slide for a part and include the source code.
 \newcommand{\talkpart}[3]{%
