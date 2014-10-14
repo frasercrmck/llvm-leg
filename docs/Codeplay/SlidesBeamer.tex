@@ -18,6 +18,7 @@
 \usepackage{listings}
 \lstset{basicstyle={\footnotesize}}
 \usepackage{fancyvrb}
+\usepackage{tcolorbox}
 
 % suppress navigation bar
 \beamertemplatenavigationsymbolsempty
@@ -38,6 +39,11 @@
 % color definitions
 \usepackage{color}
 \definecolor{uiwhite}{RGB}{255, 255, 255}
+\definecolor{uidarkgray}{RGB}{24,24,25}
+\definecolor{uigray}{RGB}{51,51,51}
+\definecolor{uilightgray}{RGB}{123,123,123}
+\definecolor{uicyan}{RGB}{0,255,255}
+\definecolor{uipink}{RGB}{255,153,255}
 
 % caption styling
 \DeclareCaptionFont{uiwhite}{\color{uiwhite}}
@@ -52,30 +58,34 @@
 \date{\today}
 
 % Code box formatting
-\DefineVerbatimEnvironment%
-  {codebox}{Verbatim}
-  {fontsize=\scriptsize,frame=single,tabsize=4}
+\fvset{fontsize=\scriptsize,tabsize=4}
+\tcbset{colback=uigray,colframe=uilightgray,colupper=uiwhite,left=1pt,right=1pt,top=1pt,bottom=1pt,arc=0pt,toprule=1pt,bottomrule=1pt,leftrule=1pt,rightrule=1pt}
+
+\newenvironment{codebox}
+ {\VerbatimEnvironment
+  \begin{tcolorbox}%
+  \begin{Verbatim}}
+ {\end{Verbatim}\end{tcolorbox}}
 
 \newcommand{\codecaption}[1]{%
-  \vspace{-5ex}
-  \hfill\mbox{\footnotesize{#1}\hspace{0.5em}}
+  \vspace{-4.4ex}
+  \hfill\mbox{\footnotesize{\textcolor{uicyan}{#1}}\hspace{0.5em}}
   \vspace*{2ex}}
-
+  
 \newcommand{\sourcebox}[3][firstline=1]{%
-  \fvset{fontsize=\scriptsize,frame=single,tabsize=4}
-  \VerbatimInput[#1]{#2}
+  \begin{tcolorbox}\VerbatimInput[#1]{#2}\end{tcolorbox}
   \codecaption{#3}}
 
 \newcommand{\examplebox}[2][firstline=1]{\sourcebox[#1]{examples/#2}{#2}}
 
-\newcommand{\codeempha}[1]{\textcolor{red}{#1}}
+\newcommand{\codeempha}[1]{\textcolor{uipink}{#1}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
 
-\setbeamertemplate{background}
-{\includegraphics[width=\paperwidth,height=\paperheight]{dark_background_title.png}}
+%\setbeamertemplate{background}
+%{\includegraphics[width=\paperwidth,height=\paperheight]{dark_background_title.png}}
 \setbeamertemplate{footline}[default]
 
 \begin{frame}
@@ -87,8 +97,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Set the background for the rest of the slides.
-\setbeamertemplate{background}
- {\includegraphics[width=\paperwidth,height=\paperheight]{dark_background.png}}
+%\setbeamertemplate{background}
+% {\includegraphics[width=\paperwidth,height=\paperheight]{dark_background.png}}
 \setbeamertemplate{footline}[codeplaytheme]
 
 \section{Introduction}
