@@ -55,19 +55,19 @@ Background
     \item Return value in r0
 \end{itemize}
 
-\begin{Verbatim}[fontsize=\scriptsize,frame=single]
+\begin{codebox}
 int foo(int a, int b) {
     int result = a + b;   // r0 + r1
     return result;        // r0
 }
-\end{Verbatim}
+\end{codebox}
 \codecaption{ex1.c}
 
-\begin{Verbatim}[fontsize=\scriptsize,frame=single]
+\begin{codebox}
 .foo:
     add r0, r0, r1
     b lr
-\end{Verbatim}
+\end{codebox}
 \codecaption{ex1.s}
 
 \end{frame}
@@ -108,8 +108,7 @@ int foo(int a, int b) {
 \end{itemize}
 
 % FIXME color formatting of the add line
-\begin{block}{ex1.ll}
-\begin{lstlisting}
+\begin{codebox}
 target datalayout = "e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i64:32-f64:32-a:0:32-n32"
 target triple = "leg"
 
@@ -117,8 +116,8 @@ define i32 @foo(i32 %a, i32 %b) {
     %c = add nsw i32 %a, %b
     ret i32 %c
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{ex1.ll}
 
 \end{frame}
 
@@ -205,8 +204,6 @@ define i32 @foo(i32 %a, i32 %b) {
     \end{itemize}
 \end{itemize}
 
-\begin{block}{ex1-mi.txt}
-\lstinputlisting{examples/ex1-mi.txt}
-\end{block}
+\sourcebox{examples/ex1-mi.txt}{ex1-mi.txt}
 
 \end{frame}

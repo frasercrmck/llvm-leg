@@ -51,10 +51,19 @@
 
 \date{\today}
 
+% Code box formatting
+\DefineVerbatimEnvironment%
+  {codebox}{Verbatim}
+  {fontsize=\scriptsize,frame=single,tabsize=4}
+
 \newcommand{\codecaption}[1]{%
   \vspace{-5ex}
   \hfill\mbox{\footnotesize{#1}\hspace{0.5em}}
   \vspace*{2ex}}
+
+\newcommand{\sourcebox}[2]{%
+  \VerbatimInput[fontsize=\scriptsize,frame=single,tabsize=4]{#1}
+  \codecaption{#2}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
