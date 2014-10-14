@@ -78,6 +78,17 @@
 
 \newcommand{\codeempha}[1]{\textcolor{uipink}{#1}}
 
+% Create a slide for a part and include the source code.
+\newcommand{\talkpart}[3]{%
+\section{Part #1: #2}
+
+\begin{frame}[c]{Part #1}
+
+\centerline{\LARGE{#2}}
+
+\end{frame}
+\input{#3}}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
@@ -123,21 +134,19 @@
 
 \begin{frame}{Overview}
 
-\begin{itemize}
-    \item Part 1: Background
-    \item Part 2: Creating your own target
-    \item Part 3: How-tos for specific tasks
-    \item Part 4: Troubleshooting and resources
-\end{itemize}
+\tableofcontents[subsectionstyle=hide]
 
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\input{SlidesBeamer-part1.tex}
-\input{SlidesBeamer-part2.tex}
-\input{SlidesBeamer-part3.tex}
-\input{SlidesBeamer-part4.tex}
+\talkpart{1}{Background}{SlidesBeamer-part1.tex}
+
+\talkpart{2}{Creating your own target}{SlidesBeamer-part2.tex}
+
+\talkpart{3}{How-tos for specific tasks}{SlidesBeamer-part3.tex}
+
+\talkpart{4}{Troubleshooting and resources}{SlidesBeamer-part4.tex}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
