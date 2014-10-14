@@ -55,23 +55,20 @@ Background
     \item Return value in r0
 \end{itemize}
 
-\begin{figure}{ex1.c}
 \begin{Verbatim}[fontsize=\scriptsize,frame=single]
 int foo(int a, int b) {
     int result = a + b;   // r0 + r1
     return result;        // r0
 }
 \end{Verbatim}
-\caption{ex1.c}
-\end{figure}
+\codecaption{ex1.c}
 
-\begin{block}{ex1.s}
-\begin{lstlisting}
+\begin{Verbatim}[fontsize=\scriptsize,frame=single]
 .foo:
     add r0, r0, r1
     b lr
-\end{lstlisting}
-\end{block}
+\end{Verbatim}
+\codecaption{ex1.s}
 
 \end{frame}
 
