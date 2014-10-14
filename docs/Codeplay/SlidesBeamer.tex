@@ -61,9 +61,12 @@
   \hfill\mbox{\footnotesize{#1}\hspace{0.5em}}
   \vspace*{2ex}}
 
-\newcommand{\sourcebox}[2]{%
-  \VerbatimInput[fontsize=\scriptsize,frame=single,tabsize=4]{#1}
-  \codecaption{#2}}
+\newcommand{\sourcebox}[3][firstline=1]{%
+  \fvset{fontsize=\scriptsize,frame=single,tabsize=4}
+  \VerbatimInput[#1]{#2}
+  \codecaption{#3}}
+
+\newcommand{\examplebox}[2][firstline=1]{\sourcebox[#1]{examples/#2}{#2}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

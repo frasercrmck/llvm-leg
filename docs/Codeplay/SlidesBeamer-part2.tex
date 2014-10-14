@@ -398,9 +398,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
     \item The previous example translates to:
 \end{itemize}
 
-\begin{block}{ex2-ADDrr-MOVW.s}
-\lstinputlisting[firstline=7,lastline=8]{examples/ex2-ADDrr-MOVW.s}
-\end{block}
+\examplebox[firstline=7,lastline=8]{ex2-ADDrr-MOVW.s}
 
 \end{frame}
 
@@ -427,9 +425,7 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
 \end{lstlisting}
 \end{block}
 
-\begin{block}{ex2-ADDri.s}
-\lstinputlisting[firstline=7,lastline=7]{examples/ex2-ADDri.s}
-\end{block}
+\examplebox[firstline=7,lastline=7]{ex2-ADDri.s}
 
 \end{frame}
 
@@ -501,17 +497,13 @@ def MLA : InstLEG<(outs GRRegs:$dst),
     \item Example that uses the stack:
 \end{itemize}
 
-\begin{block}{ex4.ll}
-\lstinputlisting[firstline=7,lastline=10]{examples/ex4.ll}
-\end{block}
+\examplebox[firstline=7,lastline=10]{ex4.ll}
 
 \begin{itemize}
     \item Output when compiled with -O2:
 \end{itemize}
 
-\begin{block}{ex4-O2.s}
-\lstinputlisting[firstline=7,lastline=11]{examples/ex4-O2.s}
-\end{block}
+\examplebox[firstline=7,lastline=11]{ex4-O2.s}
 
 \end{frame}
 
@@ -638,8 +630,6 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
     \end{itemize}
 \end{itemize}
 
-\begin{block}{ex1.s}
-\lstinputlisting[firstline=1,lastline=10]{examples/ex1.s}
-\end{block}
+\examplebox[firstline=1,lastline=10]{ex1.s}
 
 \end{frame}
