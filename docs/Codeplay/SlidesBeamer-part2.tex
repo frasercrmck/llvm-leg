@@ -271,7 +271,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
-\codecaption{LEGInstrInfo.td}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -300,7 +300,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
-\codecaption{LEGInstrInfo.td}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -330,7 +330,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
-\codecaption{LEGInstrInfo.td}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -384,7 +384,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
     \item The previous example translates to:
 \end{itemize}
 
-\examplebox[firstline=7,lastline=8]{ex2-ADDrr-MOVW.s}
+\examplebox[firstline=7,lastline=8,gobble=1]{ex2-ADDrr-MOVW.s}
 
 \end{frame}
 
@@ -392,9 +392,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 
 \begin{frame}[fragile]{Constants}
 
-\begin{itemize}
-    \item What if instructions take immediates?
-\end{itemize}
+What if instructions take immediates?
 
 % FIXME color formatting
 \begin{codebox}
@@ -410,7 +408,9 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 
-\examplebox[firstline=7,lastline=7]{ex2-ADDri.s}
+Output:
+
+\examplebox[firstline=7,lastline=7,gobble=1]{ex2-ADDri.s}
 
 \end{frame}
 
@@ -439,6 +439,7 @@ def MLA : InstLEG<(outs GRRegs:$dst),
                   [(set i32:$dst,
                    (add (mul i32:$src1, i32:$src2), i32:$src3))]>;
 \end{codebox}
+\codecaption[-12.2ex]{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -513,6 +514,7 @@ BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
 // LEGInstrInfo::copyPhysReg()
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
   .addReg(SrcReg, getKillRegState(KillSrc));
+
 \end{codebox}
 \codecaption{LEGFrameLowering.cpp}
 

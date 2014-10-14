@@ -2,7 +2,7 @@
 
 \begin{frame}{Part 3}
 
-Background
+How-tos for specific tasks
 
 \end{frame}
 
@@ -29,9 +29,9 @@ Background
 
 \begin{frame}[fragile]{Instruction encoding}
 
-\begin{itemize}
-    \item Example encoding:
-\end{itemize}
+Example encoding:
+
+\vspace{1ex}
 
 \begin{tabular}{|c|c|c|c|c|c|c|c|}
 \hline 
@@ -41,9 +41,11 @@ Background
 \hline 
 \end{tabular}
 
-\begin{itemize}
-    \item How can we achieve this?
-\end{itemize}
+\vspace{2ex}
+
+How can we achieve this?
+
+\vspace{1ex}
 
 % FIXME add color formatting
 \begin{codebox}
@@ -52,7 +54,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
-\codecaption{LEGInstrInfo.td}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -121,9 +123,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 
 \begin{frame}[fragile]{Instruction encoding}
 
-\begin{itemize}
-    \item Returns the encoding of each operand...
-\end{itemize}
+Returns the encoding of each operand...
 
 \begin{codebox}
 unsigned LEGMCCodeEmitter::

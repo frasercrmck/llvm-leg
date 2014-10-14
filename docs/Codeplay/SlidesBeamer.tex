@@ -64,11 +64,12 @@
   \begin{Verbatim}}
  {\end{Verbatim}\end{tcolorbox}}
 
-\newcommand{\codecaption}[1]{%
-  \vspace{-4.4ex}
-  \hfill\mbox{\footnotesize{\textcolor{uicyan}{#1}}\hspace{0.5em}}
+% Code caption that comes after the code box.
+\newcommand{\codecaption}[2][-4.4ex]{%
+  \vspace{#1}
+  \hfill\mbox{\footnotesize{\textcolor{uicyan}{#2}}\hspace{0.5em}}
   \vspace*{2ex}}
-  
+
 \newcommand{\sourcebox}[3][firstline=1]{%
   \begin{tcolorbox}\VerbatimInput[#1]{#2}\end{tcolorbox}
   \codecaption{#3}}
