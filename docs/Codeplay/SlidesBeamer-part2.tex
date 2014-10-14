@@ -62,8 +62,7 @@ Creating your own target
     \item Referenced as “LEG::R0” in C++
 \end{itemize}
 
-\begin{block}{LEGRegisterInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 class LEGReg<bits<16> Enc, string n> : Register<n> {
   Let HWEncoding = Enc;
   let Namespace = "LEG";
@@ -72,8 +71,8 @@ class LEGReg<bits<16> Enc, string n> : Register<n> {
 def R0 : LEGReg< 0, "r0" >;
 ...
 def SP : LEGReg< 10, "sp" >;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
 
 \end{frame}
 
@@ -85,24 +84,22 @@ def SP : LEGReg< 10, "sp" >;
     \item Can automate trivial definitions
 \end{itemize}
 
-\begin{block}{LEGRegisterInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 foreach i = 0-9 in {
   def R#i : R<i, "r"#i>;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
 
 \begin{itemize}
     \item Group registers into register classes
 \end{itemize}
 
-\begin{block}{LEGRegisterInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def GRRegs : RegisterClass<"LEG", [i32], 32,
   (add SP, (sequence "R%i", 0, 9))>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
 
 \end{frame}
 
@@ -110,8 +107,7 @@ def GRRegs : RegisterClass<"LEG", [i32], 32,
 
 \begin{frame}[fragile]{Calling convention lowering: TableGen}
 
-\begin{block}{LEGCallingConv.td}
-\begin{lstlisting}
+\begin{codebox}
 def CC_LEG : CallingConv<[
     // Promote i8/i16 arguments to i32
     CCIfType<[i8, i16], CCPromoteToType<i32>>,
@@ -122,8 +118,8 @@ def CC_LEG : CallingConv<[
     // Fall-back, and use the stack
     CCIfType<[i32], CCAssignToStack<4, 4>>
   ]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGCallingConv.td}
 
 \begin{itemize}
     \item Generates functions used in ISelLowering via function pointers.
@@ -138,14 +134,13 @@ The big picture}
 
 \begin{columns}[t]
 \column{.5\textwidth}
-    \begin{block}{ex1.ll}
-    \begin{lstlisting}
+    \begin{codebox}
 define i32 @foo(i32 %a, i32 %b) {
     %c = add nsw i32 %a, %b
     ret i32 %c
 }
-    \end{lstlisting}
-    \end{block}
+    \end{codebox}
+    \codecaption{ex1.ll}
 
     Two target hooks:
     \begin{itemize}
@@ -199,8 +194,7 @@ define i32 @foo(i32 %a, i32 %b) {
     \end{itemize}
 \end{itemize}
 
-\begin{block}{LEGISelLowering.cpp}
-\begin{lstlisting}
+\begin{codebox}
 // LEGTargetLowering::LowerFormalArguments()
 SmallVector<CCValAssign, 16> ArgLocs;
 CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
@@ -208,8 +202,8 @@ CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
                *DAG.getContext());
 CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 ...
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
 
 \end{frame}
 
@@ -271,14 +265,13 @@ CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 \end{itemize}
 
 % FIXME formatting, move to file
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -301,14 +294,13 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \end{itemize}
 
 % FIXME formatting, move to file
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -325,22 +317,20 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \end{itemize}
 
 % FIXME move to file
-\begin{block}{ex1.s}
-\begin{lstlisting}
+\begin{codebox}
 # BB#0:                                 # %entry
 	add r0, r0, r1
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{ex1.s}
 
 % FIXME formatting, move to file
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \end{frame}
 
@@ -352,18 +342,15 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \item Compiling this IR produces the following error:
 \end{itemize}
 
-\begin{block}{ex2.ll}
-\begin{lstlisting}
+\begin{codebox}
 %2 = add nsw i32 %1, 2
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{ex2.ll}
 
-\begin{block}{}
-\begin{lstlisting}
+\begin{codebox}
 LLVM ERROR: Cannot select: 0x29d4350: i32 = Constant<2> [ID=2]
 In function: main
-\end{lstlisting}
-\end{block}
+\end{codebox}
 
 \begin{itemize}
     \item Specify how to generate ('materialize') constants
@@ -383,16 +370,15 @@ In function: main
     \item Let's define this move instruction:
 \end{itemize}
 
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def MOVWi16 : InstLEG<(outs GRRegs:$dst),
                       (ins i32imm:$src),
                       "movw $dst, $src",
                       [(set i32:$dst, i32imm:$src)]> {
   let isMoveImm = 1;
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
     \item The previous example translates to:
@@ -411,8 +397,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 \end{itemize}
 
 % FIXME color formatting
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def LEGimm8 : Operand<i32>, ImmLeaf<i32, [{
   return Imm >= 0 && Imm < 256;
 }]>;
@@ -422,8 +407,8 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
                     "add $dst, $src1, $src2",
                     [(set i32:$dst, (add i32:$src1, 
                                      LEGimm8:$src2))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \examplebox[firstline=7,lastline=7]{ex2-ADDri.s}
 
@@ -447,15 +432,13 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
 \end{itemize}
 
 % FIXME color formatting
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def MLA : InstLEG<(outs GRRegs:$dst),
                   (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
                   "mla $dst, $src1, $src2, $src3",
                   [(set i32:$dst,
                    (add (mul i32:$src1, i32:$src2), i32:$src3))]>;
-\end{lstlisting}
-\end{block}
+\end{codebox}
 
 \end{frame}
 
@@ -517,8 +500,7 @@ def MLA : InstLEG<(outs GRRegs:$dst),
     \item Minimal implementation:
 \end{itemize}
 
-\begin{block}{LEGFrameLowering.cpp}
-\begin{lstlisting}
+\begin{codebox}
 // LEGInstrInfo::storeRegToStackSlot()
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STR))
   .addReg(SrcReg, getKillRegState(KillSrc))
@@ -531,8 +513,8 @@ BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
 // LEGInstrInfo::copyPhysReg()
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
   .addReg(SrcReg, getKillRegState(KillSrc));
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGFrameLowering.cpp}
 
 \end{frame}
 
@@ -562,25 +544,23 @@ BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
     \item TableGen provides the 'AsmString' field:
 \end{itemize}
 
-\begin{block}{LEGInstrFormats.td}
-\begin{lstlisting}
+\begin{codebox}
 class InstLEG<... , string asmstr> : Instruction {
   let AsmString = asmstr;
   ...
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrFormats.t}
 
 % FIXME add color formatting
-\begin{block}{LEGInstrInfo.td}
-\begin{lstlisting}
+\begin{codebox}
 def ADDrr : InstLEG<(outs GRRegs:$dst),
                     (ins GRRegs:$src1, GRRegs:$src2),
                     "add $dst, $src1, $src2"> {
   ...
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
     \item 'LEGInstPrinter::printOperand' will be called on each operand.
@@ -596,8 +576,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \item LEGInstPrinter::printOperand is given the stream to print to.
 \end{itemize}
 
-\begin{block}{LEGInstPrinter.cpp}
-\begin{lstlisting}
+\begin{codebox}
 void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
                                   raw_ostream &O) {
   const MCOperand &Op = MI->getOperand(No);
@@ -613,8 +592,8 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
   }
   /* ... */
 }
-\end{lstlisting}
-\end{block}
+\end{codebox}
+\codecaption{LEGInstPrinter.cpp}
 
 \end{frame}
 
