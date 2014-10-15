@@ -1370,9 +1370,11 @@ def : Mips16Pat<(MipsJmpLink (i32 texternalsym:$dst)),
                 (Jal16 texternalsym:$dst)>;
 
 // Indirect branch
-def: Mips16Pat<
-  (brind CPU16Regs:$rs),
-  (JrcRx16 CPU16Regs:$rs)>;
+def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
+  // Ensure that the addition of MIPS32r6/MIPS64r6 support does not change
+  // MIPS16's behaviour.
+  let AddedComplexity = 1;
+}
 
 // Jump and Link (Call)
 let isCall=1, hasDelaySlot=0 in
@@ -1769,9 +1771,9 @@ def: Mips16Pat
 
 //
 // For constants, llvm transforms this to:
-// x > (k -1) and then reverses the operands to use setlt. So this pattern
+// x > (k - 1) and then reverses the operands to use setlt. So this pattern
 // is not used now by the compiler. (Presumably checking that k-1 does not
-// overflow). The compiler never uses this at a the current time, due to
+// overflow). The compiler never uses this at the current time, due to
 // other optimizations.
 //
 //def: Mips16Pat

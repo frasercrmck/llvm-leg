@@ -1,7 +1,7 @@
 ; RUN: llc < %s -march=r600 -mcpu=redwood | FileCheck --check-prefix=EG-CHECK --check-prefix=FUNC %s
 ; RUN: llc < %s -march=r600 -mcpu=verde -verify-machineinstrs | FileCheck --check-prefix=SI-CHECK --check-prefix=FUNC %s
 
-;FUNC-LABEL: @test1:
+;FUNC-LABEL: {{^}}test1:
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
 
 ;SI-CHECK: V_ADD_I32_e32 [[REG:v[0-9]+]], {{v[0-9]+, v[0-9]+}}
@@ -16,7 +16,7 @@ define void @test1(i32 addrspace(1)* %out, i32 addrspace(1)* %in) {
   ret void
 }
 
-;FUNC-LABEL: @test2:
+;FUNC-LABEL: {{^}}test2:
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
 
@@ -32,7 +32,7 @@ define void @test2(<2 x i32> addrspace(1)* %out, <2 x i32> addrspace(1)* %in) {
   ret void
 }
 
-;FUNC-LABEL: @test4:
+;FUNC-LABEL: {{^}}test4:
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
 ;EG-CHECK: ADD_INT {{[* ]*}}T{{[0-9]+\.[XYZW], T[0-9]+\.[XYZW], T[0-9]+\.[XYZW]}}
@@ -52,7 +52,7 @@ define void @test4(<4 x i32> addrspace(1)* %out, <4 x i32> addrspace(1)* %in) {
   ret void
 }
 
-; FUNC-LABEL: @test8
+; FUNC-LABEL: {{^}}test8:
 ; EG-CHECK: ADD_INT
 ; EG-CHECK: ADD_INT
 ; EG-CHECK: ADD_INT
@@ -76,7 +76,7 @@ entry:
   ret void
 }
 
-; FUNC-LABEL: @test16
+; FUNC-LABEL: {{^}}test16:
 ; EG-CHECK: ADD_INT
 ; EG-CHECK: ADD_INT
 ; EG-CHECK: ADD_INT
@@ -116,8 +116,8 @@ entry:
   ret void
 }
 
-; FUNC-LABEL: @add64
-; SI-CHECK: S_ADD_I32
+; FUNC-LABEL: {{^}}add64:
+; SI-CHECK: S_ADD_U32
 ; SI-CHECK: S_ADDC_U32
 define void @add64(i64 addrspace(1)* %out, i64 %a, i64 %b) {
 entry:
@@ -131,12 +131,35 @@ entry:
 ; %0 will be stored in a VGPR, so the comiler will be forced to copy %a
 ; to a VGPR before doing the add.
 
-; FUNC-LABEL: @add64_sgpr_vgpr
+; FUNC-LABEL: {{^}}add64_sgpr_vgpr:
 ; SI-CHECK-NOT: V_ADDC_U32_e32 s
 define void @add64_sgpr_vgpr(i64 addrspace(1)* %out, i64 %a, i64 addrspace(1)* %in) {
 entry:
   %0 = load i64 addrspace(1)* %in
   %1 = add i64 %a, %0
   store i64 %1, i64 addrspace(1)* %out
+  ret void
+}
+
+; Test i64 add inside a branch.
+; FUNC-LABEL: {{^}}add64_in_branch:
+; SI-CHECK: S_ADD_U32
+; SI-CHECK: S_ADDC_U32
+define void @add64_in_branch(i64 addrspace(1)* %out, i64 addrspace(1)* %in, i64 %a, i64 %b, i64 %c) {
+entry:
+  %0 = icmp eq i64 %a, 0
+  br i1 %0, label %if, label %else
+
+if:
+  %1 = load i64 addrspace(1)* %in
+  br label %endif
+
+else:
+  %2 = add i64 %a, %b
+  br label %endif
+
+endif:
+  %3 = phi i64 [%1, %if], [%2, %else]
+  store i64 %3, i64 addrspace(1)* %out
   ret void
 }

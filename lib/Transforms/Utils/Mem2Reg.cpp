@@ -12,15 +12,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "mem2reg"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "mem2reg"
 
 STATISTIC(NumPromoted, "Number of alloca's promoted");
 
@@ -37,6 +39,7 @@ namespace {
     bool runOnFunction(Function &F) override;
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<AssumptionTracker>();
       AU.addRequired<DominatorTreeWrapperPass>();
       AU.setPreservesCFG();
       // This is a cluster of orthogonal Transforms
@@ -50,6 +53,7 @@ namespace {
 char PromotePass::ID = 0;
 INITIALIZE_PASS_BEGIN(PromotePass, "mem2reg", "Promote Memory to Register",
                 false, false)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_END(PromotePass, "mem2reg", "Promote Memory to Register",
                 false, false)
@@ -62,6 +66,7 @@ bool PromotePass::runOnFunction(Function &F) {
   bool Changed  = false;
 
   DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+  AssumptionTracker *AT = &getAnalysis<AssumptionTracker>();
 
   while (1) {
     Allocas.clear();
@@ -75,7 +80,7 @@ bool PromotePass::runOnFunction(Function &F) {
 
     if (Allocas.empty()) break;
 
-    PromoteMemToReg(Allocas, DT);
+    PromoteMemToReg(Allocas, DT, nullptr, AT);
     NumPromoted += Allocas.size();
     Changed = true;
   }

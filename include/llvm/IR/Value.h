@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares the Value class. 
+// This file declares the Value class.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,6 +31,7 @@ class Constant;
 class DataLayout;
 class Function;
 class GlobalAlias;
+class GlobalObject;
 class GlobalValue;
 class GlobalVariable;
 class InlineAsm;
@@ -52,7 +53,7 @@ typedef StringMapEntry<Value*> ValueName;
 //                                 Value Class
 //===----------------------------------------------------------------------===//
 
-/// This is a very important LLVM class. It is the base class of all values 
+/// This is a very important LLVM class. It is the base class of all values
 /// computed by a program that may be used as operands to other values. Value is
 /// the super class of other important classes such as Instruction and Function.
 /// All Values have a Type. Type is not a subclass of Value. Some values can
@@ -66,6 +67,13 @@ typedef StringMapEntry<Value*> ValueName;
 ///
 /// @brief LLVM Value Representation
 class Value {
+  Type *VTy;
+  Use *UseList;
+
+  friend class ValueSymbolTable; // Allow ValueSymbolTable to directly mod Name.
+  friend class ValueHandleBase;
+  ValueName *Name;
+
   const unsigned char SubclassID;   // Subclass identifier (for isa/dyn_cast)
   unsigned char HasValueHandle : 1; // Has a ValueHandle pointing to this?
 protected:
@@ -76,6 +84,11 @@ protected:
   unsigned char SubclassOptionalData : 7;
 
 private:
+  /// SubclassData - This member is defined by this class, but is not used for
+  /// anything.  Subclasses can use it to hold whatever state they find useful.
+  /// This field is initialized to zero by the ctor.
+  unsigned short SubclassData;
+
   template <typename UseT> // UseT == 'Use' or 'const Use'
   class use_iterator_impl
       : public std::iterator<std::forward_iterator_tag, UseT *, ptrdiff_t> {
@@ -166,26 +179,10 @@ private:
     unsigned getOperandNo() const { return UI->getOperandNo(); }
   };
 
-  /// SubclassData - This member is defined by this class, but is not used for
-  /// anything.  Subclasses can use it to hold whatever state they find useful.
-  /// This field is initialized to zero by the ctor.
-  unsigned short SubclassData;
-
-  Type *VTy;
-  Use *UseList;
-
-  friend class ValueSymbolTable; // Allow ValueSymbolTable to directly mod Name.
-  friend class ValueHandleBase;
-  ValueName *Name;
-
   void operator=(const Value &) LLVM_DELETED_FUNCTION;
   Value(const Value &) LLVM_DELETED_FUNCTION;
 
 protected:
-  /// printCustom - Value subclasses can override this to implement custom
-  /// printing behavior.
-  virtual void printCustom(raw_ostream &O) const;
-
   Value(Type *Ty, unsigned scid);
 public:
   virtual ~Value();
@@ -196,14 +193,15 @@ public:
 
   /// print - Implement operator<< on Value.
   ///
-  void print(raw_ostream &O, AssemblyAnnotationWriter *AAW = 0) const;
+  void print(raw_ostream &O) const;
 
   /// \brief Print the name of this Value out to the specified raw_ostream.
   /// This is useful when you just want to print 'int %reg126', not the
   /// instruction that generated it. If you specify a Module for context, then
   /// even constanst get pretty-printed; for example, the type of a null
   /// pointer is printed symbolically.
-  void printAsOperand(raw_ostream &O, bool PrintType = true, const Module *M = 0) const;
+  void printAsOperand(raw_ostream &O, bool PrintType = true,
+                      const Module *M = nullptr) const;
 
   /// All values are typed, get the type of this value.
   ///
@@ -213,10 +211,10 @@ public:
   LLVMContext &getContext() const;
 
   // All values can potentially be named.
-  bool hasName() const { return Name != 0 && SubclassID != MDStringVal; }
+  bool hasName() const { return Name != nullptr && SubclassID != MDStringVal; }
   ValueName *getValueName() const { return Name; }
   void setValueName(ValueName *VN) { Name = VN; }
-  
+
   /// getName() - Return a constant reference to the value's name. This is cheap
   /// and guaranteed to return the same reference as long as the value is not
   /// modified.
@@ -228,9 +226,9 @@ public:
   /// \param Name The new name; or "" if the value's name should be removed.
   void setName(const Twine &Name);
 
-  
+
   /// takeName - transfer the name from V to this value, setting V's name to
-  /// empty.  It is an error to call V->takeName(V). 
+  /// empty.  It is an error to call V->takeName(V).
   void takeName(Value *V);
 
   /// replaceAllUsesWith - Go through the uses list for this definition and make
@@ -242,7 +240,7 @@ public:
   //----------------------------------------------------------------------
   // Methods for handling the chain of uses of this Value.
   //
-  bool               use_empty() const { return UseList == 0; }
+  bool               use_empty() const { return UseList == nullptr; }
 
   typedef use_iterator_impl<Use>       use_iterator;
   typedef use_iterator_impl<const Use> const_use_iterator;
@@ -303,7 +301,7 @@ public:
   void addUse(Use &U) { U.addToList(&UseList); }
 
   /// An enumeration for keeping track of the concrete subclass of Value that
-  /// is actually instantiated. Values of this enumeration are kept in the 
+  /// is actually instantiated. Values of this enumeration are kept in the
   /// Value classes SubclassID field. They are used for concrete type
   /// identification.
   enum ValueTy {
@@ -327,9 +325,6 @@ public:
     MDNodeVal,                // This is an instance of MDNode
     MDStringVal,              // This is an instance of MDString
     InlineAsmVal,             // This is an instance of InlineAsm
-    PseudoSourceValueVal,     // This is an instance of PseudoSourceValue
-    FixedStackPseudoSourceValueVal, // This is an instance of 
-                                    // FixedStackPseudoSourceValue
     InstructionVal,           // This is an instance of Instruction
     // Enum values starting at InstructionVal are used for Instructions;
     // don't add new values here!
@@ -435,8 +430,8 @@ public:
 
   /// isDereferenceablePointer - Test if this value is always a pointer to
   /// allocated and suitably aligned memory for a simple load or store.
-  bool isDereferenceablePointer() const;
-  
+  bool isDereferenceablePointer(const DataLayout *DL = nullptr) const;
+
   /// DoPHITranslation - If this value is a PHI node with CurBB as its parent,
   /// return the value in the PHI node corresponding to PredBB.  If not, return
   /// ourself.  This is useful if you want to know the value something has in a
@@ -447,11 +442,11 @@ public:
                                 const BasicBlock *PredBB) const{
     return const_cast<Value*>(this)->DoPHITranslation(CurBB, PredBB);
   }
-  
+
   /// MaximumAlignment - This is the greatest alignment value supported by
   /// load, store, and alloca instructions, and global values.
   static const unsigned MaximumAlignment = 1u << 29;
-  
+
   /// mutateType - Mutate the type of this Value to be of the specified type.
   /// Note that this is an extremely dangerous operation which can create
   /// completely invalid IR very easily.  It is strongly recommended that you
@@ -460,7 +455,38 @@ public:
   void mutateType(Type *Ty) {
     VTy = Ty;
   }
-  
+
+  /// \brief Sort the use-list.
+  ///
+  /// Sorts the Value's use-list by Cmp using a stable mergesort.  Cmp is
+  /// expected to compare two \a Use references.
+  template <class Compare> void sortUseList(Compare Cmp);
+
+  /// \brief Reverse the use-list.
+  void reverseUseList();
+
+private:
+  /// \brief Merge two lists together.
+  ///
+  /// Merges \c L and \c R using \c Cmp.  To enable stable sorts, always pushes
+  /// "equal" items from L before items from R.
+  ///
+  /// \return the first element in the list.
+  ///
+  /// \note Completely ignores \a Use::Prev (doesn't read, doesn't update).
+  template <class Compare>
+  static Use *mergeUseLists(Use *L, Use *R, Compare Cmp) {
+    Use *Merged;
+    mergeUseListsImpl(L, R, &Merged, Cmp);
+    return Merged;
+  }
+
+  /// \brief Tail-recursive helper for \a mergeUseLists().
+  ///
+  /// \param[out] Next the first element in the list.
+  template <class Compare>
+  static void mergeUseListsImpl(Use *L, Use *R, Use **Next, Compare Cmp);
+
 protected:
   unsigned short getSubclassDataFromValue() const { return SubclassData; }
   void setValueSubclassData(unsigned short D) { SubclassData = D; }
@@ -470,13 +496,98 @@ inline raw_ostream &operator<<(raw_ostream &OS, const Value &V) {
   V.print(OS);
   return OS;
 }
-  
+
 void Use::set(Value *V) {
   if (Val) removeFromList();
   Val = V;
   if (V) V->addUse(*this);
 }
 
+template <class Compare> void Value::sortUseList(Compare Cmp) {
+  if (!UseList || !UseList->Next)
+    // No need to sort 0 or 1 uses.
+    return;
+
+  // Note: this function completely ignores Prev pointers until the end when
+  // they're fixed en masse.
+
+  // Create a binomial vector of sorted lists, visiting uses one at a time and
+  // merging lists as necessary.
+  const unsigned MaxSlots = 32;
+  Use *Slots[MaxSlots];
+
+  // Collect the first use, turning it into a single-item list.
+  Use *Next = UseList->Next;
+  UseList->Next = nullptr;
+  unsigned NumSlots = 1;
+  Slots[0] = UseList;
+
+  // Collect all but the last use.
+  while (Next->Next) {
+    Use *Current = Next;
+    Next = Current->Next;
+
+    // Turn Current into a single-item list.
+    Current->Next = nullptr;
+
+    // Save Current in the first available slot, merging on collisions.
+    unsigned I;
+    for (I = 0; I < NumSlots; ++I) {
+      if (!Slots[I])
+        break;
+
+      // Merge two lists, doubling the size of Current and emptying slot I.
+      //
+      // Since the uses in Slots[I] originally preceded those in Current, send
+      // Slots[I] in as the left parameter to maintain a stable sort.
+      Current = mergeUseLists(Slots[I], Current, Cmp);
+      Slots[I] = nullptr;
+    }
+    // Check if this is a new slot.
+    if (I == NumSlots) {
+      ++NumSlots;
+      assert(NumSlots <= MaxSlots && "Use list bigger than 2^32");
+    }
+
+    // Found an open slot.
+    Slots[I] = Current;
+  }
+
+  // Merge all the lists together.
+  assert(Next && "Expected one more Use");
+  assert(!Next->Next && "Expected only one Use");
+  UseList = Next;
+  for (unsigned I = 0; I < NumSlots; ++I)
+    if (Slots[I])
+      // Since the uses in Slots[I] originally preceded those in UseList, send
+      // Slots[I] in as the left parameter to maintain a stable sort.
+      UseList = mergeUseLists(Slots[I], UseList, Cmp);
+
+  // Fix the Prev pointers.
+  for (Use *I = UseList, **Prev = &UseList; I; I = I->Next) {
+    I->setPrev(Prev);
+    Prev = &I->Next;
+  }
+}
+
+template <class Compare>
+void Value::mergeUseListsImpl(Use *L, Use *R, Use **Next, Compare Cmp) {
+  if (!L) {
+    *Next = R;
+    return;
+  }
+  if (!R) {
+    *Next = L;
+    return;
+  }
+  if (Cmp(*R, *L)) {
+    *Next = R;
+    mergeUseListsImpl(L, R->Next, &R->Next, Cmp);
+    return;
+  }
+  *Next = L;
+  mergeUseListsImpl(L->Next, R, &L->Next, Cmp);
+}
 
 // isa - Provide some specializations of isa so that we don't have to include
 // the subtype header files to test to see if the value is a subclass...
@@ -494,55 +605,60 @@ template <> struct isa_impl<Argument, Value> {
   }
 };
 
-template <> struct isa_impl<InlineAsm, Value> { 
+template <> struct isa_impl<InlineAsm, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::InlineAsmVal;
   }
 };
 
-template <> struct isa_impl<Instruction, Value> { 
+template <> struct isa_impl<Instruction, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() >= Value::InstructionVal;
   }
 };
 
-template <> struct isa_impl<BasicBlock, Value> { 
+template <> struct isa_impl<BasicBlock, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::BasicBlockVal;
   }
 };
 
-template <> struct isa_impl<Function, Value> { 
+template <> struct isa_impl<Function, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::FunctionVal;
   }
 };
 
-template <> struct isa_impl<GlobalVariable, Value> { 
+template <> struct isa_impl<GlobalVariable, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::GlobalVariableVal;
   }
 };
 
-template <> struct isa_impl<GlobalAlias, Value> { 
+template <> struct isa_impl<GlobalAlias, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::GlobalAliasVal;
   }
 };
 
-template <> struct isa_impl<GlobalValue, Value> { 
+template <> struct isa_impl<GlobalValue, Value> {
   static inline bool doit(const Value &Val) {
-    return isa<GlobalVariable>(Val) || isa<Function>(Val) ||
-      isa<GlobalAlias>(Val);
+    return isa<GlobalObject>(Val) || isa<GlobalAlias>(Val);
   }
 };
 
-template <> struct isa_impl<MDNode, Value> { 
+template <> struct isa_impl<GlobalObject, Value> {
+  static inline bool doit(const Value &Val) {
+    return isa<GlobalVariable>(Val) || isa<Function>(Val);
+  }
+};
+
+template <> struct isa_impl<MDNode, Value> {
   static inline bool doit(const Value &Val) {
     return Val.getValueID() == Value::MDNodeVal;
   }
 };
-  
+
 // Value* is only 4-byte aligned.
 template<>
 class PointerLikeTypeTraits<Value*> {
@@ -559,7 +675,7 @@ public:
 DEFINE_ISA_CONVERSION_FUNCTIONS(Value, LLVMValueRef)
 
 /* Specialized opaque value conversions.
- */ 
+ */
 inline Value **unwrap(LLVMValueRef *Vals) {
   return reinterpret_cast<Value**>(Vals);
 }

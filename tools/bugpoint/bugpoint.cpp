@@ -99,7 +99,7 @@ namespace {
   class AddToDriver : public FunctionPassManager {
     BugDriver &D;
   public:
-    AddToDriver(BugDriver &_D) : FunctionPassManager(0), D(_D) {}
+    AddToDriver(BugDriver &_D) : FunctionPassManager(nullptr), D(_D) {}
 
     void add(Pass *P) override {
       const void *ID = P->getPassID();
@@ -179,8 +179,8 @@ int main(int argc, char **argv) {
 
   if (StandardLinkOpts) {
     PassManagerBuilder Builder;
-    Builder.populateLTOPassManager(PM, /*Internalize=*/true,
-                                   /*RunInliner=*/true);
+    Builder.Inliner = createFunctionInliningPass();
+    Builder.populateLTOPassManager(PM);
   }
 
   if (OptLevelO1 || OptLevelO2 || OptLevelO3) {

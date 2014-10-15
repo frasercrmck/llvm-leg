@@ -11,7 +11,6 @@
 #include "MCTargetDesc/X86FixupKinds.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFixupKindInfo.h"
@@ -37,23 +36,29 @@ MCDisableArithRelaxation("mc-x86-disable-arith-relaxation",
 
 static unsigned getFixupKindLog2Size(unsigned Kind) {
   switch (Kind) {
-  default: llvm_unreachable("invalid fixup kind!");
+  default:
+    llvm_unreachable("invalid fixup kind!");
   case FK_PCRel_1:
   case FK_SecRel_1:
-  case FK_Data_1: return 0;
+  case FK_Data_1:
+    return 0;
   case FK_PCRel_2:
   case FK_SecRel_2:
-  case FK_Data_2: return 1;
+  case FK_Data_2:
+    return 1;
   case FK_PCRel_4:
   case X86::reloc_riprel_4byte:
   case X86::reloc_riprel_4byte_movq_load:
   case X86::reloc_signed_4byte:
   case X86::reloc_global_offset_table:
   case FK_SecRel_4:
-  case FK_Data_4: return 2;
+  case FK_Data_4:
+    return 2;
   case FK_PCRel_8:
   case FK_SecRel_8:
-  case FK_Data_8: return 3;
+  case FK_Data_8:
+  case X86::reloc_global_offset_table8:
+    return 3;
   }
 }
 
@@ -67,11 +72,12 @@ public:
 };
 
 class X86AsmBackend : public MCAsmBackend {
-  StringRef CPU;
+  const StringRef CPU;
   bool HasNopl;
+  const uint64_t MaxNopLength;
 public:
   X86AsmBackend(const Target &T, StringRef _CPU)
-    : MCAsmBackend(), CPU(_CPU) {
+    : MCAsmBackend(), CPU(_CPU), MaxNopLength(_CPU == "slm" ? 7 : 15) {
     HasNopl = CPU != "generic" && CPU != "i386" && CPU != "i486" &&
               CPU != "i586" && CPU != "pentium" && CPU != "pentium-mmx" &&
               CPU != "i686" && CPU != "k6" && CPU != "k6-2" && CPU != "k6-3" &&
@@ -325,7 +331,7 @@ bool X86AsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
   // 15 is the longest single nop instruction.  Emit as many 15-byte nops as
   // needed, then emit a nop of the remaining length.
   do {
-    const uint8_t ThisNopLength = (uint8_t) std::min(Count, (uint64_t) 15);
+    const uint8_t ThisNopLength = (uint8_t) std::min(Count, MaxNopLength);
     const uint8_t Prefixes = ThisNopLength <= 10 ? 0 : ThisNopLength - 10;
     for (uint8_t i = 0; i < Prefixes; i++)
       OW->Write8(0x66);
@@ -356,6 +362,17 @@ public:
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createX86ELFObjectWriter(OS, /*IsELF64*/ false, OSABI, ELF::EM_386);
+  }
+};
+
+class ELFX86_X32AsmBackend : public ELFX86AsmBackend {
+public:
+  ELFX86_X32AsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+      : ELFX86AsmBackend(T, OSABI, CPU) {}
+
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
+    return createX86ELFObjectWriter(OS, /*IsELF64*/ false, OSABI,
+                                    ELF::EM_X86_64);
   }
 };
 
@@ -419,10 +436,30 @@ class DarwinX86AsmBackend : public X86AsmBackend {
   bool Is64Bit;
 
   unsigned OffsetSize;                   ///< Offset of a "push" instruction.
-  unsigned PushInstrSize;                ///< Size of a "push" instruction.
   unsigned MoveInstrSize;                ///< Size of a "move" instruction.
-  unsigned StackDivide;                  ///< Amount to adjust stack stize by.
+  unsigned StackDivide;                  ///< Amount to adjust stack size by.
 protected:
+  /// \brief Size of a "push" instruction for the given register.
+  unsigned PushInstrSize(unsigned Reg) const {
+    switch (Reg) {
+      case X86::EBX:
+      case X86::ECX:
+      case X86::EDX:
+      case X86::EDI:
+      case X86::ESI:
+      case X86::EBP:
+      case X86::RBX:
+      case X86::RBP:
+        return 1;
+      case X86::R12:
+      case X86::R13:
+      case X86::R14:
+      case X86::R15:
+        return 2;
+    }
+    return 1;
+  }
+
   /// \brief Implementation of algorithm to generate the compact unwind encoding
   /// for the CFI instructions.
   uint32_t
@@ -512,7 +549,7 @@ protected:
         unsigned Reg = MRI.getLLVMRegNum(Inst.getRegister(), true);
         SavedRegs[SavedRegIdx++] = Reg;
         StackAdjust += OffsetSize;
-        InstrOffset += PushInstrSize;
+        InstrOffset += PushInstrSize(Reg);
         break;
       }
       }
@@ -706,16 +743,14 @@ public:
     OffsetSize = Is64Bit ? 8 : 4;
     MoveInstrSize = Is64Bit ? 3 : 2;
     StackDivide = Is64Bit ? 8 : 4;
-    PushInstrSize = 1;
   }
 };
 
 class DarwinX86_32AsmBackend : public DarwinX86AsmBackend {
-  bool SupportsCU;
 public:
   DarwinX86_32AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                         StringRef CPU, bool SupportsCU)
-    : DarwinX86AsmBackend(T, MRI, CPU, false), SupportsCU(SupportsCU) {}
+                         StringRef CPU)
+      : DarwinX86AsmBackend(T, MRI, CPU, false) {}
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createX86MachObjectWriter(OS, /*Is64Bit=*/false,
@@ -726,20 +761,16 @@ public:
   /// \brief Generate the compact unwind encoding for the CFI instructions.
   uint32_t generateCompactUnwindEncoding(
                              ArrayRef<MCCFIInstruction> Instrs) const override {
-    return SupportsCU ? generateCompactUnwindEncodingImpl(Instrs) : 0;
+    return generateCompactUnwindEncodingImpl(Instrs);
   }
 };
 
 class DarwinX86_64AsmBackend : public DarwinX86AsmBackend {
-  bool SupportsCU;
   const MachO::CPUSubTypeX86 Subtype;
 public:
   DarwinX86_64AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                         StringRef CPU, bool SupportsCU,
-                         MachO::CPUSubTypeX86 st)
-    : DarwinX86AsmBackend(T, MRI, CPU, true), SupportsCU(SupportsCU),
-      Subtype(st) {
-  }
+                         StringRef CPU, MachO::CPUSubTypeX86 st)
+      : DarwinX86AsmBackend(T, MRI, CPU, true), Subtype(st) {}
 
   MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createX86MachObjectWriter(OS, /*Is64Bit=*/true,
@@ -782,7 +813,7 @@ public:
   /// \brief Generate the compact unwind encoding for the CFI instructions.
   uint32_t generateCompactUnwindEncoding(
                              ArrayRef<MCCFIInstruction> Instrs) const override {
-    return SupportsCU ? generateCompactUnwindEncodingImpl(Instrs) : 0;
+    return generateCompactUnwindEncodingImpl(Instrs);
   }
 };
 
@@ -795,9 +826,7 @@ MCAsmBackend *llvm::createX86_32AsmBackend(const Target &T,
   Triple TheTriple(TT);
 
   if (TheTriple.isOSBinFormatMachO())
-    return new DarwinX86_32AsmBackend(T, MRI, CPU,
-                                      TheTriple.isMacOSX() &&
-                                      !TheTriple.isMacOSXVersionLT(10, 7));
+    return new DarwinX86_32AsmBackend(T, MRI, CPU);
 
   if (TheTriple.isOSWindows() && !TheTriple.isOSBinFormatELF())
     return new WindowsX86AsmBackend(T, false, CPU);
@@ -817,14 +846,15 @@ MCAsmBackend *llvm::createX86_64AsmBackend(const Target &T,
         StringSwitch<MachO::CPUSubTypeX86>(TheTriple.getArchName())
             .Case("x86_64h", MachO::CPU_SUBTYPE_X86_64_H)
             .Default(MachO::CPU_SUBTYPE_X86_64_ALL);
-    return new DarwinX86_64AsmBackend(T, MRI, CPU,
-                                      TheTriple.isMacOSX() &&
-                                      !TheTriple.isMacOSXVersionLT(10, 7), CS);
+    return new DarwinX86_64AsmBackend(T, MRI, CPU, CS);
   }
 
   if (TheTriple.isOSWindows() && !TheTriple.isOSBinFormatELF())
     return new WindowsX86AsmBackend(T, true, CPU);
 
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
+
+  if (TheTriple.getEnvironment() == Triple::GNUX32)
+    return new ELFX86_X32AsmBackend(T, OSABI, CPU);
   return new ELFX86_64AsmBackend(T, OSABI, CPU);
 }

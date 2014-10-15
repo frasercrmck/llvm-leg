@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NVPTX_ALLOCA_HOISTING_H_
-#define NVPTX_ALLOCA_HOISTING_H_
+#ifndef LLVM_LIB_TARGET_NVPTX_NVPTXALLOCAHOISTING_H
+#define LLVM_LIB_TARGET_NVPTX_NVPTXALLOCAHOISTING_H
 
 #include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/IR/DataLayout.h"
@@ -30,21 +30,21 @@ public:
   static char ID; // Pass ID
   NVPTXAllocaHoisting() : FunctionPass(ID) {}
 
-  void getAnalysisUsage(AnalysisUsage &AU) const {
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<DataLayoutPass>();
     AU.addPreserved("stack-protector");
     AU.addPreserved<MachineFunctionAnalysis>();
   }
 
-  virtual const char *getPassName() const {
+  const char *getPassName() const override {
     return "NVPTX specific alloca hoisting";
   }
 
-  virtual bool runOnFunction(Function &function);
+  bool runOnFunction(Function &function) override;
 };
 
 extern FunctionPass *createAllocaHoisting();
 
 } // end namespace llvm
 
-#endif // NVPTX_ALLOCA_HOISTING_H_
+#endif

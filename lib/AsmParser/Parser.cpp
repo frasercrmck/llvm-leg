@@ -17,45 +17,47 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/system_error.h"
 #include <cstring>
+#include <system_error>
 using namespace llvm;
 
-Module *llvm::ParseAssembly(MemoryBuffer *F,
-                            Module *M,
-                            SMDiagnostic &Err,
-                            LLVMContext &Context) {
+bool llvm::parseAssemblyInto(MemoryBufferRef F, Module &M, SMDiagnostic &Err) {
   SourceMgr SM;
-  SM.AddNewSourceBuffer(F, SMLoc());
+  std::unique_ptr<MemoryBuffer> Buf = MemoryBuffer::getMemBuffer(F, false);
+  SM.AddNewSourceBuffer(std::move(Buf), SMLoc());
 
-  // If we are parsing into an existing module, do it.
-  if (M)
-    return LLParser(F, SM, Err, M).Run() ? 0 : M;
-
-  // Otherwise create a new module.
-  std::unique_ptr<Module> M2(new Module(F->getBufferIdentifier(), Context));
-  if (LLParser(F, SM, Err, M2.get()).Run())
-    return 0;
-  return M2.release();
+  return LLParser(F.getBuffer(), SM, Err, &M).Run();
 }
 
-Module *llvm::ParseAssemblyFile(const std::string &Filename, SMDiagnostic &Err,
-                                LLVMContext &Context) {
-  std::unique_ptr<MemoryBuffer> File;
-  if (error_code ec = MemoryBuffer::getFileOrSTDIN(Filename, File)) {
+std::unique_ptr<Module> llvm::parseAssembly(MemoryBufferRef F,
+                                            SMDiagnostic &Err,
+                                            LLVMContext &Context) {
+  std::unique_ptr<Module> M =
+      make_unique<Module>(F.getBufferIdentifier(), Context);
+
+  if (parseAssemblyInto(F, *M, Err))
+    return nullptr;
+
+  return std::move(M);
+}
+
+std::unique_ptr<Module> llvm::parseAssemblyFile(StringRef Filename,
+                                                SMDiagnostic &Err,
+                                                LLVMContext &Context) {
+  ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+      MemoryBuffer::getFileOrSTDIN(Filename);
+  if (std::error_code EC = FileOrErr.getError()) {
     Err = SMDiagnostic(Filename, SourceMgr::DK_Error,
-                       "Could not open input file: " + ec.message());
-    return 0;
+                       "Could not open input file: " + EC.message());
+    return nullptr;
   }
 
-  return ParseAssembly(File.release(), 0, Err, Context);
+  return parseAssembly(FileOrErr.get()->getMemBufferRef(), Err, Context);
 }
 
-Module *llvm::ParseAssemblyString(const char *AsmString, Module *M,
-                                  SMDiagnostic &Err, LLVMContext &Context) {
-  MemoryBuffer *F =
-    MemoryBuffer::getMemBuffer(StringRef(AsmString, strlen(AsmString)),
-                               "<string>");
-
-  return ParseAssembly(F, M, Err, Context);
+std::unique_ptr<Module> llvm::parseAssemblyString(StringRef AsmString,
+                                                  SMDiagnostic &Err,
+                                                  LLVMContext &Context) {
+  MemoryBufferRef F(AsmString, "<string>");
+  return parseAssembly(F, Err, Context);
 }

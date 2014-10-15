@@ -7,8 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "processimplicitdefs"
-
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -18,8 +16,11 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "processimplicitdefs"
 
 namespace {
 /// Process IMPLICIT_DEF instructions and make sure there is one implicit_def
@@ -138,8 +139,8 @@ bool ProcessImplicitDefs::runOnMachineFunction(MachineFunction &MF) {
 
   bool Changed = false;
 
-  TII = MF.getTarget().getInstrInfo();
-  TRI = MF.getTarget().getRegisterInfo();
+  TII = MF.getSubtarget().getInstrInfo();
+  TRI = MF.getSubtarget().getRegisterInfo();
   MRI = &MF.getRegInfo();
   assert(MRI->isSSA() && "ProcessImplicitDefs only works on SSA form.");
   assert(WorkList.empty() && "Inconsistent worklist state");

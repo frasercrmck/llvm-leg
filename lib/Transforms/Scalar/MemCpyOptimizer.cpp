@@ -12,11 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "memcpyopt"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/MemoryDependenceAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/DataLayout.h"
@@ -32,6 +32,8 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include <list>
 using namespace llvm;
+
+#define DEBUG_TYPE "memcpyopt"
 
 STATISTIC(NumMemCpyInstr, "Number of memcpy instructions deleted");
 STATISTIC(NumMemSetInfer, "Number of memsets inferred");
@@ -49,7 +51,7 @@ static int64_t GetOffsetFromIndex(const GEPOperator *GEP, unsigned Idx,
   int64_t Offset = 0;
   for (unsigned i = Idx, e = GEP->getNumOperands(); i != e; ++i, ++GTI) {
     ConstantInt *OpC = dyn_cast<ConstantInt>(GEP->getOperand(i));
-    if (OpC == 0)
+    if (!OpC)
       return VariableIdxFound = true;
     if (OpC->isZero()) continue;  // No offset.
 
@@ -89,12 +91,12 @@ static bool IsPointerOffset(Value *Ptr1, Value *Ptr2, int64_t &Offset,
 
   // If one pointer is a GEP and the other isn't, then see if the GEP is a
   // constant offset from the base, as in "P" and "gep P, 1".
-  if (GEP1 && GEP2 == 0 && GEP1->getOperand(0)->stripPointerCasts() == Ptr2) {
+  if (GEP1 && !GEP2 && GEP1->getOperand(0)->stripPointerCasts() == Ptr2) {
     Offset = -GetOffsetFromIndex(GEP1, 1, VariableIdxFound, TD);
     return !VariableIdxFound;
   }
 
-  if (GEP2 && GEP1 == 0 && GEP2->getOperand(0)->stripPointerCasts() == Ptr1) {
+  if (GEP2 && !GEP1 && GEP2->getOperand(0)->stripPointerCasts() == Ptr1) {
     Offset = GetOffsetFromIndex(GEP2, 1, VariableIdxFound, TD);
     return !VariableIdxFound;
   }
@@ -317,9 +319,9 @@ namespace {
     static char ID; // Pass identification, replacement for typeid
     MemCpyOpt() : FunctionPass(ID) {
       initializeMemCpyOptPass(*PassRegistry::getPassRegistry());
-      MD = 0;
-      TLI = 0;
-      DL = 0;
+      MD = nullptr;
+      TLI = nullptr;
+      DL = nullptr;
     }
 
     bool runOnFunction(Function &F) override;
@@ -328,6 +330,7 @@ namespace {
     // This transformation requires dominator postdominator info
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
+      AU.addRequired<AssumptionTracker>();
       AU.addRequired<DominatorTreeWrapperPass>();
       AU.addRequired<MemoryDependenceAnalysis>();
       AU.addRequired<AliasAnalysis>();
@@ -360,6 +363,7 @@ FunctionPass *llvm::createMemCpyOptPass() { return new MemCpyOpt(); }
 
 INITIALIZE_PASS_BEGIN(MemCpyOpt, "memcpyopt", "MemCpy Optimization",
                       false, false)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MemoryDependenceAnalysis)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfo)
@@ -373,7 +377,7 @@ INITIALIZE_PASS_END(MemCpyOpt, "memcpyopt", "MemCpy Optimization",
 /// attempts to merge them together into a memcpy/memset.
 Instruction *MemCpyOpt::tryMergingIntoMemset(Instruction *StartInst,
                                              Value *StartPtr, Value *ByteVal) {
-  if (DL == 0) return 0;
+  if (!DL) return nullptr;
 
   // Okay, so we now have a single store that can be splatable.  Scan to find
   // all subsequent stores of the same value to offset from the same pointer.
@@ -426,7 +430,7 @@ Instruction *MemCpyOpt::tryMergingIntoMemset(Instruction *StartInst,
   // If we have no ranges, then we just had a single store with nothing that
   // could be merged in.  This is a very common case of course.
   if (Ranges.empty())
-    return 0;
+    return nullptr;
 
   // If we had at least one store that could be merged in, add the starting
   // store as well.  We try to avoid this unless there is at least something
@@ -440,7 +444,7 @@ Instruction *MemCpyOpt::tryMergingIntoMemset(Instruction *StartInst,
 
   // Now that we have full information about ranges, loop over the ranges and
   // emit memset's for anything big enough to be worthwhile.
-  Instruction *AMemSet = 0;
+  Instruction *AMemSet = nullptr;
   for (MemsetRanges::const_iterator I = Ranges.begin(), E = Ranges.end();
        I != E; ++I) {
     const MemsetRange &Range = *I;
@@ -491,7 +495,7 @@ Instruction *MemCpyOpt::tryMergingIntoMemset(Instruction *StartInst,
 bool MemCpyOpt::processStore(StoreInst *SI, BasicBlock::iterator &BBI) {
   if (!SI->isSimple()) return false;
 
-  if (DL == 0) return false;
+  if (!DL) return false;
 
   // Detect cases where we're performing call slot forwarding, but
   // happen to be using a load-store pair to implement it, rather than
@@ -500,7 +504,7 @@ bool MemCpyOpt::processStore(StoreInst *SI, BasicBlock::iterator &BBI) {
     if (LI->isSimple() && LI->hasOneUse() &&
         LI->getParent() == SI->getParent()) {
       MemDepResult ldep = MD->getDependency(LI);
-      CallInst *C = 0;
+      CallInst *C = nullptr;
       if (ldep.isClobber() && !isa<MemCpyInst>(ldep.getInst()))
         C = dyn_cast<CallInst>(ldep.getInst());
 
@@ -512,7 +516,7 @@ bool MemCpyOpt::processStore(StoreInst *SI, BasicBlock::iterator &BBI) {
         for (BasicBlock::iterator I = --BasicBlock::iterator(SI),
                                   E = C; I != E; --I) {
           if (AA.getModRefInfo(&*I, StoreLoc) != AliasAnalysis::NoModRef) {
-            C = 0;
+            C = nullptr;
             break;
           }
         }
@@ -603,7 +607,7 @@ bool MemCpyOpt::performCallSlotOptzn(Instruction *cpy,
     return false;
 
   // Check that all of src is copied to dest.
-  if (DL == 0) return false;
+  if (!DL) return false;
 
   ConstantInt *srcArraySize = dyn_cast<ConstantInt>(srcAlloca->getArraySize());
   if (!srcArraySize)
@@ -672,16 +676,30 @@ bool MemCpyOpt::performCallSlotOptzn(Instruction *cpy,
     if (isa<BitCastInst>(U) || isa<AddrSpaceCastInst>(U)) {
       for (User *UU : U->users())
         srcUseList.push_back(UU);
-    } else if (GetElementPtrInst *G = dyn_cast<GetElementPtrInst>(U)) {
-      if (G->hasAllZeroIndices())
-        for (User *UU : U->users())
-          srcUseList.push_back(UU);
-      else
-        return false;
-    } else if (U != C && U != cpy) {
-      return false;
+      continue;
     }
+    if (GetElementPtrInst *G = dyn_cast<GetElementPtrInst>(U)) {
+      if (!G->hasAllZeroIndices())
+        return false;
+
+      for (User *UU : U->users())
+        srcUseList.push_back(UU);
+      continue;
+    }
+    if (const IntrinsicInst *IT = dyn_cast<IntrinsicInst>(U))
+      if (IT->getIntrinsicID() == Intrinsic::lifetime_start ||
+          IT->getIntrinsicID() == Intrinsic::lifetime_end)
+        continue;
+
+    if (U != C && U != cpy)
+      return false;
   }
+
+  // Check that src isn't captured by the called function since the
+  // transformation can cause aliasing issues in that case.
+  for (unsigned i = 0, e = CS.arg_size(); i != e; ++i)
+    if (CS.getArgument(i) == cpySrc && !CS.doesNotCapture(i))
+      return false;
 
   // Since we're changing the parameter to the callsite, we need to make sure
   // that what would be the new parameter dominates the callsite.
@@ -846,7 +864,7 @@ bool MemCpyOpt::processMemCpy(MemCpyInst *M) {
 
   // The optimizations after this point require the memcpy size.
   ConstantInt *CopySize = dyn_cast<ConstantInt>(M->getLength());
-  if (CopySize == 0) return false;
+  if (!CopySize) return false;
 
   // The are three possible optimizations we can do for memcpy:
   //   a) memcpy-memcpy xform which exposes redundance for DSE.
@@ -929,7 +947,7 @@ bool MemCpyOpt::processMemMove(MemMoveInst *M) {
 
 /// processByValArgument - This is called on every byval argument in call sites.
 bool MemCpyOpt::processByValArgument(CallSite CS, unsigned ArgNo) {
-  if (DL == 0) return false;
+  if (!DL) return false;
 
   // Find out what feeds this byval argument.
   Value *ByValArg = CS.getArgument(ArgNo);
@@ -946,13 +964,13 @@ bool MemCpyOpt::processByValArgument(CallSite CS, unsigned ArgNo) {
   // a memcpy, see if we can byval from the source of the memcpy instead of the
   // result.
   MemCpyInst *MDep = dyn_cast<MemCpyInst>(DepInfo.getInst());
-  if (MDep == 0 || MDep->isVolatile() ||
+  if (!MDep || MDep->isVolatile() ||
       ByValArg->stripPointerCasts() != MDep->getDest())
     return false;
 
   // The length of the memcpy must be larger or equal to the size of the byval.
   ConstantInt *C1 = dyn_cast<ConstantInt>(MDep->getLength());
-  if (C1 == 0 || C1->getValue().getZExtValue() < ByValSize)
+  if (!C1 || C1->getValue().getZExtValue() < ByValSize)
     return false;
 
   // Get the alignment of the byval.  If the call doesn't specify the alignment,
@@ -962,8 +980,11 @@ bool MemCpyOpt::processByValArgument(CallSite CS, unsigned ArgNo) {
 
   // If it is greater than the memcpy, then we check to see if we can force the
   // source of the memcpy to the alignment we need.  If we fail, we bail out.
+  AssumptionTracker *AT = &getAnalysis<AssumptionTracker>();
+  DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   if (MDep->getAlignment() < ByValAlign &&
-      getOrEnforceKnownAlignment(MDep->getSource(),ByValAlign, DL) < ByValAlign)
+      getOrEnforceKnownAlignment(MDep->getSource(),ByValAlign,
+                                 DL, AT, CS.getInstruction(), &DT) < ByValAlign)
     return false;
 
   // Verify that the copied-from memory doesn't change in between the memcpy and
@@ -1043,7 +1064,7 @@ bool MemCpyOpt::runOnFunction(Function &F) {
   bool MadeChange = false;
   MD = &getAnalysis<MemoryDependenceAnalysis>();
   DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
-  DL = DLP ? &DLP->getDataLayout() : 0;
+  DL = DLP ? &DLP->getDataLayout() : nullptr;
   TLI = &getAnalysis<TargetLibraryInfo>();
 
   // If we don't have at least memset and memcpy, there is little point of doing
@@ -1058,6 +1079,6 @@ bool MemCpyOpt::runOnFunction(Function &F) {
     MadeChange = true;
   }
 
-  MD = 0;
+  MD = nullptr;
   return MadeChange;
 }

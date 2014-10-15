@@ -156,3 +156,94 @@ define <2 x i64> @test18(<2 x i64> %x) nounwind {
 ; CHECK-NEXT: sub <2 x i64> zeroinitializer, %x
 ; CHECK-NEXT: ret <2 x i64>
 }
+
+define i32 @test19(i32 %x) {
+  %A = udiv i32 1, %x
+  ret i32 %A
+; CHECK-LABEL: @test19(
+; CHECK-NEXT: icmp eq i32 %x, 1
+; CHECK-NEXT: zext i1 %{{.*}} to i32
+; CHECK-NEXT ret i32
+}
+
+define i32 @test20(i32 %x) {
+  %A = sdiv i32 1, %x
+  ret i32 %A
+; CHECK-LABEL: @test20(
+; CHECK-NEXT: add i32 %x, 1
+; CHECK-NEXT: icmp ult i32 %{{.*}}, 3
+; CHECK-NEXT: select i1 %{{.*}}, i32 %x, i32 {{.*}}
+; CHECK-NEXT: ret i32
+}
+
+define i32 @test21(i32 %a) {
+  %shl = shl nsw i32 %a, 2
+  %div = sdiv i32 %shl, 12
+  ret i32 %div
+; CHECK-LABEL: @test21(
+; CHECK-NEXT: %div = sdiv i32 %a, 3
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test22(i32 %a) {
+  %mul = mul nsw i32 %a, 3
+  %div = sdiv i32 %mul, 12
+  ret i32 %div
+; CHECK-LABEL: @test22(
+; CHECK-NEXT: %div = sdiv i32 %a, 4
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test23(i32 %a) {
+  %shl = shl nuw i32 %a, 2
+  %div = udiv i32 %shl, 12
+  ret i32 %div
+; CHECK-LABEL: @test23(
+; CHECK-NEXT: %div = udiv i32 %a, 3
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test24(i32 %a) {
+  %mul = mul nuw i32 %a, 3
+  %div = udiv i32 %mul, 12
+  ret i32 %div
+; CHECK-LABEL: @test24(
+; CHECK-NEXT: %div = lshr i32 %a, 2
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test25(i32 %a) {
+  %shl = shl nsw i32 %a, 2
+  %div = sdiv i32 %shl, 2
+  ret i32 %div
+; CHECK-LABEL: @test25(
+; CHECK-NEXT: %div = shl nsw i32 %a, 1
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test26(i32 %a) {
+  %mul = mul nsw i32 %a, 12
+  %div = sdiv i32 %mul, 3
+  ret i32 %div
+; CHECK-LABEL: @test26(
+; CHECK-NEXT: %div = shl nsw i32 %a, 2
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test27(i32 %a) {
+  %shl = shl nuw i32 %a, 2
+  %div = udiv i32 %shl, 2
+  ret i32 %div
+; CHECK-LABEL: @test27(
+; CHECK-NEXT: %div = shl nuw i32 %a, 1
+; CHECK-NEXT: ret i32 %div
+}
+
+define i32 @test28(i32 %a) {
+  %mul = mul nuw i32 %a, 36
+  %div = udiv i32 %mul, 3
+  ret i32 %div
+; CHECK-LABEL: @test28(
+; CHECK-NEXT: %div = mul nuw i32 %a, 12
+; CHECK-NEXT: ret i32 %div
+}

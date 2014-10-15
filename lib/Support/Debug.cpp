@@ -27,6 +27,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/circular_raw_ostream.h"
+#include "llvm/Support/ManagedStatic.h"
 
 using namespace llvm;
 
@@ -50,14 +51,14 @@ DebugBufferSize("debug-buffer-size",
                 cl::Hidden,
                 cl::init(0));
 
-static std::string CurrentDebugType;
+static ManagedStatic<std::string> CurrentDebugType;
 
 namespace {
 
 struct DebugOnlyOpt {
   void operator=(const std::string &Val) const {
     DebugFlag |= !Val.empty();
-    CurrentDebugType = Val;
+    *CurrentDebugType = Val;
   }
 };
 
@@ -86,7 +87,7 @@ static void debug_user_sig_handler(void *Cookie) {
 // with the -debug-only=X option.
 //
 bool llvm::isCurrentDebugType(const char *DebugType) {
-  return CurrentDebugType.empty() || DebugType == CurrentDebugType;
+  return CurrentDebugType->empty() || DebugType == *CurrentDebugType;
 }
 
 /// setCurrentDebugType - Set the current debug type, as if the -debug-only=X
@@ -94,7 +95,7 @@ bool llvm::isCurrentDebugType(const char *DebugType) {
 /// debug output to be produced.
 ///
 void llvm::setCurrentDebugType(const char *Type) {
-  CurrentDebugType = Type;
+  *CurrentDebugType = Type;
 }
 
 /// dbgs - Return a circular-buffered debug stream.
@@ -109,7 +110,7 @@ raw_ostream &llvm::dbgs() {
       if (EnableDebugBuffering && DebugFlag && DebugBufferSize != 0)
         // TODO: Add a handler for SIGUSER1-type signals so the user can
         // force a debug dump.
-        sys::AddSignalHandler(&debug_user_sig_handler, 0);
+        sys::AddSignalHandler(&debug_user_sig_handler, nullptr);
       // Otherwise we've already set the debug stream buffer size to
       // zero, disabling buffering so it will output directly to errs().
     }

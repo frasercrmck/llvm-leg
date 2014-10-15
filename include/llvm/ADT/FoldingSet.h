@@ -137,7 +137,7 @@ public:
 
   public:
 
-    Node() : NextInFoldingSetBucket(0) {}
+    Node() : NextInFoldingSetBucket(nullptr) {}
 
     // Accessors
     void *getNextInBucket() const { return NextInFoldingSetBucket; }
@@ -269,7 +269,7 @@ class FoldingSetNodeIDRef {
   const unsigned *Data;
   size_t Size;
 public:
-  FoldingSetNodeIDRef() : Data(0), Size(0) {}
+  FoldingSetNodeIDRef() : Data(nullptr), Size(0) {}
   FoldingSetNodeIDRef(const unsigned *D, size_t S) : Data(D), Size(S) {}
 
   /// ComputeHash - Compute a strong hash value for this FoldingSetNodeIDRef,
@@ -792,6 +792,14 @@ public:
 template<typename T> struct FoldingSetTrait<T*> {
   static inline void Profile(T *X, FoldingSetNodeID &ID) {
     ID.AddPointer(X);
+  }
+};
+template <typename T1, typename T2>
+struct FoldingSetTrait<std::pair<T1, T2>> {
+  static inline void Profile(const std::pair<T1, T2> &P,
+                             llvm::FoldingSetNodeID &ID) {
+    ID.Add(P.first);
+    ID.Add(P.second);
   }
 };
 } // End of namespace llvm.

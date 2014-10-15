@@ -29,36 +29,27 @@
 
 using namespace llvm;
 
-typedef std::pair<std::string, std::string> SectionGroupPair;
-
-typedef StringMap<const MCSectionMachO*> MachOUniqueMapTy;
-typedef std::map<SectionGroupPair, const MCSectionELF *> ELFUniqueMapTy;
-typedef std::map<SectionGroupPair, const MCSectionCOFF *> COFFUniqueMapTy;
-
 MCContext::MCContext(const MCAsmInfo *mai, const MCRegisterInfo *mri,
                      const MCObjectFileInfo *mofi, const SourceMgr *mgr,
                      bool DoAutoReset)
     : SrcMgr(mgr), MAI(mai), MRI(mri), MOFI(mofi), Allocator(),
       Symbols(Allocator), UsedNames(Allocator), NextUniqueID(0),
       CurrentDwarfLoc(0, 0, 0, DWARF2_FLAG_IS_STMT, 0, 0), DwarfLocSeen(false),
-      GenDwarfForAssembly(false), GenDwarfFileNumber(0),
+      GenDwarfForAssembly(false), GenDwarfFileNumber(0), DwarfVersion(4),
       AllowTemporaryLabels(true), DwarfCompileUnitID(0),
       AutoReset(DoAutoReset) {
 
-  error_code EC = llvm::sys::fs::current_path(CompilationDir);
+  std::error_code EC = llvm::sys::fs::current_path(CompilationDir);
   if (EC)
     CompilationDir.clear();
 
-  MachOUniquingMap = 0;
-  ELFUniquingMap = 0;
-  COFFUniquingMap = 0;
-
   SecureLogFile = getenv("AS_SECURE_LOG_FILE");
-  SecureLog = 0;
+  SecureLog = nullptr;
   SecureLogUsed = false;
 
-  if (SrcMgr && SrcMgr->getNumBuffers() > 0)
-    MainFileName = SrcMgr->getMemoryBuffer(0)->getBufferIdentifier();
+  if (SrcMgr && SrcMgr->getNumBuffers())
+    MainFileName =
+        SrcMgr->getMemoryBuffer(SrcMgr->getMainFileID())->getBufferIdentifier();
 }
 
 MCContext::~MCContext() {
@@ -82,19 +73,18 @@ void MCContext::reset() {
   Symbols.clear();
   Allocator.Reset();
   Instances.clear();
+  CompilationDir.clear();
+  MainFileName.clear();
   MCDwarfLineTablesCUMap.clear();
+  SectionStartEndSyms.clear();
   MCGenDwarfLabelEntries.clear();
   DwarfDebugFlags = StringRef();
   DwarfCompileUnitID = 0;
   CurrentDwarfLoc = MCDwarfLoc(0,0,0,DWARF2_FLAG_IS_STMT,0,0);
 
-  // If we have the MachO uniquing map, free it.
-  delete (MachOUniqueMapTy*)MachOUniquingMap;
-  delete (ELFUniqueMapTy*)ELFUniquingMap;
-  delete (COFFUniqueMapTy*)COFFUniquingMap;
-  MachOUniquingMap = 0;
-  ELFUniquingMap = 0;
-  COFFUniquingMap = 0;
+  MachOUniquingMap.clear();
+  ELFUniquingMap.clear();
+  COFFUniquingMap.clear();
 
   NextUniqueID = 0;
   AllowTemporaryLabels = true;
@@ -225,11 +215,6 @@ getMachOSection(StringRef Segment, StringRef Section,
   // may not have the same flags as the requested section, if so this should be
   // diagnosed by the client as an error.
 
-  // Create the map if it doesn't already exist.
-  if (MachOUniquingMap == 0)
-    MachOUniquingMap = new MachOUniqueMapTy();
-  MachOUniqueMapTy &Map = *(MachOUniqueMapTy*)MachOUniquingMap;
-
   // Form the name to look up.
   SmallString<64> Name;
   Name += Segment;
@@ -237,7 +222,7 @@ getMachOSection(StringRef Segment, StringRef Section,
   Name += Section;
 
   // Do the lookup, if we have a hit, return it.
-  const MCSectionMachO *&Entry = Map[Name.str()];
+  const MCSectionMachO *&Entry = MachOUniquingMap[Name.str()];
   if (Entry) return Entry;
 
   // Otherwise, return a new section.
@@ -251,69 +236,71 @@ getELFSection(StringRef Section, unsigned Type, unsigned Flags,
   return getELFSection(Section, Type, Flags, Kind, 0, "");
 }
 
+void MCContext::renameELFSection(const MCSectionELF *Section, StringRef Name) {
+  StringRef GroupName;
+  if (const MCSymbol *Group = Section->getGroup())
+    GroupName = Group->getName();
+
+  ELFUniquingMap.erase(SectionGroupPair(Section->getSectionName(), GroupName));
+  auto I =
+      ELFUniquingMap.insert(std::make_pair(SectionGroupPair(Name, GroupName),
+                                           Section)).first;
+  StringRef CachedName = I->first.first;
+  const_cast<MCSectionELF*>(Section)->setSectionName(CachedName);
+}
+
 const MCSectionELF *MCContext::
 getELFSection(StringRef Section, unsigned Type, unsigned Flags,
               SectionKind Kind, unsigned EntrySize, StringRef Group) {
-  if (ELFUniquingMap == 0)
-    ELFUniquingMap = new ELFUniqueMapTy();
-  ELFUniqueMapTy &Map = *(ELFUniqueMapTy*)ELFUniquingMap;
-
-  SmallString<32> ZDebugName;
-  if (MAI->compressDebugSections() && Section.startswith(".debug_") &&
-      Section != ".debug_frame" && Section != ".debug_line")
-    Section = (".z" + Section.drop_front(1)).toStringRef(ZDebugName);
-
   // Do the lookup, if we have a hit, return it.
-  std::pair<ELFUniqueMapTy::iterator, bool> Entry = Map.insert(
-      std::make_pair(SectionGroupPair(Section, Group), (MCSectionELF *)0));
-  if (!Entry.second) return Entry.first->second;
+  auto IterBool = ELFUniquingMap.insert(
+      std::make_pair(SectionGroupPair(Section, Group), nullptr));
+  auto &Entry = *IterBool.first;
+  if (!IterBool.second) return Entry.second;
 
   // Possibly refine the entry size first.
   if (!EntrySize) {
     EntrySize = MCSectionELF::DetermineEntrySize(Kind);
   }
 
-  MCSymbol *GroupSym = NULL;
+  MCSymbol *GroupSym = nullptr;
   if (!Group.empty())
     GroupSym = GetOrCreateSymbol(Group);
 
-  MCSectionELF *Result = new (*this) MCSectionELF(
-      Entry.first->first.first, Type, Flags, Kind, EntrySize, GroupSym);
-  Entry.first->second = Result;
+  StringRef CachedName = Entry.first.first;
+  MCSectionELF *Result = new (*this)
+      MCSectionELF(CachedName, Type, Flags, Kind, EntrySize, GroupSym);
+  Entry.second = Result;
   return Result;
 }
 
 const MCSectionELF *MCContext::CreateELFGroupSection() {
   MCSectionELF *Result =
     new (*this) MCSectionELF(".group", ELF::SHT_GROUP, 0,
-                             SectionKind::getReadOnly(), 4, NULL);
+                             SectionKind::getReadOnly(), 4, nullptr);
   return Result;
 }
 
-const MCSectionCOFF *
-MCContext::getCOFFSection(StringRef Section, unsigned Characteristics,
-                          SectionKind Kind, StringRef COMDATSymName,
-                          int Selection, const MCSectionCOFF *Assoc) {
-  if (COFFUniquingMap == 0)
-    COFFUniquingMap = new COFFUniqueMapTy();
-  COFFUniqueMapTy &Map = *(COFFUniqueMapTy*)COFFUniquingMap;
-
+const MCSectionCOFF *MCContext::getCOFFSection(StringRef Section,
+                                               unsigned Characteristics,
+                                               SectionKind Kind,
+                                               StringRef COMDATSymName,
+                                               int Selection) {
   // Do the lookup, if we have a hit, return it.
 
-  SectionGroupPair P(Section, COMDATSymName);
-  std::pair<COFFUniqueMapTy::iterator, bool> Entry =
-      Map.insert(std::make_pair(P, (MCSectionCOFF *)0));
-  COFFUniqueMapTy::iterator Iter = Entry.first;
-  if (!Entry.second)
+  SectionGroupTriple T(Section, COMDATSymName, Selection);
+  auto IterBool = COFFUniquingMap.insert(std::make_pair(T, nullptr));
+  auto Iter = IterBool.first;
+  if (!IterBool.second)
     return Iter->second;
 
-  const MCSymbol *COMDATSymbol = NULL;
+  MCSymbol *COMDATSymbol = nullptr;
   if (!COMDATSymName.empty())
     COMDATSymbol = GetOrCreateSymbol(COMDATSymName);
 
-  MCSectionCOFF *Result =
-      new (*this) MCSectionCOFF(Iter->first.first, Characteristics,
-                                COMDATSymbol, Selection, Assoc, Kind);
+  StringRef CachedName = std::get<0>(Iter->first);
+  MCSectionCOFF *Result = new (*this)
+      MCSectionCOFF(CachedName, Characteristics, COMDATSymbol, Selection, Kind);
 
   Iter->second = Result;
   return Result;
@@ -326,15 +313,27 @@ MCContext::getCOFFSection(StringRef Section, unsigned Characteristics,
 }
 
 const MCSectionCOFF *MCContext::getCOFFSection(StringRef Section) {
-  if (COFFUniquingMap == 0)
-    COFFUniquingMap = new COFFUniqueMapTy();
-  COFFUniqueMapTy &Map = *(COFFUniqueMapTy*)COFFUniquingMap;
-
-  SectionGroupPair P(Section, "");
-  COFFUniqueMapTy::iterator Iter = Map.find(P);
-  if (Iter == Map.end())
-    return 0;
+  SectionGroupTriple T(Section, "", 0);
+  auto Iter = COFFUniquingMap.find(T);
+  if (Iter == COFFUniquingMap.end())
+    return nullptr;
   return Iter->second;
+}
+
+const MCSectionCOFF *
+MCContext::getAssociativeCOFFSection(const MCSectionCOFF *Sec,
+                                     const MCSymbol *KeySym) {
+  // Return the normal section if we don't have to be associative.
+  if (!KeySym)
+    return Sec;
+
+  // Make an associative section with the same name and kind as the normal
+  // section.
+  unsigned Characteristics =
+      Sec->getCharacteristics() | COFF::IMAGE_SCN_LNK_COMDAT;
+  return getCOFFSection(Sec->getSectionName(), Characteristics, Sec->getKind(),
+                        KeySym->getName(),
+                        COFF::IMAGE_COMDAT_SELECT_ASSOCIATIVE);
 }
 
 //===----------------------------------------------------------------------===//
@@ -361,7 +360,30 @@ bool MCContext::isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID) {
   return !MCDwarfFiles[FileNumber].Name.empty();
 }
 
-void MCContext::FatalError(SMLoc Loc, const Twine &Msg) {
+/// finalizeDwarfSections - Emit end symbols for each non-empty code section.
+/// Also remove empty sections from SectionStartEndSyms, to avoid generating
+/// useless debug info for them.
+void MCContext::finalizeDwarfSections(MCStreamer &MCOS) {
+  MCContext &context = MCOS.getContext();
+
+  auto sec = SectionStartEndSyms.begin();
+  while (sec != SectionStartEndSyms.end()) {
+    assert(sec->second.first && "Start symbol must be set by now");
+    MCOS.SwitchSection(sec->first);
+    if (MCOS.mayHaveInstructions()) {
+      MCSymbol *SectionEndSym = context.CreateTempSymbol();
+      MCOS.EmitLabel(SectionEndSym);
+      sec->second.second = SectionEndSym;
+      ++sec;
+    } else {
+      MapVector<const MCSection *, std::pair<MCSymbol *, MCSymbol *> >::iterator
+        to_erase = sec;
+      sec = SectionStartEndSyms.erase(to_erase);
+    }
+  }
+}
+
+void MCContext::FatalError(SMLoc Loc, const Twine &Msg) const {
   // If we have a source manager and a location, use it. Otherwise just
   // use the generic report_fatal_error().
   if (!SrcMgr || Loc == SMLoc())

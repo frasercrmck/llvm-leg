@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "regalloc-emitter"
-
 #include "CodeGenRegisters.h"
 #include "CodeGenTarget.h"
 #include "llvm/ADT/IntEqClasses.h"
@@ -25,6 +23,8 @@
 #include "llvm/TableGen/Error.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "regalloc-emitter"
 
 //===----------------------------------------------------------------------===//
 //                             CodeGenSubRegIndex
@@ -41,7 +41,7 @@ CodeGenSubRegIndex::CodeGenSubRegIndex(Record *R, unsigned Enum)
 
 CodeGenSubRegIndex::CodeGenSubRegIndex(StringRef N, StringRef Nspace,
                                        unsigned Enum)
-  : TheDef(0), Name(N), Namespace(Nspace), Size(-1), Offset(-1),
+  : TheDef(nullptr), Name(N), Namespace(Nspace), Size(-1), Offset(-1),
     EnumValue(Enum), LaneMask(0), AllSuperRegsCovered(true) {
 }
 
@@ -725,7 +725,7 @@ CodeGenRegisterClass::CodeGenRegisterClass(CodeGenRegBank &RegBank, Record *R)
 CodeGenRegisterClass::CodeGenRegisterClass(CodeGenRegBank &RegBank,
                                            StringRef Name, Key Props)
   : Members(*Props.Members),
-    TheDef(0),
+    TheDef(nullptr),
     Name(Name),
     TopoSigs(RegBank.getNumTopoSigs()),
     EnumValue(-1),
@@ -901,9 +901,8 @@ CodeGenRegisterClass::getSuperRegClasses(CodeGenSubRegIndex *SubIdx,
     FindI = SuperRegClasses.find(SubIdx);
   if (FindI == SuperRegClasses.end())
     return;
-  for (SmallPtrSet<CodeGenRegisterClass*, 8>::const_iterator I =
-       FindI->second.begin(), E = FindI->second.end(); I != E; ++I)
-    Out.set((*I)->EnumValue);
+  for (CodeGenRegisterClass *RC : FindI->second)
+    Out.set(RC->EnumValue);
 }
 
 // Populate a unique sorted list of units from a register set.
@@ -1312,7 +1311,7 @@ static void computeUberWeights(std::vector<UberRegSet> &UberSets,
          E = UberSets.end(); I != E; ++I) {
 
     // Initialize all unit weights in this set, and remember the max units/reg.
-    const CodeGenRegister *Reg = 0;
+    const CodeGenRegister *Reg = nullptr;
     unsigned MaxWeight = 0, Weight = 0;
     for (RegUnitIterator UnitI(I->Regs); UnitI.isValid(); ++UnitI) {
       if (Reg != UnitI.getReg()) {
@@ -1533,7 +1532,7 @@ void CodeGenRegBank::computeRegUnitSets() {
   assert(RegUnitSets.empty() && "dirty RegUnitSets");
 
   // Compute a unique RegUnitSet for each RegClass.
-  const ArrayRef<CodeGenRegisterClass*> &RegClasses = getRegClasses();
+  ArrayRef<CodeGenRegisterClass*> RegClasses = getRegClasses();
   unsigned NumRegClasses = RegClasses.size();
   for (unsigned RCIdx = 0, RCEnd = NumRegClasses; RCIdx != RCEnd; ++RCIdx) {
     if (!RegClasses[RCIdx]->Allocatable)
@@ -1923,7 +1922,7 @@ const CodeGenRegisterClass*
 CodeGenRegBank::getRegClassForRegister(Record *R) {
   const CodeGenRegister *Reg = getReg(R);
   ArrayRef<CodeGenRegisterClass*> RCs = getRegClasses();
-  const CodeGenRegisterClass *FoundRC = 0;
+  const CodeGenRegisterClass *FoundRC = nullptr;
   for (unsigned i = 0, e = RCs.size(); i != e; ++i) {
     const CodeGenRegisterClass &RC = *RCs[i];
     if (!RC.contains(Reg))
@@ -1938,7 +1937,7 @@ CodeGenRegBank::getRegClassForRegister(Record *R) {
 
     // If a register's classes have different types, return null.
     if (RC.getValueTypes() != FoundRC->getValueTypes())
-      return 0;
+      return nullptr;
 
     // Check to see if the previously found class that contains
     // the register is a subclass of the current class. If so,
@@ -1956,7 +1955,7 @@ CodeGenRegBank::getRegClassForRegister(Record *R) {
 
     // Multiple classes, and neither is a superclass of the other.
     // Return null.
-    return 0;
+    return nullptr;
   }
   return FoundRC;
 }

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "sparseprop"
 #include "llvm/Analysis/SparsePropagation.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -20,6 +19,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "sparseprop"
 
 //===----------------------------------------------------------------------===//
 //                  AbstractLatticeFunction Implementation
@@ -147,7 +148,7 @@ void SparseSolver::getFeasibleSuccessors(TerminatorInst &TI,
       return;
 
     Constant *C = LatticeFunc->GetConstant(BCValue, BI->getCondition(), *this);
-    if (C == 0 || !isa<ConstantInt>(C)) {
+    if (!C || !isa<ConstantInt>(C)) {
       // Non-constant values can go either way.
       Succs[0] = Succs[1] = true;
       return;
@@ -189,7 +190,7 @@ void SparseSolver::getFeasibleSuccessors(TerminatorInst &TI,
     return;
   
   Constant *C = LatticeFunc->GetConstant(SCValue, SI.getCondition(), *this);
-  if (C == 0 || !isa<ConstantInt>(C)) {
+  if (!C || !isa<ConstantInt>(C)) {
     // All destinations are executable!
     Succs.assign(TI.getNumSuccessors(), true);
     return;

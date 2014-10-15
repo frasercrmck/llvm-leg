@@ -33,80 +33,85 @@ using namespace llvm;
 // functions can all be passed as NULL.  If successful, this returns a
 // disassembler context.  If not, it returns NULL.
 //
-LLVMDisasmContextRef LLVMCreateDisasmCPU(const char *Triple, const char *CPU,
-                                         void *DisInfo, int TagType,
-                                         LLVMOpInfoCallback GetOpInfo,
-                                         LLVMSymbolLookupCallback SymbolLookUp){
+LLVMDisasmContextRef
+LLVMCreateDisasmCPUFeatures(const char *Triple, const char *CPU,
+                            const char *Features, void *DisInfo, int TagType,
+                            LLVMOpInfoCallback GetOpInfo,
+                            LLVMSymbolLookupCallback SymbolLookUp) {
   // Get the target.
   std::string Error;
   const Target *TheTarget = TargetRegistry::lookupTarget(Triple, Error);
   if (!TheTarget)
-    return 0;
+    return nullptr;
 
   const MCRegisterInfo *MRI = TheTarget->createMCRegInfo(Triple);
   if (!MRI)
-    return 0;
+    return nullptr;
 
   // Get the assembler info needed to setup the MCContext.
   const MCAsmInfo *MAI = TheTarget->createMCAsmInfo(*MRI, Triple);
   if (!MAI)
-    return 0;
+    return nullptr;
 
   const MCInstrInfo *MII = TheTarget->createMCInstrInfo();
   if (!MII)
-    return 0;
-
-  // Package up features to be passed to target/subtarget
-  std::string FeaturesStr;
+    return nullptr;
 
   const MCSubtargetInfo *STI = TheTarget->createMCSubtargetInfo(Triple, CPU,
-                                                                FeaturesStr);
+                                                                Features);
   if (!STI)
-    return 0;
+    return nullptr;
 
   // Set up the MCContext for creating symbols and MCExpr's.
-  MCContext *Ctx = new MCContext(MAI, MRI, 0);
+  MCContext *Ctx = new MCContext(MAI, MRI, nullptr);
   if (!Ctx)
-    return 0;
+    return nullptr;
 
   // Set up disassembler.
-  MCDisassembler *DisAsm = TheTarget->createMCDisassembler(*STI);
+  MCDisassembler *DisAsm = TheTarget->createMCDisassembler(*STI, *Ctx);
   if (!DisAsm)
-    return 0;
+    return nullptr;
 
   std::unique_ptr<MCRelocationInfo> RelInfo(
       TheTarget->createMCRelocationInfo(Triple, *Ctx));
   if (!RelInfo)
-    return 0;
+    return nullptr;
 
   std::unique_ptr<MCSymbolizer> Symbolizer(TheTarget->createMCSymbolizer(
       Triple, GetOpInfo, SymbolLookUp, DisInfo, Ctx, RelInfo.release()));
   DisAsm->setSymbolizer(std::move(Symbolizer));
-  DisAsm->setupForSymbolicDisassembly(GetOpInfo, SymbolLookUp, DisInfo,
-                                      Ctx, RelInfo);
+
   // Set up the instruction printer.
   int AsmPrinterVariant = MAI->getAssemblerDialect();
   MCInstPrinter *IP = TheTarget->createMCInstPrinter(AsmPrinterVariant,
                                                      *MAI, *MII, *MRI, *STI);
   if (!IP)
-    return 0;
+    return nullptr;
 
   LLVMDisasmContext *DC = new LLVMDisasmContext(Triple, DisInfo, TagType,
                                                 GetOpInfo, SymbolLookUp,
                                                 TheTarget, MAI, MRI,
                                                 STI, MII, Ctx, DisAsm, IP);
   if (!DC)
-    return 0;
+    return nullptr;
 
   DC->setCPU(CPU);
   return DC;
 }
 
+LLVMDisasmContextRef LLVMCreateDisasmCPU(const char *Triple, const char *CPU,
+                                         void *DisInfo, int TagType,
+                                         LLVMOpInfoCallback GetOpInfo,
+                                         LLVMSymbolLookupCallback SymbolLookUp){
+  return LLVMCreateDisasmCPUFeatures(Triple, CPU, "", DisInfo, TagType,
+                                     GetOpInfo, SymbolLookUp);
+}
+
 LLVMDisasmContextRef LLVMCreateDisasm(const char *Triple, void *DisInfo,
                                       int TagType, LLVMOpInfoCallback GetOpInfo,
                                       LLVMSymbolLookupCallback SymbolLookUp) {
-  return LLVMCreateDisasmCPU(Triple, "", DisInfo, TagType, GetOpInfo,
-                             SymbolLookUp);
+  return LLVMCreateDisasmCPUFeatures(Triple, "", "", DisInfo, TagType,
+                                     GetOpInfo, SymbolLookUp);
 }
 
 //
@@ -203,19 +208,19 @@ static int getItineraryLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
 static int getLatency(LLVMDisasmContext *DC, const MCInst &Inst) {
   // Try to compute scheduling information.
   const MCSubtargetInfo *STI = DC->getSubtargetInfo();
-  const MCSchedModel *SCModel = STI->getSchedModel();
+  const MCSchedModel SCModel = STI->getSchedModel();
   const int NoInformationAvailable = -1;
 
   // Check if we have a scheduling model for instructions.
-  if (!SCModel || !SCModel->hasInstrSchedModel())
-    // Try to fall back to the itinerary model if we do not have a
-    // scheduling model.
+  if (!SCModel.hasInstrSchedModel())
+    // Try to fall back to the itinerary model if the scheduling model doesn't
+    // have a scheduling table.  Note the default does not have a table.
     return getItineraryLatency(DC, Inst);
 
   // Get the scheduling class of the requested instruction.
   const MCInstrDesc& Desc = DC->getInstrInfo()->get(Inst.getOpcode());
   unsigned SCClass = Desc.getSchedClass();
-  const MCSchedClassDesc *SCDesc = SCModel->getSchedClassDesc(SCClass);
+  const MCSchedClassDesc *SCDesc = SCModel.getSchedClassDesc(SCClass);
   // Resolving the variant SchedClass requires an MI to pass to
   // SubTargetInfo::resolveSchedClass.
   if (!SCDesc || !SCDesc->isValid() || SCDesc->isVariant())

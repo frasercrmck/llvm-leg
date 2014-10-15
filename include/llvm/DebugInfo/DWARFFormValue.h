@@ -36,7 +36,7 @@ public:
 
 private:
   struct ValueType {
-    ValueType() : data(NULL) {
+    ValueType() : data(nullptr) {
       uval = 0;
     }
 
@@ -60,7 +60,7 @@ public:
   bool extractValue(DataExtractor data, uint32_t *offset_ptr,
                     const DWARFUnit *u);
   bool isInlinedCStr() const {
-    return Value.data != NULL && Value.data == (const uint8_t*)Value.cstr;
+    return Value.data != nullptr && Value.data == (const uint8_t*)Value.cstr;
   }
 
   /// getAsFoo functions below return the extracted value as Foo if only
@@ -70,6 +70,7 @@ public:
   Optional<const char *> getAsCString(const DWARFUnit *U) const;
   Optional<uint64_t> getAsAddress(const DWARFUnit *U) const;
   Optional<uint64_t> getAsSectionOffset() const;
+  Optional<ArrayRef<uint8_t>> getAsBlock() const;
 
   bool skipValue(DataExtractor debug_info_data, uint32_t *offset_ptr,
                  const DWARFUnit *u) const;

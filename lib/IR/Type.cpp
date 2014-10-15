@@ -36,7 +36,7 @@ Type *Type::getPrimitiveType(LLVMContext &C, TypeID IDNumber) {
   case MetadataTyID  : return getMetadataTy(C);
   case X86_MMXTyID   : return getX86_MMXTy(C);
   default:
-    return 0;
+    return nullptr;
   }
 }
 
@@ -89,9 +89,13 @@ bool Type::canLosslesslyBitCastTo(Type *Ty) const {
 
   // At this point we have only various mismatches of the first class types
   // remaining and ptr->ptr. Just select the lossless conversions. Everything
-  // else is not lossless.
-  if (this->isPointerTy())
-    return Ty->isPointerTy();
+  // else is not lossless. Conservatively assume we can't losslessly convert
+  // between pointers with different address spaces.
+  if (const PointerType *PTy = dyn_cast<PointerType>(this)) {
+    if (const PointerType *OtherPTy = dyn_cast<PointerType>(Ty))
+      return PTy->getAddressSpace() == OtherPTy->getAddressSpace();
+    return false;
+  }
   return false;  // Other types have no identity values
 }
 
@@ -155,7 +159,7 @@ int Type::getFPMantissaWidth() const {
 /// isSizedDerivedType - Derived types like structures and arrays are sized
 /// iff all of the members of the type are sized as well.  Since asking for
 /// their size is relatively uncommon, move this operation out of line.
-bool Type::isSizedDerivedType(SmallPtrSet<const Type*, 4> *Visited) const {
+bool Type::isSizedDerivedType(SmallPtrSetImpl<const Type*> *Visited) const {
   if (const ArrayType *ATy = dyn_cast<ArrayType>(this))
     return ATy->getElementType()->isSized(Visited);
 
@@ -312,8 +316,8 @@ IntegerType *IntegerType::get(LLVMContext &C, unsigned NumBits) {
   }
   
   IntegerType *&Entry = C.pImpl->IntegerTypes[NumBits];
-  
-  if (Entry == 0)
+
+  if (!Entry)
     Entry = new (C.pImpl->TypeAllocator) IntegerType(C, NumBits);
   
   return Entry;
@@ -448,7 +452,7 @@ void StructType::setName(StringRef Name) {
     if (SymbolTableEntry) {
       // Delete the old string data.
       ((EntryTy *)SymbolTableEntry)->Destroy(SymbolTable.getAllocator());
-      SymbolTableEntry = 0;
+      SymbolTableEntry = nullptr;
     }
     return;
   }
@@ -497,7 +501,7 @@ StructType *StructType::get(LLVMContext &Context, bool isPacked) {
 }
 
 StructType *StructType::get(Type *type, ...) {
-  assert(type != 0 && "Cannot create a struct type with no elements with this");
+  assert(type && "Cannot create a struct type with no elements with this");
   LLVMContext &Ctx = type->getContext();
   va_list ap;
   SmallVector<llvm::Type*, 8> StructFields;
@@ -506,7 +510,9 @@ StructType *StructType::get(Type *type, ...) {
     StructFields.push_back(type);
     type = va_arg(ap, llvm::Type*);
   }
-  return llvm::StructType::get(Ctx, StructFields);
+  auto *Ret = llvm::StructType::get(Ctx, StructFields);
+  va_end(ap);
+  return Ret;
 }
 
 StructType *StructType::create(LLVMContext &Context, ArrayRef<Type*> Elements,
@@ -538,7 +544,7 @@ StructType *StructType::create(ArrayRef<Type*> Elements) {
 }
 
 StructType *StructType::create(StringRef Name, Type *type, ...) {
-  assert(type != 0 && "Cannot create a struct type with no elements with this");
+  assert(type && "Cannot create a struct type with no elements with this");
   LLVMContext &Ctx = type->getContext();
   va_list ap;
   SmallVector<llvm::Type*, 8> StructFields;
@@ -547,10 +553,12 @@ StructType *StructType::create(StringRef Name, Type *type, ...) {
     StructFields.push_back(type);
     type = va_arg(ap, llvm::Type*);
   }
-  return llvm::StructType::create(Ctx, StructFields, Name);
+  auto *Ret = llvm::StructType::create(Ctx, StructFields, Name);
+  va_end(ap);
+  return Ret;
 }
 
-bool StructType::isSized(SmallPtrSet<const Type*, 4> *Visited) const {
+bool StructType::isSized(SmallPtrSetImpl<const Type*> *Visited) const {
   if ((getSubclassData() & SCDB_IsSized) != 0)
     return true;
   if (isOpaque())
@@ -576,13 +584,13 @@ bool StructType::isSized(SmallPtrSet<const Type*, 4> *Visited) const {
 
 StringRef StructType::getName() const {
   assert(!isLiteral() && "Literal structs never have names");
-  if (SymbolTableEntry == 0) return StringRef();
-  
+  if (!SymbolTableEntry) return StringRef();
+
   return ((StringMapEntry<StructType*> *)SymbolTableEntry)->getKey();
 }
 
 void StructType::setBody(Type *type, ...) {
-  assert(type != 0 && "Cannot create a struct type with no elements with this");
+  assert(type && "Cannot create a struct type with no elements with this");
   va_list ap;
   SmallVector<llvm::Type*, 8> StructFields;
   va_start(ap, type);
@@ -591,6 +599,7 @@ void StructType::setBody(Type *type, ...) {
     type = va_arg(ap, llvm::Type*);
   }
   setBody(StructFields);
+  va_end(ap);
 }
 
 bool StructType::isValidElementType(Type *ElemTy) {
@@ -680,8 +689,8 @@ ArrayType *ArrayType::get(Type *elementType, uint64_t NumElements) {
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   ArrayType *&Entry = 
     pImpl->ArrayTypes[std::make_pair(ElementType, NumElements)];
-  
-  if (Entry == 0)
+
+  if (!Entry)
     Entry = new (pImpl->TypeAllocator) ArrayType(ElementType, NumElements);
   return Entry;
 }
@@ -709,8 +718,8 @@ VectorType *VectorType::get(Type *elementType, unsigned NumElements) {
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   VectorType *&Entry = ElementType->getContext().pImpl
     ->VectorTypes[std::make_pair(ElementType, NumElements)];
-  
-  if (Entry == 0)
+
+  if (!Entry)
     Entry = new (pImpl->TypeAllocator) VectorType(ElementType, NumElements);
   return Entry;
 }
@@ -734,7 +743,7 @@ PointerType *PointerType::get(Type *EltTy, unsigned AddressSpace) {
   PointerType *&Entry = AddressSpace == 0 ? CImpl->PointerTypes[EltTy]
      : CImpl->ASPointerTypes[std::make_pair(EltTy, AddressSpace)];
 
-  if (Entry == 0)
+  if (!Entry)
     Entry = new (CImpl->TypeAllocator) PointerType(EltTy, AddressSpace);
   return Entry;
 }

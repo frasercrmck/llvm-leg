@@ -5,7 +5,7 @@ import sys
 import llvmbuild.componentinfo as componentinfo
 import llvmbuild.configutil as configutil
 
-from llvmbuild.util import *
+from llvmbuild.util import fatal, note
 
 ###
 
@@ -719,7 +719,9 @@ def add_magic_target_components(parser, project, opts):
         enable_targets = available_targets.values()
     else:
         # We support both space separated and semi-colon separated lists.
-        if ' ' in opts.enable_targets:
+        if opts.enable_targets == '':
+            enable_target_names = []
+        elif ' ' in opts.enable_targets:
             enable_target_names = opts.enable_targets.split()
         else:
             enable_target_names = opts.enable_targets.split(';')
@@ -781,7 +783,7 @@ def add_magic_target_components(parser, project, opts):
     # If we have a native target with a JIT, use that for the engine. Otherwise,
     # use the interpreter.
     if native_target and native_target.enabled and native_target.has_jit:
-        engine_group.required_libraries.append('JIT')
+        engine_group.required_libraries.append('MCJIT')
         engine_group.required_libraries.append(native_group.name)
     else:
         engine_group.required_libraries.append('Interpreter')

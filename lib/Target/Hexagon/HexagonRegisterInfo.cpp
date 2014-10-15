@@ -43,13 +43,12 @@ HexagonRegisterInfo::HexagonRegisterInfo(HexagonSubtarget &st)
     Subtarget(st) {
 }
 
-const uint16_t* HexagonRegisterInfo::getCalleeSavedRegs(const MachineFunction
-                                                        *MF)
-  const {
-  static const uint16_t CalleeSavedRegsV2[] = {
+const MCPhysReg *
+HexagonRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  static const MCPhysReg CalleeSavedRegsV2[] = {
     Hexagon::R24,   Hexagon::R25,   Hexagon::R26,   Hexagon::R27, 0
   };
-  static const uint16_t CalleeSavedRegsV3[] = {
+  static const MCPhysReg CalleeSavedRegsV3[] = {
     Hexagon::R16,   Hexagon::R17,   Hexagon::R18,   Hexagon::R19,
     Hexagon::R20,   Hexagon::R21,   Hexagon::R22,   Hexagon::R23,
     Hexagon::R24,   Hexagon::R25,   Hexagon::R26,   Hexagon::R27, 0
@@ -129,12 +128,12 @@ void HexagonRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // Addressable stack objects are accessed using neg. offsets from %fp.
   MachineFunction &MF = *MI.getParent()->getParent();
   const HexagonInstrInfo &TII =
-    *static_cast<const HexagonInstrInfo*>(MF.getTarget().getInstrInfo());
+      *static_cast<const HexagonInstrInfo *>(MF.getSubtarget().getInstrInfo());
   int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
   MachineFrameInfo &MFI = *MF.getFrameInfo();
 
   unsigned FrameReg = getFrameRegister(MF);
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   if (!TFI->hasFP(MF)) {
     // We will not reserve space on the stack for the lr and fp registers.
     Offset -= 2 * Hexagon_WordSize;
@@ -279,7 +278,7 @@ unsigned HexagonRegisterInfo::getRARegister() const {
 
 unsigned HexagonRegisterInfo::getFrameRegister(const MachineFunction
                                                &MF) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   if (TFI->hasFP(MF)) {
     return Hexagon::R30;
   }

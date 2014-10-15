@@ -18,7 +18,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "post-RA-sched"
 #include "llvm/CodeGen/Passes.h"
 #include "AggressiveAntiDepBreaker.h"
 #include "AntiDepBreaker.h"
@@ -46,6 +45,8 @@
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "post-RA-sched"
 
 STATISTIC(NumNoops, "Number of noops inserted");
 STATISTIC(NumStalls, "Number of pipeline stalls");
@@ -97,6 +98,11 @@ namespace {
     }
 
     bool runOnMachineFunction(MachineFunction &Fn) override;
+    
+    bool enablePostRAScheduler(
+        const TargetSubtargetInfo &ST, CodeGenOpt::Level OptLevel,
+        TargetSubtargetInfo::AntiDepBreakMode &Mode,
+        TargetSubtargetInfo::RegClassVector &CriticalPathRCs) const;
   };
   char PostRAScheduler::ID = 0;
 
@@ -131,10 +137,10 @@ namespace {
 
   public:
     SchedulePostRATDList(
-      MachineFunction &MF, MachineLoopInfo &MLI, MachineDominatorTree &MDT,
-      AliasAnalysis *AA, const RegisterClassInfo&,
-      TargetSubtargetInfo::AntiDepBreakMode AntiDepMode,
-      SmallVectorImpl<const TargetRegisterClass*> &CriticalPathRCs);
+        MachineFunction &MF, MachineLoopInfo &MLI, AliasAnalysis *AA,
+        const RegisterClassInfo &,
+        TargetSubtargetInfo::AntiDepBreakMode AntiDepMode,
+        SmallVectorImpl<const TargetRegisterClass *> &CriticalPathRCs);
 
     ~SchedulePostRATDList();
 
@@ -187,16 +193,18 @@ INITIALIZE_PASS(PostRAScheduler, "post-RA-sched",
                 "Post RA top-down list latency scheduler", false, false)
 
 SchedulePostRATDList::SchedulePostRATDList(
-  MachineFunction &MF, MachineLoopInfo &MLI, MachineDominatorTree &MDT,
-  AliasAnalysis *AA, const RegisterClassInfo &RCI,
-  TargetSubtargetInfo::AntiDepBreakMode AntiDepMode,
-  SmallVectorImpl<const TargetRegisterClass*> &CriticalPathRCs)
-  : ScheduleDAGInstrs(MF, MLI, MDT, /*IsPostRA=*/true), AA(AA), EndIndex(0) {
+    MachineFunction &MF, MachineLoopInfo &MLI, AliasAnalysis *AA,
+    const RegisterClassInfo &RCI,
+    TargetSubtargetInfo::AntiDepBreakMode AntiDepMode,
+    SmallVectorImpl<const TargetRegisterClass *> &CriticalPathRCs)
+    : ScheduleDAGInstrs(MF, &MLI, /*IsPostRA=*/true), AA(AA), EndIndex(0) {
 
   const TargetMachine &TM = MF.getTarget();
-  const InstrItineraryData *InstrItins = TM.getInstrItineraryData();
+  const InstrItineraryData *InstrItins =
+      TM.getSubtargetImpl()->getInstrItineraryData();
   HazardRec =
-    TM.getInstrInfo()->CreateTargetPostRAHazardRecognizer(InstrItins, this);
+      TM.getSubtargetImpl()->getInstrInfo()->CreateTargetPostRAHazardRecognizer(
+          InstrItins, this);
 
   assert((AntiDepMode == TargetSubtargetInfo::ANTIDEP_NONE ||
           MRI.tracksLiveness()) &&
@@ -205,7 +213,7 @@ SchedulePostRATDList::SchedulePostRATDList(
     ((AntiDepMode == TargetSubtargetInfo::ANTIDEP_ALL) ?
      (AntiDepBreaker *)new AggressiveAntiDepBreaker(MF, RCI, CriticalPathRCs) :
      ((AntiDepMode == TargetSubtargetInfo::ANTIDEP_CRITICAL) ?
-      (AntiDepBreaker *)new CriticalAntiDepBreaker(MF, RCI) : NULL));
+      (AntiDepBreaker *)new CriticalAntiDepBreaker(MF, RCI) : nullptr));
 }
 
 SchedulePostRATDList::~SchedulePostRATDList() {
@@ -244,13 +252,23 @@ void SchedulePostRATDList::dumpSchedule() const {
 }
 #endif
 
+bool PostRAScheduler::enablePostRAScheduler(
+    const TargetSubtargetInfo &ST,
+    CodeGenOpt::Level OptLevel,
+    TargetSubtargetInfo::AntiDepBreakMode &Mode,
+    TargetSubtargetInfo::RegClassVector &CriticalPathRCs) const {
+  Mode = ST.getAntiDepBreakMode();
+  ST.getCriticalPathRCs(CriticalPathRCs);
+  return ST.enablePostMachineScheduler() &&
+         OptLevel >= ST.getOptLevelToEnablePostRAScheduler();
+}
+
 bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
   if (skipOptnoneFunction(*Fn.getFunction()))
     return false;
 
-  TII = Fn.getTarget().getInstrInfo();
+  TII = Fn.getSubtarget().getInstrInfo();
   MachineLoopInfo &MLI = getAnalysis<MachineLoopInfo>();
-  MachineDominatorTree &MDT = getAnalysis<MachineDominatorTree>();
   AliasAnalysis *AA = &getAnalysis<AliasAnalysis>();
   TargetPassConfig *PassConfig = &getAnalysis<TargetPassConfig>();
 
@@ -266,9 +284,10 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
   } else {
     // Check that post-RA scheduling is enabled for this target.
     // This may upgrade the AntiDepMode.
-    const TargetSubtargetInfo &ST = Fn.getTarget().getSubtarget<TargetSubtargetInfo>();
-    if (!ST.enablePostRAScheduler(PassConfig->getOptLevel(), AntiDepMode,
-                                  CriticalPathRCs))
+    const TargetSubtargetInfo &ST =
+        Fn.getTarget().getSubtarget<TargetSubtargetInfo>();
+    if (!enablePostRAScheduler(ST, PassConfig->getOptLevel(),
+                               AntiDepMode, CriticalPathRCs))
       return false;
   }
 
@@ -283,7 +302,7 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
 
   DEBUG(dbgs() << "PostRAScheduler\n");
 
-  SchedulePostRATDList Scheduler(Fn, MLI, MDT, AA, RegClassInfo, AntiDepMode,
+  SchedulePostRATDList Scheduler(Fn, MLI, AA, RegClassInfo, AntiDepMode,
                                  CriticalPathRCs);
 
   // Loop over all of the basic blocks
@@ -355,7 +374,7 @@ void SchedulePostRATDList::startBlock(MachineBasicBlock *BB) {
 
   // Reset the hazard recognizer and anti-dep breaker.
   HazardRec->Reset();
-  if (AntiDepBreak != NULL)
+  if (AntiDepBreak)
     AntiDepBreak->StartBlock(BB);
 }
 
@@ -365,7 +384,7 @@ void SchedulePostRATDList::schedule() {
   // Build the scheduling graph.
   buildSchedGraph(AA);
 
-  if (AntiDepBreak != NULL) {
+  if (AntiDepBreak) {
     unsigned Broken =
       AntiDepBreak->BreakAntiDependencies(SUnits, RegionBegin, RegionEnd,
                                           EndIndex, DbgValues);
@@ -397,14 +416,14 @@ void SchedulePostRATDList::schedule() {
 /// instruction, which will not be scheduled.
 ///
 void SchedulePostRATDList::Observe(MachineInstr *MI, unsigned Count) {
-  if (AntiDepBreak != NULL)
+  if (AntiDepBreak)
     AntiDepBreak->Observe(MI, Count, EndIndex);
 }
 
 /// FinishBlock - Clean up register live-range state.
 ///
 void SchedulePostRATDList::finishBlock() {
-  if (AntiDepBreak != NULL)
+  if (AntiDepBreak)
     AntiDepBreak->FinishBlock();
 
   // Call the superclass.
@@ -429,7 +448,7 @@ void SchedulePostRATDList::ReleaseSucc(SUnit *SU, SDep *SuccEdge) {
     dbgs() << "*** Scheduling failed! ***\n";
     SuccSU->dump(this);
     dbgs() << " has been released too many times!\n";
-    llvm_unreachable(0);
+    llvm_unreachable(nullptr);
   }
 #endif
   --SuccSU->NumPredsLeft;
@@ -480,7 +499,7 @@ void SchedulePostRATDList::ScheduleNodeTopDown(SUnit *SU, unsigned CurCycle) {
 void SchedulePostRATDList::emitNoop(unsigned CurCycle) {
   DEBUG(dbgs() << "*** Emitting noop in cycle " << CurCycle << '\n');
   HazardRec->EmitNoop();
-  Sequence.push_back(0);   // NULL here means noop
+  Sequence.push_back(nullptr);   // NULL here means noop
   ++NumNoops;
 }
 
@@ -532,7 +551,7 @@ void SchedulePostRATDList::ListScheduleTopDown() {
 
     DEBUG(dbgs() << "\n*** Examining Available\n"; AvailableQueue.dump(this));
 
-    SUnit *FoundSUnit = 0, *NotPreferredSUnit = 0;
+    SUnit *FoundSUnit = nullptr, *NotPreferredSUnit = nullptr;
     bool HasNoopHazards = false;
     while (!AvailableQueue.empty()) {
       SUnit *CurSUnit = AvailableQueue.pop();
@@ -572,7 +591,7 @@ void SchedulePostRATDList::ListScheduleTopDown() {
         AvailableQueue.push(NotPreferredSUnit);
       }
 
-      NotPreferredSUnit = 0;
+      NotPreferredSUnit = nullptr;
     }
 
     // Add the nodes that aren't ready back onto the available list.
@@ -662,5 +681,5 @@ void SchedulePostRATDList::EmitSchedule() {
     BB->splice(++OrigPrivMI, BB, DbgValue);
   }
   DbgValues.clear();
-  FirstDbgValue = NULL;
+  FirstDbgValue = nullptr;
 }

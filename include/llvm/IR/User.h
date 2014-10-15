@@ -19,6 +19,7 @@
 #ifndef LLVM_IR_USER_H
 #define LLVM_IR_USER_H
 
+#include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -38,6 +39,10 @@ class User : public Value {
   friend struct HungoffOperandTraits;
   virtual void anchor();
 protected:
+  /// NumOperands - The number of values used by this User.
+  ///
+  unsigned NumOperands;
+
   /// OperandList - This is a pointer to the array of Uses for this User.
   /// For nodes of fixed arity (e.g. a binary operator) this array will live
   /// prefixed to some derived class instance.  For nodes of resizable variable
@@ -45,17 +50,13 @@ protected:
   /// allocated and should be destroyed by the classes' virtual dtor.
   Use *OperandList;
 
-  /// NumOperands - The number of values used by this User.
-  ///
-  unsigned NumOperands;
-
   void *operator new(size_t s, unsigned Us);
   User(Type *ty, unsigned vty, Use *OpList, unsigned NumOps)
-    : Value(ty, vty), OperandList(OpList), NumOperands(NumOps) {}
+    : Value(ty, vty), NumOperands(NumOps), OperandList(OpList) {}
   Use *allocHungoffUses(unsigned) const;
   void dropHungoffUses() {
     Use::zap(OperandList, OperandList + NumOperands, true);
-    OperandList = 0;
+    OperandList = nullptr;
     // Reset NumOperands so User::operator delete() does the right thing.
     NumOperands = 0;
   }
@@ -129,33 +130,13 @@ public:
 
   /// Convenience iterator for directly iterating over the Values in the
   /// OperandList
-  class value_op_iterator : public std::iterator<std::forward_iterator_tag,
-                                                 Value*> {
-    op_iterator OI;
-  public:
-    explicit value_op_iterator(Use *U) : OI(U) {}
+  struct value_op_iterator
+      : iterator_adaptor_base<value_op_iterator, op_iterator,
+                              std::random_access_iterator_tag, Value *,
+                              ptrdiff_t, Value *, Value *> {
+    explicit value_op_iterator(Use *U = nullptr) : iterator_adaptor_base(U) {}
 
-    bool operator==(const value_op_iterator &x) const {
-      return OI == x.OI;
-    }
-    bool operator!=(const value_op_iterator &x) const {
-      return !operator==(x);
-    }
-
-    /// Iterator traversal: forward iteration only
-    value_op_iterator &operator++() {          // Preincrement
-      ++OI;
-      return *this;
-    }
-    value_op_iterator operator++(int) {        // Postincrement
-      value_op_iterator tmp = *this; ++*this; return tmp;
-    }
-
-    /// Retrieve a pointer to the current Value.
-    Value *operator*() const {
-      return *OI;
-    }
-
+    Value *operator*() const { return *I; }
     Value *operator->() const { return operator*(); }
   };
 
@@ -179,7 +160,7 @@ public:
   //
   void dropAllReferences() {
     for (Use &U : operands())
-      U.set(0);
+      U.set(nullptr);
   }
 
   /// replaceUsesOfWith - Replaces all references to the "From" definition with

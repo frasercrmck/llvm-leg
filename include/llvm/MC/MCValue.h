@@ -14,14 +14,13 @@
 #ifndef LLVM_MC_MCVALUE_H
 #define LLVM_MC_MCVALUE_H
 
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/DataTypes.h"
 #include <cassert>
 
 namespace llvm {
 class MCAsmInfo;
-class MCSymbol;
-class MCSymbolRefExpr;
 class raw_ostream;
 
 /// MCValue - This represents an "assembler immediate".  In its most
@@ -61,7 +60,10 @@ public:
   /// dump - Print the value to stderr.
   void dump() const;
 
-  static MCValue get(const MCSymbolRefExpr *SymA, const MCSymbolRefExpr *SymB=0,
+  MCSymbolRefExpr::VariantKind getAccessVariant() const;
+
+  static MCValue get(const MCSymbolRefExpr *SymA,
+                     const MCSymbolRefExpr *SymB = nullptr,
                      int64_t Val = 0, uint32_t RefKind = 0) {
     MCValue R;
     assert((!SymB || SymA) && "Invalid relocatable MCValue!");
@@ -75,8 +77,8 @@ public:
   static MCValue get(int64_t Val) {
     MCValue R;
     R.Cst = Val;
-    R.SymA = 0;
-    R.SymB = 0;
+    R.SymA = nullptr;
+    R.SymB = nullptr;
     R.RefKind = 0;
     return R;
   }

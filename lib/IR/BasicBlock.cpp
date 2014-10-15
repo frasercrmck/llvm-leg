@@ -27,7 +27,7 @@ using namespace llvm;
 ValueSymbolTable *BasicBlock::getValueSymbolTable() {
   if (Function *F = getParent())
     return &F->getValueSymbolTable();
-  return 0;
+  return nullptr;
 }
 
 const DataLayout *BasicBlock::getDataLayout() const {
@@ -45,22 +45,29 @@ template class llvm::SymbolTableListTraits<Instruction, BasicBlock>;
 
 BasicBlock::BasicBlock(LLVMContext &C, const Twine &Name, Function *NewParent,
                        BasicBlock *InsertBefore)
-  : Value(Type::getLabelTy(C), Value::BasicBlockVal), Parent(0) {
+  : Value(Type::getLabelTy(C), Value::BasicBlockVal), Parent(nullptr) {
 
   // Make sure that we get added to a function
   LeakDetector::addGarbageObject(this);
 
-  if (InsertBefore) {
-    assert(NewParent &&
+  if (NewParent)
+    insertInto(NewParent, InsertBefore);
+  else
+    assert(!InsertBefore &&
            "Cannot insert block before another block with no function!");
-    NewParent->getBasicBlockList().insert(InsertBefore, this);
-  } else if (NewParent) {
-    NewParent->getBasicBlockList().push_back(this);
-  }
 
   setName(Name);
 }
 
+void BasicBlock::insertInto(Function *NewParent, BasicBlock *InsertBefore) {
+  assert(NewParent && "Expected a parent");
+  assert(!Parent && "Already has a parent");
+
+  if (InsertBefore)
+    NewParent->getBasicBlockList().insert(InsertBefore, this);
+  else
+    NewParent->getBasicBlockList().push_back(this);
+}
 
 BasicBlock::~BasicBlock() {
   // If the address of the block is taken and it is being deleted (e.g. because
@@ -81,7 +88,7 @@ BasicBlock::~BasicBlock() {
     }
   }
 
-  assert(getParent() == 0 && "BasicBlock still linked into the program!");
+  assert(getParent() == nullptr && "BasicBlock still linked into the program!");
   dropAllReferences();
   InstList.clear();
 }
@@ -122,13 +129,44 @@ void BasicBlock::moveAfter(BasicBlock *MovePos) {
 
 
 TerminatorInst *BasicBlock::getTerminator() {
-  if (InstList.empty()) return 0;
+  if (InstList.empty()) return nullptr;
   return dyn_cast<TerminatorInst>(&InstList.back());
 }
 
 const TerminatorInst *BasicBlock::getTerminator() const {
-  if (InstList.empty()) return 0;
+  if (InstList.empty()) return nullptr;
   return dyn_cast<TerminatorInst>(&InstList.back());
+}
+
+CallInst *BasicBlock::getTerminatingMustTailCall() {
+  if (InstList.empty())
+    return nullptr;
+  ReturnInst *RI = dyn_cast<ReturnInst>(&InstList.back());
+  if (!RI || RI == &InstList.front())
+    return nullptr;
+
+  Instruction *Prev = RI->getPrevNode();
+  if (!Prev)
+    return nullptr;
+
+  if (Value *RV = RI->getReturnValue()) {
+    if (RV != Prev)
+      return nullptr;
+
+    // Look through the optional bitcast.
+    if (auto *BI = dyn_cast<BitCastInst>(Prev)) {
+      RV = BI->getOperand(0);
+      Prev = BI->getPrevNode();
+      if (!Prev || RV != Prev)
+        return nullptr;
+    }
+  }
+
+  if (auto *CI = dyn_cast<CallInst>(Prev)) {
+    if (CI->isMustTailCall())
+      return CI;
+  }
+  return nullptr;
 }
 
 Instruction* BasicBlock::getFirstNonPHI() {
@@ -186,10 +224,10 @@ void BasicBlock::dropAllReferences() {
 /// return the block, otherwise return a null pointer.
 BasicBlock *BasicBlock::getSinglePredecessor() {
   pred_iterator PI = pred_begin(this), E = pred_end(this);
-  if (PI == E) return 0;         // No preds.
+  if (PI == E) return nullptr;         // No preds.
   BasicBlock *ThePred = *PI;
   ++PI;
-  return (PI == E) ? ThePred : 0 /*multiple preds*/;
+  return (PI == E) ? ThePred : nullptr /*multiple preds*/;
 }
 
 /// getUniquePredecessor - If this basic block has a unique predecessor block,
@@ -199,12 +237,12 @@ BasicBlock *BasicBlock::getSinglePredecessor() {
 /// a switch statement with multiple cases having the same destination).
 BasicBlock *BasicBlock::getUniquePredecessor() {
   pred_iterator PI = pred_begin(this), E = pred_end(this);
-  if (PI == E) return 0; // No preds.
+  if (PI == E) return nullptr; // No preds.
   BasicBlock *PredBB = *PI;
   ++PI;
   for (;PI != E; ++PI) {
     if (*PI != PredBB)
-      return 0;
+      return nullptr;
     // The same predecessor appears multiple times in the predecessor list.
     // This is OK.
   }
@@ -277,7 +315,7 @@ void BasicBlock::removePredecessor(BasicBlock *Pred,
       PN->removeIncomingValue(Pred, false);
       // If all incoming values to the Phi are the same, we can replace the Phi
       // with that value.
-      Value* PNV = 0;
+      Value* PNV = nullptr;
       if (!DontDeleteUselessPHIs && (PNV = PN->hasConstantValue()))
         if (PNV != PN) {
           PN->replaceAllUsesWith(PNV);

@@ -54,8 +54,9 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
   OS << SRE->getSymbol();
 
   if (Offset) {
-    if (Offset > 0)
+    if (Offset > 0) {
       OS << '+';
+    }
     OS << Offset;
   }
 }
@@ -69,8 +70,9 @@ void LEGInstPrinter::printAddrModeMemSrc(const MCInst *MI, unsigned OpNum,
   printRegName(O, Op1.getReg());
 
   unsigned Offset = Op2.getImm();
-  if (Offset)
+  if (Offset) {
     O << ", #" << Offset;
+  }
   O << "]";
 }
 

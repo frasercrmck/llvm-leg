@@ -45,7 +45,7 @@ static inline StringRef MCLOHDirectiveName() {
   return StringRef(".loh");
 }
 
-static inline bool isValidMCLOHType(MCLOHType Kind) {
+static inline bool isValidMCLOHType(unsigned Kind) {
   return Kind >= MCLOH_AdrpAdrp && Kind <= MCLOH_AdrpLdrGot;
 }
 
@@ -132,8 +132,19 @@ public:
   /// the given @p Layout.
   uint64_t getEmitSize(const MachObjectWriter &ObjWriter,
                        const MCAsmLayout &Layout) const {
-    std::string Buffer;
-    raw_string_ostream OutStream(Buffer);
+    class raw_counting_ostream : public raw_ostream {
+      uint64_t Count;
+
+      void write_impl(const char *, size_t size) override { Count += size; }
+
+      uint64_t current_pos() const override { return Count; }
+
+    public:
+      raw_counting_ostream() : Count(0) {}
+      ~raw_counting_ostream() { flush(); }
+    };
+
+    raw_counting_ostream OutStream;
     Emit_impl(OutStream, ObjWriter, Layout);
     return OutStream.tell();
   }

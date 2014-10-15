@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPARCTARGETSTREAMER_H
-#define SPARCTARGETSTREAMER_H
+#ifndef LLVM_LIB_TARGET_SPARC_SPARCTARGETSTREAMER_H
+#define LLVM_LIB_TARGET_SPARC_SPARCTARGETSTREAMER_H
 
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCStreamer.h"
@@ -31,8 +31,8 @@ class SparcTargetAsmStreamer : public SparcTargetStreamer {
 
 public:
   SparcTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
-  virtual void emitSparcRegisterIgnore(unsigned reg);
-  virtual void emitSparcRegisterScratch(unsigned reg);
+  void emitSparcRegisterIgnore(unsigned reg) override;
+  void emitSparcRegisterScratch(unsigned reg) override;
 
 };
 
@@ -41,8 +41,8 @@ class SparcTargetELFStreamer : public SparcTargetStreamer {
 public:
   SparcTargetELFStreamer(MCStreamer &S);
   MCELFStreamer &getStreamer();
-  virtual void emitSparcRegisterIgnore(unsigned reg) {}
-  virtual void emitSparcRegisterScratch(unsigned reg) {}
+  void emitSparcRegisterIgnore(unsigned reg) override {}
+  void emitSparcRegisterScratch(unsigned reg) override {}
 };
 } // end namespace llvm
 

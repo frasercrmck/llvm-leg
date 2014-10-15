@@ -79,23 +79,15 @@ typedef enum {
 typedef enum {
     LTO_CODEGEN_PIC_MODEL_STATIC         = 0,
     LTO_CODEGEN_PIC_MODEL_DYNAMIC        = 1,
-    LTO_CODEGEN_PIC_MODEL_DYNAMIC_NO_PIC = 2
+    LTO_CODEGEN_PIC_MODEL_DYNAMIC_NO_PIC = 2,
+    LTO_CODEGEN_PIC_MODEL_DEFAULT        = 3
 } lto_codegen_model;
 
-/**
- * \since LTO_API_VERSION=6
- */
-typedef enum {
-    LTO_INTERNALIZE_FULL   = 0,
-    LTO_INTERNALIZE_NONE   = 1,
-    LTO_INTERNALIZE_HIDDEN = 2
-} lto_internalize_strategy;
-
 /** opaque reference to a loaded object module */
-typedef struct LTOModule*         lto_module_t;
+typedef struct LLVMOpaqueLTOModule *lto_module_t;
 
 /** opaque reference to a code generator */
-typedef struct LTOCodeGenerator*  lto_code_gen_t;
+typedef struct LLVMOpaqueLTOCodeGenerator *lto_code_gen_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -403,18 +395,9 @@ lto_codegen_set_assembler_args(lto_code_gen_t cg, const char **args,
                                int nargs);
 
 /**
- * Sets the strategy to use during internalize.  Default strategy is
- * LTO_INTERNALIZE_FULL.
- *
- * \since LTO_API_VERSION=6
- */
-extern void
-lto_codegen_set_internalize_strategy(lto_code_gen_t cg,
-                                     lto_internalize_strategy);
-
-/**
- * Tells LTO optimization passes that this symbol must be preserved
- * because it is referenced by native code or a command line option.
+ * Adds to a list of all global symbols that must exist in the final generated
+ * code. If a function is not listed there, it might be inlined into every usage
+ * and optimized away.
  *
  * \since prior to LTO_API_VERSION=3
  */

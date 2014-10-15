@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CODEGEN_INSTRUCTION_H
-#define CODEGEN_INSTRUCTION_H
+#ifndef LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
+#define LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineValueType.h"
@@ -149,6 +149,12 @@ namespace llvm {
     OperandInfo &back() { return OperandList.back(); }
     const OperandInfo &back() const { return OperandList.back(); }
 
+    typedef std::vector<OperandInfo>::iterator iterator;
+    typedef std::vector<OperandInfo>::const_iterator const_iterator;
+    iterator begin() { return OperandList.begin(); }
+    const_iterator begin() const { return OperandList.begin(); }
+    iterator end() { return OperandList.end(); }
+    const_iterator end() const { return OperandList.end(); }
 
     /// getOperandNamed - Return the index of the operand with the specified
     /// non-empty name.  If the instruction does not have an operand with the
@@ -247,6 +253,9 @@ namespace llvm {
     bool hasExtraDefRegAllocReq : 1;
     bool isCodeGenOnly : 1;
     bool isPseudo : 1;
+    bool isRegSequence : 1;
+    bool isExtractSubreg : 1;
+    bool isInsertSubreg : 1;
 
     std::string DeprecatedReason;
     bool HasComplexDeprecationPredicate;
@@ -318,6 +327,8 @@ namespace llvm {
       Record *getRecord() const { assert(isRecord()); return R; }
       int64_t getImm() const { assert(isImm()); return Imm; }
       Record *getRegister() const { assert(isReg()); return R; }
+
+      unsigned getMINumOperands() const;
     };
 
     /// ResultOperands - The decoded operands for the result instruction.
@@ -330,7 +341,7 @@ namespace llvm {
     /// of them are matched by the operand, the second value should be -1.
     std::vector<std::pair<unsigned, int> > ResultInstOperandIndex;
 
-    CodeGenInstAlias(Record *R, CodeGenTarget &T);
+    CodeGenInstAlias(Record *R, unsigned Variant, CodeGenTarget &T);
 
     bool tryAliasOpMatch(DagInit *Result, unsigned AliasOpNo,
                          Record *InstOpRec, bool hasSubOps, ArrayRef<SMLoc> Loc,

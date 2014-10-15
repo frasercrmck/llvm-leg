@@ -28,6 +28,7 @@
 
 namespace llvm {
 
+class Function;
 class GlobalValue;
 class Loop;
 class Type;
@@ -105,7 +106,7 @@ public:
   /// The returned cost is defined in terms of \c TargetCostConstants, see its
   /// comments for a detailed explanation of the cost values.
   virtual unsigned getOperationCost(unsigned Opcode, Type *Ty,
-                                    Type *OpTy = 0) const;
+                                    Type *OpTy = nullptr) const;
 
   /// \brief Estimate the cost of a GEP operation when lowered.
   ///
@@ -183,7 +184,7 @@ public:
   /// should probably move to simpler cost metrics using the above.
   /// Alternatively, we could split the cost interface into distinct code-size
   /// and execution-speed costs. This would allow modelling the core of this
-  /// query more accurately as the a call is a single small instruction, but
+  /// query more accurately as a call is a single small instruction, but
   /// incurs significant execution cost.
   virtual bool isLoweredToCall(const Function *F) const;
 
@@ -198,11 +199,23 @@ public:
     /// The cost threshold for the unrolled loop when optimizing for size (set
     /// to UINT_MAX to disable).
     unsigned OptSizeThreshold;
+    /// The cost threshold for the unrolled loop, like Threshold, but used
+    /// for partial/runtime unrolling (set to UINT_MAX to disable).
+    unsigned PartialThreshold;
+    /// The cost threshold for the unrolled loop when optimizing for size, like
+    /// OptSizeThreshold, but used for partial/runtime unrolling (set to UINT_MAX
+    /// to disable).
+    unsigned PartialOptSizeThreshold;
     /// A forced unrolling factor (the number of concatenated bodies of the
     /// original loop in the unrolled loop body). When set to 0, the unrolling
     /// transformation will select an unrolling factor based on the current cost
     /// threshold and other factors.
     unsigned Count;
+    // Set the maximum unrolling factor. The unrolling factor may be selected
+    // using the appropriate cost threshold, but may not exceed this number
+    // (set to UINT_MAX to disable). This does not apply in cases where the
+    // loop is being fully unrolled.
+    unsigned MaxCount;
     /// Allow partial unrolling (unrolling of loops to expand the size of the
     /// loop body, not only to eliminate small constant-trip-count loops).
     bool     Partial;
@@ -215,7 +228,8 @@ public:
   /// \brief Get target-customized preferences for the generic loop unrolling
   /// transformation. The caller will initialize UP with the current
   /// target-independent defaults.
-  virtual void getUnrollingPreferences(Loop *L, UnrollingPreferences &UP) const;
+  virtual void getUnrollingPreferences(const Function *F, Loop *L,
+                                       UnrollingPreferences &UP) const;
 
   /// @}
 
@@ -310,6 +324,7 @@ public:
   enum ShuffleKind {
     SK_Broadcast,       ///< Broadcast element 0 to all other elements.
     SK_Reverse,         ///< Reverse the order of the vector.
+    SK_Alternate,       ///< Choose alternate elements from vector.
     SK_InsertSubvector, ///< InsertSubvector. Index indicates start offset.
     SK_ExtractSubvector ///< ExtractSubvector Index indicates start offset.
   };
@@ -322,6 +337,9 @@ public:
     OK_NonUniformConstantValue   // Operand is a non uniform constant value.
   };
 
+  /// \brief Additional properties of an operand's values.
+  enum OperandValueProperties { OP_None = 0, OP_PowerOf2 = 1 };
+
   /// \return The number of scalar or vector registers that the target has.
   /// If 'Vectors' is true, it returns the number of vector registers. If it is
   /// set to false, it returns the number of scalar registers.
@@ -330,21 +348,24 @@ public:
   /// \return The width of the largest scalar or vector register type.
   virtual unsigned getRegisterBitWidth(bool Vector) const;
 
-  /// \return The maximum unroll factor that the vectorizer should try to
+  /// \return The maximum interleave factor that any transform should try to
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
-  virtual unsigned getMaximumUnrollFactor() const;
+  virtual unsigned getMaxInterleaveFactor() const;
 
   /// \return The expected cost of arithmetic ops, such as mul, xor, fsub, etc.
-  virtual unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty,
-                                  OperandValueKind Opd1Info = OK_AnyValue,
-                                  OperandValueKind Opd2Info = OK_AnyValue) const;
+  virtual unsigned
+  getArithmeticInstrCost(unsigned Opcode, Type *Ty,
+                         OperandValueKind Opd1Info = OK_AnyValue,
+                         OperandValueKind Opd2Info = OK_AnyValue,
+                         OperandValueProperties Opd1PropInfo = OP_None,
+                         OperandValueProperties Opd2PropInfo = OP_None) const;
 
   /// \return The cost of a shuffle instruction of kind Kind and of type Tp.
   /// The index and subtype parameters are used by the subvector insertion and
   /// extraction shuffle kinds.
   virtual unsigned getShuffleCost(ShuffleKind Kind, Type *Tp, int Index = 0,
-                                  Type *SubTp = 0) const;
+                                  Type *SubTp = nullptr) const;
 
   /// \return The expected cost of cast instructions, such as bitcast, trunc,
   /// zext, etc.
@@ -357,7 +378,7 @@ public:
 
   /// \returns The expected cost of compare and select instructions.
   virtual unsigned getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
-                                      Type *CondTy = 0) const;
+                                      Type *CondTy = nullptr) const;
 
   /// \return The expected cost of vector Insert and Extract.
   /// Use -1 to indicate that there is no information on the index value.
@@ -402,6 +423,13 @@ public:
   /// the address indexing mode.
   virtual unsigned getAddressComputationCost(Type *Ty,
                                              bool IsComplex = false) const;
+
+  /// \returns The cost, if any, of keeping values of the given types alive
+  /// over a callsite.
+  ///
+  /// Some types may require the use of register classes that do not have
+  /// any callee-saved registers, so would require a spill and fill.
+  virtual unsigned getCostOfKeepingLiveOverCall(ArrayRef<Type*> Tys) const;
 
   /// @}
 

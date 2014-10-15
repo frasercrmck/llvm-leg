@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 //
 
-#ifndef MIPSASMBACKEND_H
-#define MIPSASMBACKEND_H
+#ifndef LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSASMBACKEND_H
+#define LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSASMBACKEND_H
 
 #include "MCTargetDesc/MipsFixupKinds.h"
 #include "llvm/MC/MCAsmBackend.h"
@@ -37,14 +37,14 @@ public:
       : MCAsmBackend(), OSType(_OSType), IsLittle(_isLittle),
         Is64Bit(_is64Bit) {}
 
-  MCObjectWriter *createObjectWriter(raw_ostream &OS) const;
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override;
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const;
+                  uint64_t Value, bool IsPCRel) const override;
 
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const;
+  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
-  unsigned getNumFixupKinds() const {
+  unsigned getNumFixupKinds() const override {
     return Mips::NumTargetFixupKinds;
   }
 
@@ -55,7 +55,7 @@ public:
   /// relaxation.
   ///
   /// \param Inst - The instruction to test.
-  bool mayNeedRelaxation(const MCInst &Inst) const {
+  bool mayNeedRelaxation(const MCInst &Inst) const override {
     return false;
   }
 
@@ -63,9 +63,9 @@ public:
   /// fixup requires the associated instruction to be relaxed.
    bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                              const MCRelaxableFragment *DF,
-                             const MCAsmLayout &Layout) const {
+                             const MCAsmLayout &Layout) const override {
     // FIXME.
-    assert(0 && "RelaxInstruction() unimplemented");
+    llvm_unreachable("RelaxInstruction() unimplemented");
     return false;
   }
 
@@ -75,16 +75,16 @@ public:
   /// \param Inst - The instruction to relax, which may be the same
   /// as the output.
   /// \param [out] Res On return, the relaxed instruction.
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const {}
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {}
 
   /// @}
 
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const;
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
 
   void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
                          const MCFixup &Fixup, const MCFragment *DF,
                          const MCValue &Target, uint64_t &Value,
-                         bool &IsResolved);
+                         bool &IsResolved) override;
 
 }; // class MipsAsmBackend
 

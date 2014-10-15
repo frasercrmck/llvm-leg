@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "loop-reroll"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -35,6 +34,8 @@
 #include "llvm/Transforms/Utils/LoopUtils.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "loop-reroll"
 
 STATISTIC(NumRerolledLoops, "Number of rerolled loops");
 
@@ -923,8 +924,10 @@ bool LoopReroll::reroll(Instruction *IV, Loop *L, BasicBlock *Header,
       // them, and this matching fails. As an exception, we allow the alias
       // set tracker to handle regular (simple) load/store dependencies.
       if (FutureSideEffects &&
-            ((!isSimpleLoadStore(J1) && !isSafeToSpeculativelyExecute(J1)) ||
-             (!isSimpleLoadStore(J2) && !isSafeToSpeculativelyExecute(J2)))) {
+            ((!isSimpleLoadStore(J1) &&
+              !isSafeToSpeculativelyExecute(J1, DL)) ||
+             (!isSimpleLoadStore(J2) &&
+              !isSafeToSpeculativelyExecute(J2, DL)))) {
         DEBUG(dbgs() << "LRR: iteration root match failed at " << *J1 <<
                         " vs. " << *J2 <<
                         " (side effects prevent reordering)\n");
@@ -945,7 +948,7 @@ bool LoopReroll::reroll(Instruction *IV, Loop *L, BasicBlock *Header,
       bool InReduction = Reductions.isPairInSame(J1, J2);
 
       if (!(InReduction && J1->isAssociative())) {
-        bool Swapped = false, SomeOpMatched = false;;
+        bool Swapped = false, SomeOpMatched = false;
         for (unsigned j = 0; j < J1->getNumOperands() && !MatchFailed; ++j) {
           Value *Op2 = J2->getOperand(j);
 
@@ -1133,7 +1136,7 @@ bool LoopReroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   SE = &getAnalysis<ScalarEvolution>();
   TLI = &getAnalysis<TargetLibraryInfo>();
   DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
-  DL = DLP ? &DLP->getDataLayout() : 0;
+  DL = DLP ? &DLP->getDataLayout() : nullptr;
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
 
   BasicBlock *Header = L->getHeader();

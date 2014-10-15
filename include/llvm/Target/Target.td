@@ -378,9 +378,18 @@ class Instruction {
   bit isAsCheapAsAMove = 0; // As cheap (or cheaper) than a move instruction.
   bit hasExtraSrcRegAllocReq = 0; // Sources have special regalloc requirement?
   bit hasExtraDefRegAllocReq = 0; // Defs have special regalloc requirement?
+  bit isRegSequence = 0;    // Is this instruction a kind of reg sequence?
+                            // If so, make sure to override
+                            // TargetInstrInfo::getRegSequenceLikeInputs.
   bit isPseudo     = 0;     // Is this instruction a pseudo-instruction?
                             // If so, won't have encoding information for
                             // the [MC]CodeEmitter stuff.
+  bit isExtractSubreg = 0;  // Is this instruction a kind of extract subreg?
+                             // If so, make sure to override
+                             // TargetInstrInfo::getExtractSubregLikeInputs.
+  bit isInsertSubreg = 0;   // Is this instruction a kind of insert subreg?
+                            // If so, make sure to override
+                            // TargetInstrInfo::getInsertSubregLikeInputs.
 
   // Side effect flags - When set, the flags have these meanings:
   //
@@ -583,9 +592,13 @@ class Operand<ValueType ty> : DAGOperand {
   string PrintMethod = "printOperand";
   string EncoderMethod = "";
   string DecoderMethod = "";
-  string AsmOperandLowerMethod = ?;
   string OperandType = "OPERAND_UNKNOWN";
   dag MIOperandInfo = (ops);
+
+  // MCOperandPredicate - Optionally, a code fragment operating on
+  // const MCOperand &MCOp, and returning a bool, to indicate if
+  // the value of MCOp is valid for the specific subclass of Operand
+  code MCOperandPredicate;
 
   // ParserMatchClass - The "match class" that operands of this type fit
   // in. Match classes are used to define the order in which instructions are
@@ -836,6 +849,14 @@ def PATCHPOINT : Instruction {
   let mayLoad = 1;
   let usesCustomInserter = 1;
 }
+def LOAD_STACK_GUARD : Instruction {
+  let OutOperandList = (outs ptr_rc:$dst);
+  let InOperandList = (ins);
+  let mayLoad = 1;
+  bit isReMaterializable = 1;
+  let hasSideEffects = 0;
+  bit isPseudo = 1;
+}
 }
 
 //===----------------------------------------------------------------------===//
@@ -950,10 +971,15 @@ class MnemonicAlias<string From, string To, string VariantName = ""> {
 /// InstAlias - This defines an alternate assembly syntax that is allowed to
 /// match an instruction that has a different (more canonical) assembly
 /// representation.
-class InstAlias<string Asm, dag Result, bit Emit = 0b1> {
+class InstAlias<string Asm, dag Result, int Emit = 1> {
   string AsmString = Asm;      // The .s format to match the instruction with.
   dag ResultInst = Result;     // The MCInst to generate.
-  bit EmitAlias = Emit;        // Emit the alias instead of what's aliased.
+
+  // This determines which order the InstPrinter detects aliases for
+  // printing. A larger value makes the alias more likely to be
+  // emitted. The Instruction's own definition is notionally 0.5, so 0
+  // disables printing and 1 enables it if there are no conflicting aliases.
+  int EmitPriority = Emit;
 
   // Predicates - Predicates that must be true for this to match.
   list<Predicate> Predicates = [];

@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "jit"
 #include "llvm-c/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
@@ -23,25 +22,11 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "jit"
+
 // Wrapping the C bindings types.
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(GenericValue, LLVMGenericValueRef)
 
-inline DataLayout *unwrap(LLVMTargetDataRef P) {
-  return reinterpret_cast<DataLayout*>(P);
-}
-  
-inline LLVMTargetDataRef wrap(const DataLayout *P) {
-  return reinterpret_cast<LLVMTargetDataRef>(const_cast<DataLayout*>(P));
-}
-
-inline TargetLibraryInfo *unwrap(LLVMTargetLibraryInfoRef P) {
-  return reinterpret_cast<TargetLibraryInfo*>(P);
-}
-
-inline LLVMTargetLibraryInfoRef wrap(const TargetLibraryInfo *P) {
-  TargetLibraryInfo *X = const_cast<TargetLibraryInfo*>(P);
-  return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
-}
 
 inline LLVMTargetMachineRef wrap(const TargetMachine *P) {
   return
@@ -117,7 +102,7 @@ LLVMBool LLVMCreateExecutionEngineForModule(LLVMExecutionEngineRef *OutEE,
                                             LLVMModuleRef M,
                                             char **OutError) {
   std::string Error;
-  EngineBuilder builder(unwrap(M));
+  EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
   builder.setEngineKind(EngineKind::Either)
          .setErrorStr(&Error);
   if (ExecutionEngine *EE = builder.create()){
@@ -132,7 +117,7 @@ LLVMBool LLVMCreateInterpreterForModule(LLVMExecutionEngineRef *OutInterp,
                                         LLVMModuleRef M,
                                         char **OutError) {
   std::string Error;
-  EngineBuilder builder(unwrap(M));
+  EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
   builder.setEngineKind(EngineKind::Interpreter)
          .setErrorStr(&Error);
   if (ExecutionEngine *Interp = builder.create()) {
@@ -148,7 +133,7 @@ LLVMBool LLVMCreateJITCompilerForModule(LLVMExecutionEngineRef *OutJIT,
                                         unsigned OptLevel,
                                         char **OutError) {
   std::string Error;
-  EngineBuilder builder(unwrap(M));
+  EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
   builder.setEngineKind(EngineKind::JIT)
          .setErrorStr(&Error)
          .setOptLevel((CodeGenOpt::Level)OptLevel);
@@ -196,10 +181,9 @@ LLVMBool LLVMCreateMCJITCompilerForModule(
   targetOptions.EnableFastISel = options.EnableFastISel;
 
   std::string Error;
-  EngineBuilder builder(unwrap(M));
+  EngineBuilder builder(std::unique_ptr<Module>(unwrap(M)));
   builder.setEngineKind(EngineKind::JIT)
          .setErrorStr(&Error)
-         .setUseMCJIT(true)
          .setOptLevel((CodeGenOpt::Level)options.OptLevel)
          .setCodeModel(unwrap(options.CodeModel))
          .setTargetOptions(targetOptions);
@@ -282,11 +266,10 @@ LLVMGenericValueRef LLVMRunFunction(LLVMExecutionEngineRef EE, LLVMValueRef F,
 }
 
 void LLVMFreeMachineCodeForFunction(LLVMExecutionEngineRef EE, LLVMValueRef F) {
-  unwrap(EE)->freeMachineCodeForFunction(unwrap<Function>(F));
 }
 
 void LLVMAddModule(LLVMExecutionEngineRef EE, LLVMModuleRef M){
-  unwrap(EE)->addModule(unwrap(M));
+  unwrap(EE)->addModule(std::unique_ptr<Module>(unwrap(M)));
 }
 
 void LLVMAddModuleProvider(LLVMExecutionEngineRef EE, LLVMModuleProviderRef MP){
@@ -321,7 +304,7 @@ LLVMBool LLVMFindFunction(LLVMExecutionEngineRef EE, const char *Name,
 
 void *LLVMRecompileAndRelinkFunction(LLVMExecutionEngineRef EE,
                                      LLVMValueRef Fn) {
-  return unwrap(EE)->recompileAndRelinkFunction(unwrap<Function>(Fn));
+  return nullptr;
 }
 
 LLVMTargetDataRef LLVMGetExecutionEngineTargetData(LLVMExecutionEngineRef EE) {
@@ -410,7 +393,7 @@ uint8_t *SimpleBindingMemoryManager::allocateDataSection(
 }
 
 bool SimpleBindingMemoryManager::finalizeMemory(std::string *ErrMsg) {
-  char *errMsgCString = 0;
+  char *errMsgCString = nullptr;
   bool result = Functions.FinalizeMemory(Opaque, &errMsgCString);
   assert((result || !errMsgCString) &&
          "Did not expect an error message if FinalizeMemory succeeded");
@@ -433,7 +416,7 @@ LLVMMCJITMemoryManagerRef LLVMCreateSimpleMCJITMemoryManager(
   
   if (!AllocateCodeSection || !AllocateDataSection || !FinalizeMemory ||
       !Destroy)
-    return NULL;
+    return nullptr;
   
   SimpleBindingMMFunctions functions;
   functions.AllocateCodeSection = AllocateCodeSection;

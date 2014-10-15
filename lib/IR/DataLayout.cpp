@@ -155,10 +155,9 @@ DataLayout::InvalidPointerElem = { 0U, 0U, 0U, ~0U };
 const char *DataLayout::getManglingComponent(const Triple &T) {
   if (T.isOSBinFormatMachO())
     return "-m:o";
-  if (T.isOSBinFormatELF() || T.isArch64Bit())
-    return "-m:e";
-  assert(T.isOSBinFormatCOFF());
-  return "-m:w";
+  if (T.isOSWindows() && T.getArch() == Triple::x86 && T.isOSBinFormatCOFF())
+    return "-m:w";
+  return "-m:e";
 }
 
 static const LayoutAlignElem DefaultAlignments[] = {
@@ -179,7 +178,7 @@ static const LayoutAlignElem DefaultAlignments[] = {
 void DataLayout::reset(StringRef Desc) {
   clear();
 
-  LayoutMap = 0;
+  LayoutMap = nullptr;
   LittleEndian = false;
   StackNaturalAlign = 0;
   ManglingMode = MM_None;
@@ -345,7 +344,11 @@ void DataLayout::parseSpecifier(StringRef Desc) {
   }
 }
 
-DataLayout::DataLayout(const Module *M) : LayoutMap(0) {
+DataLayout::DataLayout(const Module *M) : LayoutMap(nullptr) {
+  init(M);
+}
+
+void DataLayout::init(const Module *M) {
   const DataLayout *Other = M->getDataLayout();
   if (Other)
     *this = *Other;
@@ -358,7 +361,7 @@ bool DataLayout::operator==(const DataLayout &Other) const {
              StackNaturalAlign == Other.StackNaturalAlign &&
              ManglingMode == Other.ManglingMode &&
              LegalIntWidths == Other.LegalIntWidths &&
-             Alignments == Other.Alignments && Pointers == Pointers;
+             Alignments == Other.Alignments && Pointers == Other.Pointers;
   assert(Ret == (getStringRepresentation() == Other.getStringRepresentation()));
   return Ret;
 }
@@ -489,7 +492,7 @@ void DataLayout::clear() {
   Alignments.clear();
   Pointers.clear();
   delete static_cast<StructLayoutMap *>(LayoutMap);
-  LayoutMap = 0;
+  LayoutMap = nullptr;
 }
 
 DataLayout::~DataLayout() {
@@ -638,7 +641,7 @@ unsigned DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
             ? getPointerABIAlignment(0)
             : getPointerPrefAlignment(0));
   case Type::PointerTyID: {
-    unsigned AS = dyn_cast<PointerType>(Ty)->getAddressSpace();
+    unsigned AS = cast<PointerType>(Ty)->getAddressSpace();
     return (abi_or_pref
             ? getPointerABIAlignment(AS)
             : getPointerPrefAlignment(AS));
@@ -688,7 +691,7 @@ unsigned DataLayout::getABITypeAlignment(Type *Ty) const {
 /// getABIIntegerTypeAlignment - Return the minimum ABI-required alignment for
 /// an integer type of the specified bitwidth.
 unsigned DataLayout::getABIIntegerTypeAlignment(unsigned BitWidth) const {
-  return getAlignmentInfo(INTEGER_ALIGN, BitWidth, true, 0);
+  return getAlignmentInfo(INTEGER_ALIGN, BitWidth, true, nullptr);
 }
 
 unsigned DataLayout::getPrefTypeAlignment(Type *Ty) const {
@@ -709,7 +712,7 @@ IntegerType *DataLayout::getIntPtrType(LLVMContext &C,
 Type *DataLayout::getIntPtrType(Type *Ty) const {
   assert(Ty->isPtrOrPtrVectorTy() &&
          "Expected a pointer or pointer vector type.");
-  unsigned NumBits = getTypeSizeInBits(Ty->getScalarType());
+  unsigned NumBits = getPointerTypeSizeInBits(Ty);
   IntegerType *IntTy = IntegerType::get(Ty->getContext(), NumBits);
   if (VectorType *VecTy = dyn_cast<VectorType>(Ty))
     return VectorType::get(IntTy, VecTy->getNumElements());
@@ -720,7 +723,7 @@ Type *DataLayout::getSmallestLegalIntType(LLVMContext &C, unsigned Width) const 
   for (unsigned LegalIntWidth : LegalIntWidths)
     if (Width <= LegalIntWidth)
       return Type::getIntNTy(C, LegalIntWidth);
-  return 0;
+  return nullptr;
 }
 
 unsigned DataLayout::getLargestLegalIntTypeSize() const {
@@ -797,17 +800,17 @@ unsigned DataLayout::getPreferredAlignmentLog(const GlobalVariable *GV) const {
 }
 
 DataLayoutPass::DataLayoutPass() : ImmutablePass(ID), DL("") {
-  report_fatal_error("Bad DataLayoutPass ctor used. Tool did not specify a "
-                     "DataLayout to use?");
+  initializeDataLayoutPassPass(*PassRegistry::getPassRegistry());
 }
 
 DataLayoutPass::~DataLayoutPass() {}
 
-DataLayoutPass::DataLayoutPass(const DataLayout &DL)
-    : ImmutablePass(ID), DL(DL) {
-  initializeDataLayoutPassPass(*PassRegistry::getPassRegistry());
+bool DataLayoutPass::doInitialization(Module &M) {
+  DL.init(&M);
+  return false;
 }
 
-DataLayoutPass::DataLayoutPass(const Module *M) : ImmutablePass(ID), DL(M) {
-  initializeDataLayoutPassPass(*PassRegistry::getPassRegistry());
+bool DataLayoutPass::doFinalization(Module &M) {
+  DL.reset("");
+  return false;
 }

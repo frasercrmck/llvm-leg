@@ -1,8 +1,8 @@
-; RUN: llc < %s -march=r600 -mcpu=SI  | FileCheck %s
+; RUN: llc < %s -march=r600 -mcpu=SI -verify-machineinstrs | FileCheck %s
 
 ; This test checks that no VGPR to SGPR copies are created by the register
 ; allocator.
-; CHECK-LABEL: @phi1
+; CHECK-LABEL: {{^}}phi1:
 ; CHECK: S_BUFFER_LOAD_DWORD [[DST:s[0-9]]], {{s\[[0-9]+:[0-9]+\]}}, 0
 ; CHECK: V_MOV_B32_e32 v{{[0-9]}}, [[DST]]
 
@@ -29,7 +29,7 @@ ENDIF:                                            ; preds = %main_body, %ELSE
 }
 
 ; Make sure this program doesn't crash
-; CHECK-LABEL: @phi2
+; CHECK-LABEL: {{^}}phi2:
 define void @phi2(<16 x i8> addrspace(2)* inreg, <16 x i8> addrspace(2)* inreg, <32 x i8> addrspace(2)* inreg, i32 inreg, <2 x i32>, <2 x i32>, <2 x i32>, <3 x i32>, <2 x i32>, <2 x i32>, <2 x i32>, float, float, float, float, float, float, float, float, float) #0 {
 main_body:
   %20 = getelementptr <16 x i8> addrspace(2)* %0, i32 0
@@ -70,7 +70,7 @@ main_body:
   %55 = fadd float %54, %53
   %56 = fmul float %45, %45
   %57 = fadd float %55, %56
-  %58 = call float @llvm.AMDGPU.rsq(float %57)
+  %58 = call float @llvm.AMDGPU.rsq.f32(float %57)
   %59 = fmul float %43, %58
   %60 = fmul float %44, %58
   %61 = fmul float %45, %58
@@ -149,7 +149,7 @@ ENDIF24:                                          ; preds = %ENDIF, %IF25
 }
 
 ; We just want ot make sure the program doesn't crash
-; CHECK-LABEL: @loop
+; CHECK-LABEL: {{^}}loop:
 
 define void @loop(<16 x i8> addrspace(2)* inreg, <16 x i8> addrspace(2)* inreg, <32 x i8> addrspace(2)* inreg, i32 inreg, <2 x i32>, <2 x i32>, <2 x i32>, <3 x i32>, <2 x i32>, <2 x i32>, <2 x i32>, float, float, float, float, float, float, float, float, float) #0 {
 main_body:
@@ -212,7 +212,7 @@ declare float @llvm.SI.fs.interp(i32, i32, i32, <2 x i32>) #1
 declare <4 x float> @llvm.SI.sample.v2i32(<2 x i32>, <32 x i8>, <16 x i8>, i32) #1
 
 ; Function Attrs: readnone
-declare float @llvm.AMDGPU.rsq(float) #3
+declare float @llvm.AMDGPU.rsq.f32(float) #3
 
 ; Function Attrs: readnone
 declare float @llvm.AMDIL.exp.(float) #3
@@ -227,7 +227,7 @@ declare i32 @llvm.SI.packf16(float, float) #1
 ; registers were being identified as an SGPR regclass which was causing
 ; an assertion failure.
 
-; CHECK-LABEL: @sample_v3
+; CHECK-LABEL: {{^}}sample_v3:
 ; CHECK: IMAGE_SAMPLE
 ; CHECK: IMAGE_SAMPLE
 ; CHECK: EXP
@@ -269,7 +269,7 @@ endif:
 
 !2 = metadata !{metadata !"const", null, i32 1}
 
-; CHECK-LABEL: @copy1
+; CHECK-LABEL: {{^}}copy1:
 ; CHECK: BUFFER_LOAD_DWORD
 ; CHECK: V_ADD
 ; CHECK: S_ENDPGM
@@ -296,7 +296,7 @@ endif:
 }
 
 ; This test is just checking that we don't crash / assertion fail.
-; CHECK-LABEL: @copy2
+; CHECK-LABEL: {{^}}copy2:
 ; CHECK: S_ENDPGM
 
 define void @copy2([17 x <16 x i8>] addrspace(2)* byval, [32 x <16 x i8>] addrspace(2)* byval, [16 x <32 x i8>] addrspace(2)* byval, float inreg, i32 inreg, <2 x i32>, <2 x i32>, <2 x i32>, <3 x i32>, <2 x i32>, <2 x i32>, <2 x i32>, float, float, float, float, float, float, float, float, float) #0 {

@@ -25,7 +25,7 @@ ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(StringRef TT) {
       (TheTriple.getArch() == Triple::thumbeb))
     IsLittleEndian = false;
 
-  Data64bitsDirective = 0;
+  Data64bitsDirective = nullptr;
   CommentString = "@";
   Code16Directive = ".code\t16";
   Code32Directive = ".code\t32";
@@ -50,16 +50,22 @@ ARMELFMCAsmInfo::ARMELFMCAsmInfo(StringRef TT) {
   // ".comm align is in bytes but .align is pow-2."
   AlignmentIsInBytes = false;
 
-  Data64bitsDirective = 0;
+  Data64bitsDirective = nullptr;
   CommentString = "@";
   Code16Directive = ".code\t16";
   Code32Directive = ".code\t32";
 
-  HasLEB128 = true;
   SupportsDebugInformation = true;
 
   // Exceptions handling
-  ExceptionsType = ExceptionHandling::ARM;
+  switch (TheTriple.getOS()) {
+  case Triple::NetBSD:
+    ExceptionsType = ExceptionHandling::DwarfCFI;
+    break;
+  default:
+    ExceptionsType = ExceptionHandling::ARM;
+    break;
+  }
 
   // foo(plt) instead of foo@plt
   UseParensForSymbolVariant = true;
@@ -76,3 +82,31 @@ void ARMELFMCAsmInfo::setUseIntegratedAssembler(bool Value) {
     DwarfRegNumForCFI = true;
   }
 }
+
+void ARMCOFFMCAsmInfoMicrosoft::anchor() { }
+
+ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft() {
+  AlignmentIsInBytes = false;
+
+  PrivateGlobalPrefix = "$M";
+}
+
+void ARMCOFFMCAsmInfoGNU::anchor() { }
+
+ARMCOFFMCAsmInfoGNU::ARMCOFFMCAsmInfoGNU() {
+  AlignmentIsInBytes = false;
+  HasSingleParameterDotFile = true;
+
+  CommentString = "@";
+  Code16Directive = ".code\t16";
+  Code32Directive = ".code\t32";
+  PrivateGlobalPrefix = ".L";
+
+  SupportsDebugInformation = true;
+  ExceptionsType = ExceptionHandling::None;
+  UseParensForSymbolVariant = true;
+
+  UseIntegratedAssembler = false;
+  DwarfRegNumForCFI = true;
+}
+

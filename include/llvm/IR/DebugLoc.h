@@ -21,6 +21,7 @@ namespace llvm {
   template <typename T> struct DenseMapInfo;
   class MDNode;
   class LLVMContext;
+  class raw_ostream;
 
   /// DebugLoc - Debug location id.  This is carried by Instruction, SDNode,
   /// and MachineInstr to compactly encode file/line/scope information for an
@@ -58,7 +59,7 @@ namespace llvm {
     /// get - Get a new DebugLoc that corresponds to the specified line/col
     /// scope/inline location.
     static DebugLoc get(unsigned Line, unsigned Col,
-                        MDNode *Scope, MDNode *InlinedAt = 0);
+                        MDNode *Scope, MDNode *InlinedAt = nullptr);
 
     /// getFromDILocation - Translate the DILocation quad into a DebugLoc.
     static DebugLoc getFromDILocation(MDNode *N);
@@ -94,7 +95,7 @@ namespace llvm {
 
     // getFnDebugLoc - Walk up the scope chain of given debug loc and find line
     // number info for the function.
-    DebugLoc getFnDebugLoc(const LLVMContext &Ctx);
+    DebugLoc getFnDebugLoc(const LLVMContext &Ctx) const;
 
     /// getAsMDNode - This method converts the compressed DebugLoc node into a
     /// DILocation compatible MDNode.
@@ -106,6 +107,8 @@ namespace llvm {
     bool operator!=(const DebugLoc &DL) const { return !(*this == DL); }
 
     void dump(const LLVMContext &Ctx) const;
+    /// \brief prints source location /path/to/file.exe:line:col @[inlined at]
+    void print(const LLVMContext &Ctx, raw_ostream &OS) const;
   };
 
   template <>

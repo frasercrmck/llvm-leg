@@ -113,7 +113,7 @@ TransformImpl(const SCEV *S, Instruction *User, Value *OperandValToReplace) {
     // Transform each operand.
     for (SCEVNAryExpr::op_iterator I = AR->op_begin(), E = AR->op_end();
          I != E; ++I) {
-      Operands.push_back(TransformSubExpr(*I, LUser, 0));
+      Operands.push_back(TransformSubExpr(*I, LUser, nullptr));
     }
     // Conservatively use AnyWrap until/unless we need FlagNW.
     const SCEV *Result = SE.getAddRecExpr(Operands, L, SCEV::FlagAnyWrap);
@@ -126,7 +126,7 @@ TransformImpl(const SCEV *S, Instruction *User, Value *OperandValToReplace) {
       // Normalized form:   {-2,+,1,+,2}
       // Denormalized form: {1,+,3,+,2}
       //
-      // However, denormalization would use the a different step expression than
+      // However, denormalization would use a different step expression than
       // normalization (see getPostIncExpr), generating the wrong final
       // expression: {-2,+,1,+,2} + {1,+,2} => {-1,+,3,+,2}
       if (AR->isAffine() &&
@@ -241,7 +241,7 @@ TransformSubExpr(const SCEV *S, Instruction *User, Value *OperandValToReplace) {
 }
 
 /// Top level driver for transforming an expression DAG into its requested
-/// post-inc form (either "Normalized" or "Denormalized".
+/// post-inc form (either "Normalized" or "Denormalized").
 const SCEV *llvm::TransformForPostIncUse(TransformKind Kind,
                                          const SCEV *S,
                                          Instruction *User,

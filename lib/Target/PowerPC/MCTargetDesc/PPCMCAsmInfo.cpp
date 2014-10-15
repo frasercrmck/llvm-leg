@@ -28,7 +28,7 @@ PPCMCAsmInfoDarwin::PPCMCAsmInfoDarwin(bool is64Bit, const Triple& T) {
   ExceptionsType = ExceptionHandling::DwarfCFI;
 
   if (!is64Bit)
-    Data64bitsDirective = 0;      // We can't emit a 64-bit unit in PPC32 mode.
+    Data64bitsDirective = nullptr; // We can't emit a 64-bit unit in PPC32 mode.
 
   AssemblerDialect = 1;           // New-Style mnemonics.
   SupportsDebugInformation= true; // Debug information.
@@ -42,9 +42,9 @@ PPCMCAsmInfoDarwin::PPCMCAsmInfoDarwin(bool is64Bit, const Triple& T) {
   UseIntegratedAssembler = true;
 }
 
-void PPCLinuxMCAsmInfo::anchor() { }
+void PPCELFMCAsmInfo::anchor() { }
 
-PPCLinuxMCAsmInfo::PPCLinuxMCAsmInfo(bool is64Bit, const Triple& T) {
+PPCELFMCAsmInfo::PPCELFMCAsmInfo(bool is64Bit, const Triple& T) {
   if (is64Bit) {
     PointerSize = CalleeSaveStackSlotSize = 8;
   }
@@ -64,15 +64,15 @@ PPCLinuxMCAsmInfo::PPCLinuxMCAsmInfo(bool is64Bit, const Triple& T) {
   DollarIsPC = true;
 
   // Set up DWARF directives
-  HasLEB128 = true;  // Target asm supports leb128 directives (little-endian)
   MinInstAlignment = 4;
 
   // Exceptions handling
   ExceptionsType = ExceptionHandling::DwarfCFI;
     
   ZeroDirective = "\t.space\t";
-  Data64bitsDirective = is64Bit ? "\t.quad\t" : 0;
+  Data64bitsDirective = is64Bit ? "\t.quad\t" : nullptr;
   AssemblerDialect = 1;           // New-Style mnemonics.
+  LCOMMDirectiveAlignmentType = LCOMM::ByteAlignment;
 
   if (T.getOS() == llvm::Triple::FreeBSD ||
       (T.getOS() == llvm::Triple::NetBSD && !is64Bit) ||

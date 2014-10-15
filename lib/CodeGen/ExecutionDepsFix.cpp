@@ -20,7 +20,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "execution-fix"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
@@ -31,7 +30,11 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
+
 using namespace llvm;
+
+#define DEBUG_TYPE "execution-fix"
 
 /// A DomainValue is a bit like LiveIntervals' ValNo, but it also keeps track
 /// of execution domains.
@@ -100,7 +103,7 @@ struct DomainValue {
   // Clear this DomainValue and point to next which has all its data.
   void clear() {
     AvailableDomains = 0;
-    Next = 0;
+    Next = nullptr;
     Instrs.clear();
   }
 };
@@ -275,7 +278,7 @@ void ExeDepsFix::kill(int rx) {
     return;
 
   release(LiveRegs[rx].Value);
-  LiveRegs[rx].Value = 0;
+  LiveRegs[rx].Value = nullptr;
 }
 
 /// Force register rx into domain.
@@ -360,7 +363,7 @@ void ExeDepsFix::enterBasicBlock(MachineBasicBlock *MBB) {
 
   // Default values are 'nothing happened a long time ago'.
   for (unsigned rx = 0; rx != NumRegs; ++rx) {
-    LiveRegs[rx].Value = 0;
+    LiveRegs[rx].Value = nullptr;
     LiveRegs[rx].Def = -(1 << 20);
   }
 
@@ -404,7 +407,7 @@ void ExeDepsFix::enterBasicBlock(MachineBasicBlock *MBB) {
 
       // We have a live DomainValue from more than one predecessor.
       if (LiveRegs[rx].Value->isCollapsed()) {
-        // We are already collapsed, but predecessor is not. Force him.
+        // We are already collapsed, but predecessor is not. Force it.
         unsigned Domain = LiveRegs[rx].Value->getFirstDomain();
         if (!pdv->isCollapsed() && pdv->hasDomain(Domain))
           collapse(pdv, Domain);
@@ -440,7 +443,7 @@ void ExeDepsFix::leaveBasicBlock(MachineBasicBlock *MBB) {
       release(LiveRegs[i].Value);
     delete[] LiveRegs;
   }
-  LiveRegs = 0;
+  LiveRegs = nullptr;
 }
 
 void ExeDepsFix::visitInstr(MachineInstr *MI) {
@@ -664,7 +667,7 @@ void ExeDepsFix::visitSoftInstr(MachineInstr *mi, unsigned mask) {
 
   // doms are now sorted in order of appearance. Try to merge them all, giving
   // priority to the latest ones.
-  DomainValue *dv = 0;
+  DomainValue *dv = nullptr;
   while (!Regs.empty()) {
     if (!dv) {
       dv = Regs.pop_back_val().Value;
@@ -712,9 +715,9 @@ void ExeDepsFix::visitSoftInstr(MachineInstr *mi, unsigned mask) {
 
 bool ExeDepsFix::runOnMachineFunction(MachineFunction &mf) {
   MF = &mf;
-  TII = MF->getTarget().getInstrInfo();
-  TRI = MF->getTarget().getRegisterInfo();
-  LiveRegs = 0;
+  TII = MF->getSubtarget().getInstrInfo();
+  TRI = MF->getSubtarget().getRegisterInfo();
+  LiveRegs = nullptr;
   assert(NumRegs == RC->getNumRegs() && "Bad regclass");
 
   DEBUG(dbgs() << "********** FIX EXECUTION DEPENDENCIES: "

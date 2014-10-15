@@ -19,8 +19,10 @@ class MCAsmInfo;
 class MCAsmLayout;
 class MCAssembler;
 class MCContext;
+class MCFixup;
 class MCSection;
 class MCSectionData;
+class MCStreamer;
 class MCSymbol;
 class MCValue;
 class raw_ostream;
@@ -48,13 +50,20 @@ private:
   bool EvaluateAsAbsolute(int64_t &Res, const MCAssembler *Asm,
                           const MCAsmLayout *Layout,
                           const SectionAddrMap *Addrs) const;
+
+  bool evaluateAsAbsolute(int64_t &Res, const MCAssembler *Asm,
+                          const MCAsmLayout *Layout,
+                          const SectionAddrMap *Addrs, bool InSet) const;
+
 protected:
   explicit MCExpr(ExprKind _Kind) : Kind(_Kind) {}
 
   bool EvaluateAsRelocatableImpl(MCValue &Res, const MCAssembler *Asm,
                                  const MCAsmLayout *Layout,
-                                 const SectionAddrMap *Addrs,
-                                 bool InSet) const;
+                                 const MCFixup *Fixup,
+                                 const SectionAddrMap *Addrs, bool InSet,
+                                 bool ForceVarExpansion) const;
+
 public:
   /// @name Accessors
   /// @{
@@ -85,13 +94,26 @@ public:
   bool EvaluateAsAbsolute(int64_t &Res, const MCAssembler &Asm) const;
   bool EvaluateAsAbsolute(int64_t &Res, const MCAsmLayout &Layout) const;
 
+  int64_t evaluateKnownAbsolute(const MCAsmLayout &Layout) const;
+
   /// EvaluateAsRelocatable - Try to evaluate the expression to a relocatable
   /// value, i.e. an expression of the fixed form (a - b + constant).
   ///
   /// @param Res - The relocatable value, if evaluation succeeds.
   /// @param Layout - The assembler layout object to use for evaluating values.
+  /// @param Fixup - The Fixup object if available.
   /// @result - True on success.
-  bool EvaluateAsRelocatable(MCValue &Res, const MCAsmLayout *Layout) const;
+  bool EvaluateAsRelocatable(MCValue &Res, const MCAsmLayout *Layout,
+                             const MCFixup *Fixup) const;
+
+  /// \brief Try to evaluate the expression to the form (a - b + constant) where
+  /// neither a nor b are variables.
+  ///
+  /// This is a more aggressive variant of EvaluateAsRelocatable. The intended
+  /// use is for when relocations are not available, like the symbol value in
+  /// the symbol table.
+  bool EvaluateAsValue(MCValue &Res, const MCAsmLayout *Layout,
+                       const MCFixup *Fixup) const;
 
   /// FindAssociatedSection - Find the "associated section" for this expression,
   /// which is currently defined as the absolute section for constants, or
@@ -253,6 +275,8 @@ public:
     VK_Mips_GOT_LO16,
     VK_Mips_CALL_HI16,
     VK_Mips_CALL_LO16,
+    VK_Mips_PCREL_HI16,
+    VK_Mips_PCREL_LO16,
 
     VK_LEG_LO,
     VK_LEG_HI,
@@ -515,8 +539,9 @@ public:
 
   virtual void PrintImpl(raw_ostream &OS) const = 0;
   virtual bool EvaluateAsRelocatableImpl(MCValue &Res,
-                                         const MCAsmLayout *Layout) const = 0;
-  virtual void AddValueSymbols(MCAssembler *) const = 0;
+                                         const MCAsmLayout *Layout,
+                                         const MCFixup *Fixup) const = 0;
+  virtual void visitUsedExpr(MCStreamer& Streamer) const = 0;
   virtual const MCSection *FindAssociatedSection() const = 0;
 
   virtual void fixELFSymbolsInTLSFixups(MCAssembler &) const = 0;

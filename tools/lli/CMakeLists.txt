@@ -7,8 +7,9 @@ set(LLVM_LINK_COMPONENTS
   IRReader
   Instrumentation
   Interpreter
-  JIT
+  MC
   MCJIT
+  Object
   SelectionDAG
   Support
   native

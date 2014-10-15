@@ -38,12 +38,17 @@ def MMX_PHADDSUBD : OpndItins<
 >;
 }
 
+let Sched = WriteVecLogic in
+def MMX_INTALU_ITINS_VECLOGICSCHED : OpndItins<
+  IIC_MMX_ALU_RR, IIC_MMX_ALU_RM
+>;
+
 let Sched = WriteVecIMul in
 def MMX_PMUL_ITINS : OpndItins<
   IIC_MMX_PMUL, IIC_MMX_PMUL
 >;
 
-let Sched = WriteVecALU in {
+let Sched = WriteVecIMul in {
 def MMX_PSADBW_ITINS : OpndItins<
   IIC_MMX_PSADBW, IIC_MMX_PSADBW
 >;
@@ -167,12 +172,14 @@ multiclass ssse3_palign_mm<string asm, Intrinsic IntId> {
   def R64irr  : MMXSS3AI<0x0F, MRMSrcReg, (outs VR64:$dst),
       (ins VR64:$src1, VR64:$src2, i8imm:$src3),
       !strconcat(asm, "\t{$src3, $src2, $dst|$dst, $src2, $src3}"), 
-      [(set VR64:$dst, (IntId VR64:$src1, VR64:$src2, (i8 imm:$src3)))]>;
+      [(set VR64:$dst, (IntId VR64:$src1, VR64:$src2, (i8 imm:$src3)))]>,
+      Sched<[WriteShuffle]>;
   def R64irm  : MMXSS3AI<0x0F, MRMSrcMem, (outs VR64:$dst),
       (ins VR64:$src1, i64mem:$src2, i8imm:$src3),
       !strconcat(asm, "\t{$src3, $src2, $dst|$dst, $src2, $src3}"),
       [(set VR64:$dst, (IntId VR64:$src1,
-                       (bitconvert (load_mmx addr:$src2)), (i8 imm:$src3)))]>;
+                       (bitconvert (load_mmx addr:$src2)), (i8 imm:$src3)))]>,
+      Sched<[WriteShuffleLd, ReadAfterLd]>;
 }
 
 multiclass sse12_cvt_pint<bits<8> opc, RegisterClass SrcRC, RegisterClass DstRC,
@@ -192,11 +199,11 @@ multiclass sse12_cvt_pint_3addr<bits<8> opc, RegisterClass SrcRC,
   def irr : MMXPI<opc, MRMSrcReg, (outs DstRC:$dst),
                   (ins DstRC:$src1, SrcRC:$src2), asm,
                   [(set DstRC:$dst, (Int DstRC:$src1, SrcRC:$src2))],
-                  NoItinerary, d>;
+                  NoItinerary, d>, Sched<[WriteCvtI2F]>;
   def irm : MMXPI<opc, MRMSrcMem, (outs DstRC:$dst),
                   (ins DstRC:$src1, x86memop:$src2), asm,
                   [(set DstRC:$dst, (Int DstRC:$src1, (ld_frag addr:$src2)))],
-                  NoItinerary, d>;
+                  NoItinerary, d>, Sched<[WriteCvtI2FLd]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -254,6 +261,11 @@ let neverHasSideEffects = 1 in
 def MMX_MOVQ64rr : MMXI<0x6F, MRMSrcReg, (outs VR64:$dst), (ins VR64:$src),
                         "movq\t{$src, $dst|$dst, $src}", [],
                         IIC_MMX_MOVQ_RR>;
+let isCodeGenOnly = 1, ForceDisassemble = 1, hasSideEffects = 0 in {
+def MMX_MOVQ64rr_REV : MMXI<0x7F, MRMDestReg, (outs VR64:$dst), (ins VR64:$src),
+                        "movq\t{$src, $dst|$dst, $src}", [],
+                        IIC_MMX_MOVQ_RR>;
+}
 } // SchedRW
 
 let SchedRW = [WriteLoad] in {
@@ -262,11 +274,12 @@ def MMX_MOVQ64rm : MMXI<0x6F, MRMSrcMem, (outs VR64:$dst), (ins i64mem:$src),
                         "movq\t{$src, $dst|$dst, $src}",
                         [(set VR64:$dst, (load_mmx addr:$src))],
                         IIC_MMX_MOVQ_RM>;
+} // SchedRW
+let SchedRW = [WriteStore] in
 def MMX_MOVQ64mr : MMXI<0x7F, MRMDestMem, (outs), (ins i64mem:$dst, VR64:$src),
                         "movq\t{$src, $dst|$dst, $src}",
                         [(store (x86mmx VR64:$src), addr:$dst)],
                         IIC_MMX_MOVQ_RM>;
-} // SchedRW
 
 let SchedRW = [WriteMove] in {
 def MMX_MOVDQ2Qrr : MMXSDIi8<0xD6, MRMSrcReg, (outs VR64:$dst),
@@ -421,13 +434,13 @@ let Constraints = "$src1 = $dst" in
 
 // Logical Instructions
 defm MMX_PAND : MMXI_binop_rm_int<0xDB, "pand", int_x86_mmx_pand,
-                                  MMX_INTALU_ITINS, 1>;
+                                  MMX_INTALU_ITINS_VECLOGICSCHED, 1>;
 defm MMX_POR  : MMXI_binop_rm_int<0xEB, "por" , int_x86_mmx_por,
-                                  MMX_INTALU_ITINS, 1>;
+                                  MMX_INTALU_ITINS_VECLOGICSCHED, 1>;
 defm MMX_PXOR : MMXI_binop_rm_int<0xEF, "pxor", int_x86_mmx_pxor,
-                                  MMX_INTALU_ITINS, 1>;
+                                  MMX_INTALU_ITINS_VECLOGICSCHED, 1>;
 defm MMX_PANDN : MMXI_binop_rm_int<0xDF, "pandn", int_x86_mmx_pandn,
-                                  MMX_INTALU_ITINS>;
+                                  MMX_INTALU_ITINS_VECLOGICSCHED>;
 
 // Shift Instructions
 defm MMX_PSRLW : MMXI_binop_rmi_int<0xD1, 0x71, MRM2r, "psrlw",

@@ -12,15 +12,19 @@
 
 using namespace llvm;
 
-line_iterator::line_iterator(const MemoryBuffer &Buffer, char CommentMarker)
-    : Buffer(Buffer.getBufferSize() ? &Buffer : 0),
-      CommentMarker(CommentMarker), LineNumber(1),
-      CurrentLine(Buffer.getBufferSize() ? Buffer.getBufferStart() : 0, 0) {
+line_iterator::line_iterator(const MemoryBuffer &Buffer, bool SkipBlanks,
+                             char CommentMarker)
+    : Buffer(Buffer.getBufferSize() ? &Buffer : nullptr),
+      CommentMarker(CommentMarker), SkipBlanks(SkipBlanks), LineNumber(1),
+      CurrentLine(Buffer.getBufferSize() ? Buffer.getBufferStart() : nullptr,
+                  0) {
   // Ensure that if we are constructed on a non-empty memory buffer that it is
   // a null terminated buffer.
   if (Buffer.getBufferSize()) {
     assert(Buffer.getBufferEnd()[0] == '\0');
-    advance();
+    // Make sure we don't skip a leading newline if we're keeping blanks
+    if (SkipBlanks || *Buffer.getBufferStart() != '\n')
+      advance();
   }
 }
 
@@ -30,7 +34,13 @@ void line_iterator::advance() {
   const char *Pos = CurrentLine.end();
   assert(Pos == Buffer->getBufferStart() || *Pos == '\n' || *Pos == '\0');
 
-  if (CommentMarker == '\0') {
+  if (*Pos == '\n') {
+    ++Pos;
+    ++LineNumber;
+  }
+  if (!SkipBlanks && *Pos == '\n') {
+    // Nothing to do for a blank line.
+  } else if (CommentMarker == '\0') {
     // If we're not stripping comments, this is simpler.
     size_t Blanks = 0;
     while (Pos[Blanks] == '\n')
@@ -40,6 +50,8 @@ void line_iterator::advance() {
   } else {
     // Skip comments and count line numbers, which is a bit more complex.
     for (;;) {
+      if (*Pos == '\n' && !SkipBlanks)
+        break;
       if (*Pos == CommentMarker)
         do {
           ++Pos;
@@ -53,16 +65,16 @@ void line_iterator::advance() {
 
   if (*Pos == '\0') {
     // We've hit the end of the buffer, reset ourselves to the end state.
-    Buffer = 0;
+    Buffer = nullptr;
     CurrentLine = StringRef();
     return;
   }
 
   // Measure the line.
   size_t Length = 0;
-  do {
+  while (Pos[Length] != '\0' && Pos[Length] != '\n') {
     ++Length;
-  } while (Pos[Length] != '\0' && Pos[Length] != '\n');
+  }
 
   CurrentLine = StringRef(Pos, Length);
 }

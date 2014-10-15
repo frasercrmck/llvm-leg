@@ -68,8 +68,9 @@ static MCCodeGenInfo *createLEGMCCodeGenInfo(StringRef TT, Reloc::Model RM,
   if (CM == CodeModel::Default) {
     CM = CodeModel::Small;
   }
-  if (CM != CodeModel::Small && CM != CodeModel::Large)
+  if (CM != CodeModel::Small && CM != CodeModel::Large) {
     report_fatal_error("Target only supports CodeModel Small or Large");
+  }
 
   X->InitMCCodeGenInfo(RM, CM, OL);
   return X;
@@ -84,11 +85,11 @@ createLEGMCInstPrinter(const Target &T, unsigned SyntaxVariant,
 
 static MCStreamer *
 createMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
-                       bool isVerboseAsm, bool useCFI, bool useDwarfDirectory,
-                       MCInstPrinter *InstPrint, MCCodeEmitter *CE,
-                       MCAsmBackend *TAB, bool ShowInst) {
-  return createAsmStreamer(Ctx, OS, isVerboseAsm, useCFI, useDwarfDirectory,
-                           InstPrint, CE, TAB, ShowInst);
+                    bool isVerboseAsm, bool useDwarfDirectory,
+                    MCInstPrinter *InstPrint, MCCodeEmitter *CE,
+                    MCAsmBackend *TAB, bool ShowInst) {
+  return createAsmStreamer(Ctx, OS, isVerboseAsm, useDwarfDirectory, InstPrint,
+                           CE, TAB, ShowInst);
 }
 
 static MCStreamer *createMCStreamer(const Target &T, StringRef TT,

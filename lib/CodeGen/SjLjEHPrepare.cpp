@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "sjljehprepare"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
@@ -32,11 +31,14 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <set>
 using namespace llvm;
+
+#define DEBUG_TYPE "sjljehprepare"
 
 STATISTIC(NumInvokes, "Number of invokes replaced");
 STATISTIC(NumSpilled, "Number of registers live across unwind edges");
@@ -100,10 +102,10 @@ bool SjLjEHPrepare::doInitialization(Module &M) {
                                       NULL);
   RegisterFn = M.getOrInsertFunction(
       "_Unwind_SjLj_Register", Type::getVoidTy(M.getContext()),
-      PointerType::getUnqual(FunctionContextTy), (Type *)0);
+      PointerType::getUnqual(FunctionContextTy), (Type *)nullptr);
   UnregisterFn = M.getOrInsertFunction(
       "_Unwind_SjLj_Unregister", Type::getVoidTy(M.getContext()),
-      PointerType::getUnqual(FunctionContextTy), (Type *)0);
+      PointerType::getUnqual(FunctionContextTy), (Type *)nullptr);
   FrameAddrFn = Intrinsic::getDeclaration(&M, Intrinsic::frameaddress);
   StackAddrFn = Intrinsic::getDeclaration(&M, Intrinsic::stacksave);
   StackRestoreFn = Intrinsic::getDeclaration(&M, Intrinsic::stackrestore);
@@ -111,7 +113,7 @@ bool SjLjEHPrepare::doInitialization(Module &M) {
   LSDAAddrFn = Intrinsic::getDeclaration(&M, Intrinsic::eh_sjlj_lsda);
   CallSiteFn = Intrinsic::getDeclaration(&M, Intrinsic::eh_sjlj_callsite);
   FuncCtxFn = Intrinsic::getDeclaration(&M, Intrinsic::eh_sjlj_functioncontext);
-  PersonalityFn = 0;
+  PersonalityFn = nullptr;
 
   return true;
 }
@@ -137,7 +139,7 @@ void SjLjEHPrepare::insertCallSiteStore(Instruction *I, int Number) {
 /// MarkBlocksLiveIn - Insert BB and all of its predescessors into LiveBBs until
 /// we reach blocks we've already seen.
 static void MarkBlocksLiveIn(BasicBlock *BB,
-                             SmallPtrSet<BasicBlock *, 64> &LiveBBs) {
+                             SmallPtrSetImpl<BasicBlock *> &LiveBBs) {
   if (!LiveBBs.insert(BB))
     return; // already been here.
 
@@ -189,10 +191,10 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
   // Create an alloca for the incoming jump buffer ptr and the new jump buffer
   // that needs to be restored on all exits from the function. This is an alloca
   // because the value needs to be added to the global context list.
-  const TargetLowering *TLI = TM->getTargetLowering();
+  const TargetLowering *TLI = TM->getSubtargetImpl()->getTargetLowering();
   unsigned Align =
       TLI->getDataLayout()->getPrefTypeAlignment(FunctionContextTy);
-  FuncCtx = new AllocaInst(FunctionContextTy, 0, Align, "fn_context",
+  FuncCtx = new AllocaInst(FunctionContextTy, nullptr, Align, "fn_context",
                            EntryBB->begin());
 
   // Fill in the function context structure.
@@ -248,34 +250,16 @@ void SjLjEHPrepare::lowerIncomingArguments(Function &F) {
        ++AI) {
     Type *Ty = AI->getType();
 
-    // Aggregate types can't be cast, but are legal argument types, so we have
-    // to handle them differently. We use an extract/insert pair as a
-    // lightweight method to achieve the same goal.
-    if (isa<StructType>(Ty) || isa<ArrayType>(Ty)) {
-      Instruction *EI = ExtractValueInst::Create(AI, 0, "", AfterAllocaInsPt);
-      Instruction *NI = InsertValueInst::Create(AI, EI, 0);
-      NI->insertAfter(EI);
-      AI->replaceAllUsesWith(NI);
+    // Use 'select i8 true, %arg, undef' to simulate a 'no-op' instruction.
+    Value *TrueValue = ConstantInt::getTrue(F.getContext());
+    Value *UndefValue = UndefValue::get(Ty);
+    Instruction *SI = SelectInst::Create(TrueValue, AI, UndefValue,
+                                         AI->getName() + ".tmp",
+                                         AfterAllocaInsPt);
+    AI->replaceAllUsesWith(SI);
 
-      // Set the operand of the instructions back to the AllocaInst.
-      EI->setOperand(0, AI);
-      NI->setOperand(0, AI);
-    } else {
-      // This is always a no-op cast because we're casting AI to AI->getType()
-      // so src and destination types are identical. BitCast is the only
-      // possibility.
-      CastInst *NC = new BitCastInst(AI, AI->getType(), AI->getName() + ".tmp",
-                                     AfterAllocaInsPt);
-      AI->replaceAllUsesWith(NC);
-
-      // Set the operand of the cast instruction back to the AllocaInst.
-      // Normally it's forbidden to replace a CastInst's operand because it
-      // could cause the opcode to reflect an illegal conversion. However, we're
-      // replacing it here with the same value it was constructed with.  We do
-      // this because the above replaceAllUsesWith() clobbered the operand, but
-      // we want this one to remain.
-      NC->setOperand(0, AI);
-    }
+    // Reset the operand, because it  was clobbered by the RAUW above.
+    SI->setOperand(1, AI);
   }
 }
 
@@ -367,10 +351,8 @@ void SjLjEHPrepare::lowerAcrossUnwindEdges(Function &F,
       continue;
 
     // Demote the PHIs to the stack.
-    for (SmallPtrSet<PHINode *, 8>::iterator I = PHIsToDemote.begin(),
-                                             E = PHIsToDemote.end();
-         I != E; ++I)
-      DemotePHIToStack(*I);
+    for (PHINode *PN : PHIsToDemote)
+      DemotePHIToStack(PN);
 
     // Move the landingpad instruction back to the top of the landing pad block.
     LPI->moveBefore(UnwindBlock->begin());

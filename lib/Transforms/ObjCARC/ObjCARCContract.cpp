@@ -26,7 +26,6 @@
 // TODO: ObjCARCContract could insert PHI nodes when uses aren't
 // dominated by single calls.
 
-#define DEBUG_TYPE "objc-arc-contract"
 #include "ObjCARC.h"
 #include "ARCRuntimeEntryPoints.h"
 #include "DependencyAnalysis.h"
@@ -39,6 +38,8 @@
 
 using namespace llvm;
 using namespace llvm::objcarc;
+
+#define DEBUG_TYPE "objc-arc-contract"
 
 STATISTIC(NumPeeps,       "Number of calls peephole-optimized");
 STATISTIC(NumStoreStrongs, "Number objc_storeStrong calls formed");
@@ -71,9 +72,9 @@ namespace {
 
     bool ContractAutorelease(Function &F, Instruction *Autorelease,
                              InstructionClass Class,
-                             SmallPtrSet<Instruction *, 4>
+                             SmallPtrSetImpl<Instruction *>
                                &DependingInstructions,
-                             SmallPtrSet<const BasicBlock *, 4>
+                             SmallPtrSetImpl<const BasicBlock *>
                                &Visited);
 
     void ContractRelease(Instruction *Release,
@@ -149,15 +150,15 @@ ObjCARCContract::OptimizeRetainCall(Function &F, Instruction *Retain) {
 bool
 ObjCARCContract::ContractAutorelease(Function &F, Instruction *Autorelease,
                                      InstructionClass Class,
-                                     SmallPtrSet<Instruction *, 4>
+                                     SmallPtrSetImpl<Instruction *>
                                        &DependingInstructions,
-                                     SmallPtrSet<const BasicBlock *, 4>
+                                     SmallPtrSetImpl<const BasicBlock *>
                                        &Visited) {
   const Value *Arg = GetObjCArg(Autorelease);
 
   // Check that there are no instructions between the retain and the autorelease
   // (such as an autorelease_pop) which may change the count.
-  CallInst *Retain = 0;
+  CallInst *Retain = nullptr;
   if (Class == IC_AutoreleaseRV)
     FindDependencies(RetainAutoreleaseRVDep, Arg,
                      Autorelease->getParent(), Autorelease,
@@ -218,7 +219,7 @@ void ObjCARCContract::ContractRelease(Instruction *Release,
   BasicBlock::iterator I = Load, End = BB->end();
   ++I;
   AliasAnalysis::Location Loc = AA->getLocation(Load);
-  StoreInst *Store = 0;
+  StoreInst *Store = nullptr;
   bool SawRelease = false;
   for (; !Store || !SawRelease; ++I) {
     if (I == End)
@@ -300,7 +301,7 @@ bool ObjCARCContract::doInitialization(Module &M) {
   EP.Initialize(&M);
 
   // Initialize RetainRVMarker.
-  RetainRVMarker = 0;
+  RetainRVMarker = nullptr;
   if (NamedMDNode *NMD =
         M.getNamedMetadata("clang.arc.retainAutoreleasedReturnValueMarker"))
     if (NMD->getNumOperands() == 1) {
@@ -507,9 +508,8 @@ bool ObjCARCContract::runOnFunction(Function &F) {
   // If this function has no escaping allocas or suspicious vararg usage,
   // objc_storeStrong calls can be marked with the "tail" keyword.
   if (TailOkForStoreStrongs)
-    for (SmallPtrSet<CallInst *, 8>::iterator I = StoreStrongCalls.begin(),
-         E = StoreStrongCalls.end(); I != E; ++I)
-      (*I)->setTailCall();
+    for (CallInst *CI : StoreStrongCalls)
+      CI->setTailCall();
   StoreStrongCalls.clear();
 
   return Changed;

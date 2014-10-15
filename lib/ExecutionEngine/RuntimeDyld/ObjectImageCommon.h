@@ -11,12 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_RUNTIMEDYLD_OBJECTIMAGECOMMON_H
-#define LLVM_RUNTIMEDYLD_OBJECTIMAGECOMMON_H
+#ifndef LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_OBJECTIMAGECOMMON_H
+#define LLVM_LIB_EXECUTIONENGINE_RUNTIMEDYLD_OBJECTIMAGECOMMON_H
 
 #include "llvm/ExecutionEngine/ObjectBuffer.h"
 #include "llvm/ExecutionEngine/ObjectImage.h"
 #include "llvm/Object/ObjectFile.h"
+
+#include <memory>
 
 namespace llvm {
 
@@ -30,26 +32,25 @@ class ObjectImageCommon : public ObjectImage {
   void anchor() override;
 
 protected:
-  object::ObjectFile *ObjFile;
+  std::unique_ptr<object::ObjectFile> ObjFile;
 
   // This form of the constructor allows subclasses to use
   // format-specific subclasses of ObjectFile directly
-  ObjectImageCommon(ObjectBuffer *Input, object::ObjectFile *Obj)
-  : ObjectImage(Input), // saves Input as Buffer and takes ownership
-    ObjFile(Obj)
-  {
-  }
+  ObjectImageCommon(std::unique_ptr<ObjectBuffer> Input,
+                    std::unique_ptr<object::ObjectFile> Obj)
+      : ObjectImage(std::move(Input)), ObjFile(std::move(Obj)) {}
 
 public:
-  ObjectImageCommon(ObjectBuffer* Input)
-  : ObjectImage(Input) // saves Input as Buffer and takes ownership
-  {
-    ObjFile =
-        object::ObjectFile::createObjectFile(Buffer->getMemBuffer()).get();
+  ObjectImageCommon(std::unique_ptr<ObjectBuffer> Input)
+      : ObjectImage(std::move(Input)) {
+    // FIXME: error checking? createObjectFile returns an ErrorOr<ObjectFile*>
+    // and should probably be checked for failure.
+    MemoryBufferRef Buf = Buffer->getMemBuffer();
+    ObjFile = std::move(object::ObjectFile::createObjectFile(Buf).get());
   }
-  ObjectImageCommon(object::ObjectFile* Input)
-  : ObjectImage(NULL), ObjFile(Input)  {}
-  virtual ~ObjectImageCommon() { delete ObjFile; }
+  ObjectImageCommon(std::unique_ptr<object::ObjectFile> Input)
+  : ObjectImage(nullptr), ObjFile(std::move(Input))  {}
+  virtual ~ObjectImageCommon() { }
 
   object::symbol_iterator begin_symbols() const override
       { return ObjFile->symbol_begin(); }
@@ -66,7 +67,7 @@ public:
 
   StringRef getData() const override { return ObjFile->getData(); }
 
-  object::ObjectFile* getObjectFile() const override { return ObjFile; }
+  object::ObjectFile* getObjectFile() const override { return ObjFile.get(); }
 
   // Subclasses can override these methods to update the image with loaded
   // addresses for sections and common symbols
@@ -82,4 +83,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_RUNTIMEDYLD_OBJECT_IMAGE_H
+#endif

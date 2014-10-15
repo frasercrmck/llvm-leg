@@ -14,7 +14,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "loop-delete"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -22,6 +21,8 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/Dominators.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "loop-delete"
 
 STATISTIC(NumDeleted, "Number of loops deleted");
 
@@ -238,9 +239,8 @@ bool LoopDeletion::runOnLoop(Loop *L, LPPassManager &LPM) {
   LoopInfo &loopInfo = getAnalysis<LoopInfo>();
   SmallPtrSet<BasicBlock*, 8> blocks;
   blocks.insert(L->block_begin(), L->block_end());
-  for (SmallPtrSet<BasicBlock*,8>::iterator I = blocks.begin(),
-       E = blocks.end(); I != E; ++I)
-    loopInfo.removeBlock(*I);
+  for (BasicBlock *BB : blocks)
+    loopInfo.removeBlock(BB);
 
   // The last step is to inform the loop pass manager that we've
   // eliminated this loop.

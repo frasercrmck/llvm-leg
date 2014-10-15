@@ -20,19 +20,18 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 
+using namespace llvm;
+
 #define GET_INSTRINFO_CTOR_DTOR
 #define GET_INSTRINFO_NAMED_OPS
 #define GET_INSTRMAP_INFO
 #include "AMDGPUGenInstrInfo.inc"
 
-using namespace llvm;
-
-
 // Pin the vtable to this file.
 void AMDGPUInstrInfo::anchor() {}
 
-AMDGPUInstrInfo::AMDGPUInstrInfo(TargetMachine &tm)
-  : AMDGPUGenInstrInfo(-1,-1), RI(tm), TM(tm) { }
+AMDGPUInstrInfo::AMDGPUInstrInfo(const AMDGPUSubtarget &st)
+  : AMDGPUGenInstrInfo(-1,-1), RI(st), ST(st) { }
 
 const AMDGPURegisterInfo &AMDGPUInstrInfo::getRegisterInfo() const {
   return RI;
@@ -85,22 +84,7 @@ AMDGPUInstrInfo::convertToThreeAddress(MachineFunction::iterator &MFI,
                                       MachineBasicBlock::iterator &MBBI,
                                       LiveVariables *LV) const {
 // TODO: Implement this function
-  return NULL;
-}
-bool AMDGPUInstrInfo::getNextBranchInstr(MachineBasicBlock::iterator &iter,
-                                        MachineBasicBlock &MBB) const {
-  while (iter != MBB.end()) {
-    switch (iter->getOpcode()) {
-    default:
-      break;
-    case AMDGPU::BRANCH_COND_i32:
-    case AMDGPU::BRANCH_COND_f32:
-    case AMDGPU::BRANCH:
-      return true;
-    };
-    ++iter;
-  }
-  return false;
+  return nullptr;
 }
 
 void
@@ -148,7 +132,6 @@ bool AMDGPUInstrInfo::expandPostRAPseudo (MachineBasicBlock::iterator MI) const 
   } else if (isRegisterStore(*MI)) {
     int ValOpIdx = AMDGPU::getNamedOperandIdx(MI->getOpcode(),
                                               AMDGPU::OpName::val);
-    AMDGPU::getNamedOperandIdx(MI->getOpcode(), AMDGPU::OpName::dst);
     unsigned RegIndex = MI->getOperand(RegOpIdx).getImm();
     unsigned Channel = MI->getOperand(ChanOpIdx).getImm();
     unsigned Address = calculateIndirectAddress(RegIndex, Channel);
@@ -176,7 +159,7 @@ AMDGPUInstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
                                       const SmallVectorImpl<unsigned> &Ops,
                                       int FrameIndex) const {
 // TODO: Implement this function
-  return 0;
+  return nullptr;
 }
 MachineInstr*
 AMDGPUInstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
@@ -184,7 +167,7 @@ AMDGPUInstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
                                       const SmallVectorImpl<unsigned> &Ops,
                                       MachineInstr *LoadMI) const {
   // TODO: Implement this function
-  return 0;
+  return nullptr;
 }
 bool
 AMDGPUInstrInfo::canFoldMemoryOperand(const MachineInstr *MI,
@@ -216,15 +199,30 @@ AMDGPUInstrInfo::getOpcodeAfterMemoryUnfold(unsigned Opc,
   return 0;
 }
 
-bool AMDGPUInstrInfo::shouldScheduleLoadsNear(SDNode *Load1, SDNode *Load2,
-                                             int64_t Offset1, int64_t Offset2,
-                                             unsigned NumLoads) const {
-  assert(Offset2 > Offset1
-         && "Second offset should be larger than first offset!");
-  // If we have less than 16 loads in a row, and the offsets are within 16,
-  // then schedule together.
-  // TODO: Make the loads schedule near if it fits in a cacheline
-  return (NumLoads < 16 && (Offset2 - Offset1) < 16);
+bool AMDGPUInstrInfo::enableClusterLoads() const {
+  return true;
+}
+
+// FIXME: This behaves strangely. If, for example, you have 32 load + stores,
+// the first 16 loads will be interleaved with the stores, and the next 16 will
+// be clustered as expected. It should really split into 2 16 store batches.
+//
+// Loads are clustered until this returns false, rather than trying to schedule
+// groups of stores. This also means we have to deal with saying different
+// address space loads should be clustered, and ones which might cause bank
+// conflicts.
+//
+// This might be deprecated so it might not be worth that much effort to fix.
+bool AMDGPUInstrInfo::shouldScheduleLoadsNear(SDNode *Load0, SDNode *Load1,
+                                              int64_t Offset0, int64_t Offset1,
+                                              unsigned NumLoads) const {
+  assert(Offset1 > Offset0 &&
+         "Second offset should be larger than first offset!");
+  // If we have less than 16 loads in a row, and the offsets are within 64
+  // bytes, then schedule together.
+
+  // A cacheline is 64 bytes (for global memory).
+  return (NumLoads <= 16 && (Offset1 - Offset0) < 64);
 }
 
 bool
@@ -321,31 +319,12 @@ int AMDGPUInstrInfo::getIndirectIndexEnd(const MachineFunction &MF) const {
     return -1;
   }
 
-  Offset = TM.getFrameLowering()->getFrameIndexOffset(MF, -1);
+  Offset = MF.getTarget()
+               .getSubtargetImpl()
+               ->getFrameLowering()
+               ->getFrameIndexOffset(MF, -1);
 
   return getIndirectIndexBegin(MF) + Offset;
-}
-
-
-void AMDGPUInstrInfo::convertToISA(MachineInstr & MI, MachineFunction &MF,
-    DebugLoc DL) const {
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  const AMDGPURegisterInfo & RI = getRegisterInfo();
-
-  for (unsigned i = 0; i < MI.getNumOperands(); i++) {
-    MachineOperand &MO = MI.getOperand(i);
-    // Convert dst regclass to one that is supported by the ISA
-    if (MO.isReg() && MO.isDef()) {
-      if (TargetRegisterInfo::isVirtualRegister(MO.getReg())) {
-        const TargetRegisterClass * oldRegClass = MRI.getRegClass(MO.getReg());
-        const TargetRegisterClass * newRegClass = RI.getISARegClass(oldRegClass);
-
-        assert(newRegClass);
-
-        MRI.setRegClass(MO.getReg(), newRegClass);
-      }
-    }
-  }
 }
 
 int AMDGPUInstrInfo::getMaskedMIMGOp(uint16_t Opcode, unsigned Channels) const {
@@ -355,4 +334,15 @@ int AMDGPUInstrInfo::getMaskedMIMGOp(uint16_t Opcode, unsigned Channels) const {
   case 2: return AMDGPU::getMaskedMIMGOp(Opcode, AMDGPU::Channels_2);
   case 3: return AMDGPU::getMaskedMIMGOp(Opcode, AMDGPU::Channels_3);
   }
+}
+
+// Wrapper for Tablegen'd function.  enum Subtarget is not defined in any
+// header files, so we need to wrap it in a function that takes unsigned
+// instead.
+namespace llvm {
+namespace AMDGPU {
+int getMCOpcode(uint16_t Opcode, unsigned Gen) {
+  return getMCOpcode(Opcode);
+}
+}
 }

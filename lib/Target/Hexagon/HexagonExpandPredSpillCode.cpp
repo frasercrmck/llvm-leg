@@ -60,10 +60,10 @@ class HexagonExpandPredSpillCode : public MachineFunctionPass {
       initializeHexagonExpandPredSpillCodePass(Registry);
     }
 
-    const char *getPassName() const {
+    const char *getPassName() const override {
       return "Hexagon Expand Predicate Spill Code";
     }
-    bool runOnMachineFunction(MachineFunction &Fn);
+    bool runOnMachineFunction(MachineFunction &Fn) override;
 };
 
 
@@ -72,7 +72,7 @@ char HexagonExpandPredSpillCode::ID = 0;
 
 bool HexagonExpandPredSpillCode::runOnMachineFunction(MachineFunction &Fn) {
 
-  const HexagonInstrInfo *TII = QTM.getInstrInfo();
+  const HexagonInstrInfo *TII = QTM.getSubtargetImpl()->getInstrInfo();
 
   // Loop over all of the basic blocks.
   for (MachineFunction::iterator MBBb = Fn.begin(), MBBe = Fn.end();
@@ -86,8 +86,10 @@ bool HexagonExpandPredSpillCode::runOnMachineFunction(MachineFunction &Fn) {
       if (Opc == Hexagon::STriw_pred) {
         // STriw_pred [R30], ofst, SrcReg;
         unsigned FP = MI->getOperand(0).getReg();
-        assert(FP == QTM.getRegisterInfo()->getFrameRegister() &&
-               "Not a Frame Pointer, Nor a Spill Slot");
+        assert(
+            FP ==
+                QTM.getSubtargetImpl()->getRegisterInfo()->getFrameRegister() &&
+            "Not a Frame Pointer, Nor a Spill Slot");
         assert(MI->getOperand(1).isImm() && "Not an offset");
         int Offset = MI->getOperand(1).getImm();
         int SrcReg = MI->getOperand(2).getReg();
@@ -133,8 +135,10 @@ bool HexagonExpandPredSpillCode::runOnMachineFunction(MachineFunction &Fn) {
         assert(Hexagon::PredRegsRegClass.contains(DstReg) &&
                "Not a predicate register");
         unsigned FP = MI->getOperand(1).getReg();
-        assert(FP == QTM.getRegisterInfo()->getFrameRegister() &&
-               "Not a Frame Pointer, Nor a Spill Slot");
+        assert(
+            FP ==
+                QTM.getSubtargetImpl()->getRegisterInfo()->getFrameRegister() &&
+            "Not a Frame Pointer, Nor a Spill Slot");
         assert(MI->getOperand(2).isImm() && "Not an offset");
         int Offset = MI->getOperand(2).getImm();
         if (!TII->isValidOffset(Hexagon::LDriw, Offset)) {
@@ -187,7 +191,7 @@ static void initializePassOnce(PassRegistry &Registry) {
   const char *Name = "Hexagon Expand Predicate Spill Code";
   PassInfo *PI = new PassInfo(Name, "hexagon-spill-pred",
                               &HexagonExpandPredSpillCode::ID,
-                              0, false, false);
+                              nullptr, false, false);
   Registry.registerPass(*PI, true);
 }
 

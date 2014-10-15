@@ -19,6 +19,7 @@
 
 namespace llvm {
 
+class BasicBlockPass;
 class FunctionPass;
 class Pass;
 class GetElementPtrInst;
@@ -32,6 +33,13 @@ class TargetMachine;
 // ConstantPropagation - A worklist driven constant propagation pass
 //
 FunctionPass *createConstantPropagationPass();
+
+//===----------------------------------------------------------------------===//
+//
+// AlignmentFromAssumptions - Use assume intrinsics to set load/store
+// alignments.
+//
+FunctionPass *createAlignmentFromAssumptionsPass();
 
 //===----------------------------------------------------------------------===//
 //
@@ -122,7 +130,7 @@ Pass *createLICMPass();
 //
 Pass *createLoopStrengthReducePass();
 
-Pass *createGlobalMergePass(const TargetMachine *TM = 0);
+Pass *createGlobalMergePass(const TargetMachine *TM = nullptr);
 
 //===----------------------------------------------------------------------===//
 //
@@ -155,14 +163,14 @@ Pass *createLoopRerollPass();
 //
 // LoopRotate - This pass is a simple loop rotating pass.
 //
-Pass *createLoopRotatePass();
+Pass *createLoopRotatePass(int MaxHeaderSize = -1);
 
 //===----------------------------------------------------------------------===//
 //
 // LoopIdiom - This pass recognizes and replaces idioms in loops.
 //
 Pass *createLoopIdiomPass();
-  
+
 //===----------------------------------------------------------------------===//
 //
 // PromoteMemoryToRegister - This pass is used to promote memory references to
@@ -198,16 +206,17 @@ FunctionPass *createReassociatePass();
 //===----------------------------------------------------------------------===//
 //
 // JumpThreading - Thread control through mult-pred/multi-succ blocks where some
-// preds always go to some succ.
+// preds always go to some succ. Thresholds other than minus one override the
+// internal BB duplication default threshold.
 //
-FunctionPass *createJumpThreadingPass();
-  
+FunctionPass *createJumpThreadingPass(int Threshold = -1);
+
 //===----------------------------------------------------------------------===//
 //
 // CFGSimplification - Merge basic blocks, eliminate unreachable blocks,
 // simplify terminator instructions, etc...
 //
-FunctionPass *createCFGSimplificationPass();
+FunctionPass *createCFGSimplificationPass(int Threshold = -1);
 
 //===----------------------------------------------------------------------===//
 //
@@ -284,10 +293,17 @@ extern char &LCSSAID;
 // tree.
 //
 FunctionPass *createEarlyCSEPass();
-  
+
 //===----------------------------------------------------------------------===//
 //
-// GVN - This pass performs global value numbering and redundant load 
+// MergedLoadStoreMotion - This pass merges loads and stores in diamonds. Loads
+// are hoisted into the header, while stores sink into the footer.
+//
+FunctionPass *createMergedLoadStoreMotionPass();
+
+//===----------------------------------------------------------------------===//
+//
+// GVN - This pass performs global value numbering and redundant load
 // elimination cotemporaneously.
 //
 FunctionPass *createGVNPass(bool NoLoads = false);
@@ -305,7 +321,7 @@ FunctionPass *createMemCpyOptPass();
 // can prove are dead.
 //
 Pass *createLoopDeletionPass();
-  
+
 //===----------------------------------------------------------------------===//
 //
 // ConstantHoisting - This pass prepares a function for expensive constants.
@@ -318,7 +334,7 @@ FunctionPass *createConstantHoistingPass();
 //
 FunctionPass *createInstructionNamerPass();
 extern char &InstructionNamerID;
-  
+
 //===----------------------------------------------------------------------===//
 //
 // Sink - Code Sinking
@@ -344,13 +360,11 @@ Pass *createCorrelatedValuePropagationPass();
 FunctionPass *createInstructionSimplifierPass();
 extern char &InstructionSimplifierID;
 
-
 //===----------------------------------------------------------------------===//
 //
 // LowerExpectIntrinsics - Removes llvm.expect intrinsics and creates
 // "block_weights" metadata.
 FunctionPass *createLowerExpectIntrinsicPass();
-
 
 //===----------------------------------------------------------------------===//
 //
@@ -376,6 +390,18 @@ FunctionPass *createScalarizerPass();
 //
 // AddDiscriminators - Add DWARF path discriminators to the IR.
 FunctionPass *createAddDiscriminatorsPass();
+
+//===----------------------------------------------------------------------===//
+//
+// SeparateConstOffsetFromGEP - Split GEPs for better CSE
+//
+FunctionPass *createSeparateConstOffsetFromGEPPass();
+
+//===----------------------------------------------------------------------===//
+//
+// LoadCombine - Combine loads into bigger loads.
+//
+BasicBlockPass *createLoadCombinePass();
 
 } // End llvm namespace
 

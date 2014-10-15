@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "inline"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/IR/CallSite.h"
@@ -28,6 +29,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "inline"
+
 namespace {
 
 /// \brief Inliner pass which only handles "always inline" functions.
@@ -36,12 +39,13 @@ class AlwaysInliner : public Inliner {
 
 public:
   // Use extremely low threshold.
-  AlwaysInliner() : Inliner(ID, -2000000000, /*InsertLifetime*/ true), ICA(0) {
+  AlwaysInliner() : Inliner(ID, -2000000000, /*InsertLifetime*/ true),
+                    ICA(nullptr) {
     initializeAlwaysInlinerPass(*PassRegistry::getPassRegistry());
   }
 
   AlwaysInliner(bool InsertLifetime)
-      : Inliner(ID, -2000000000, InsertLifetime), ICA(0) {
+      : Inliner(ID, -2000000000, InsertLifetime), ICA(nullptr) {
     initializeAlwaysInlinerPass(*PassRegistry::getPassRegistry());
   }
 
@@ -63,6 +67,8 @@ public:
 char AlwaysInliner::ID = 0;
 INITIALIZE_PASS_BEGIN(AlwaysInliner, "always-inline",
                 "Inliner for always_inline functions", false, false)
+INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(CallGraphWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(InlineCostAnalysis)
 INITIALIZE_PASS_END(AlwaysInliner, "always-inline",
@@ -93,8 +99,7 @@ InlineCost AlwaysInliner::getInlineCost(CallSite CS) {
   // that are viable for inlining. FIXME: We shouldn't even get here for
   // declarations.
   if (Callee && !Callee->isDeclaration() &&
-      Callee->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
-                                           Attribute::AlwaysInline) &&
+      CS.hasFnAttr(Attribute::AlwaysInline) &&
       ICA->isInlineViable(*Callee))
     return InlineCost::getAlways();
 

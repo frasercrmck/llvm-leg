@@ -1,4 +1,4 @@
-//===-- ARMFeatures.h - Checks for ARM instruction features ------*- C++ -*-===//
+//===-- ARMFeatures.h - Checks for ARM instruction features -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,15 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TARGET_ARM_FEATURES_H
-#define TARGET_ARM_FEATURES_H
+#ifndef LLVM_LIB_TARGET_ARM_ARMFEATURES_H
+#define LLVM_LIB_TARGET_ARM_ARMFEATURES_H
 
 #include "MCTargetDesc/ARMMCTargetDesc.h"
 
+namespace llvm {
+
 template<typename InstrType> // could be MachineInstr or MCInst
 bool IsCPSRDead(InstrType *Instr);
-
-namespace llvm {
 
 template<typename InstrType> // could be MachineInstr or MCInst
 inline bool isV8EligibleForIT(InstrType *Instr) {

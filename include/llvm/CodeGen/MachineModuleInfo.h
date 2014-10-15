@@ -71,7 +71,7 @@ struct LandingPadInfo {
   std::vector<int> TypeIds;              // List of type ids (filters negative)
 
   explicit LandingPadInfo(MachineBasicBlock *MBB)
-    : LandingPadBlock(MBB), LandingPadLabel(0), Personality(0) {}
+    : LandingPadBlock(MBB), LandingPadLabel(nullptr), Personality(nullptr) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -109,10 +109,6 @@ class MachineModuleInfo : public ImmutablePass {
   /// List of moves done by a function's prolog.  Used to construct frame maps
   /// by debug and exception handling consumers.
   std::vector<MCCFIInstruction> FrameInstructions;
-
-  /// CompactUnwindEncoding - If the target supports it, this is the compact
-  /// unwind encoding. It replaces a function's CIE and FDE.
-  uint32_t CompactUnwindEncoding;
 
   /// LandingPads - List of LandingPadInfo describing the landing pad
   /// information in the current function.
@@ -170,6 +166,7 @@ public:
 
   struct VariableDbgInfo {
     TrackingVH<MDNode> Var;
+    TrackingVH<MDNode> Expr;
     unsigned Slot;
     DebugLoc Loc;
   };
@@ -201,7 +198,7 @@ public:
   ///
   template<typename Ty>
   Ty &getObjFileInfo() {
-    if (ObjFileMMI == 0)
+    if (ObjFileMMI == nullptr)
       ObjFileMMI = new Ty(*this);
     return *static_cast<Ty*>(ObjFileMMI);
   }
@@ -246,15 +243,6 @@ public:
     FrameInstructions.push_back(Inst);
     return FrameInstructions.size() - 1;
   }
-
-  /// getCompactUnwindEncoding - Returns the compact unwind encoding for a
-  /// function if the target supports the encoding. This encoding replaces a
-  /// function's CIE and FDE.
-  uint32_t getCompactUnwindEncoding() const { return CompactUnwindEncoding; }
-
-  /// setCompactUnwindEncoding - Set the compact unwind encoding for a function
-  /// if the target supports the encoding.
-  void setCompactUnwindEncoding(uint32_t Enc) { CompactUnwindEncoding = Enc; }
 
   /// getAddrLabelSymbol - Return the symbol to be used for the specified basic
   /// block when its address is taken.  This cannot be its normal LBB label
@@ -334,7 +322,7 @@ public:
 
   /// TidyLandingPads - Remap landing pad labels and remove any deleted landing
   /// pads.
-  void TidyLandingPads(DenseMap<MCSymbol*, uintptr_t> *LPMap = 0);
+  void TidyLandingPads(DenseMap<MCSymbol*, uintptr_t> *LPMap = nullptr);
 
   /// getLandingPads - Return a reference to the landing pad info for the
   /// current function.
@@ -403,8 +391,9 @@ public:
 
   /// setVariableDbgInfo - Collect information used to emit debugging
   /// information of a variable.
-  void setVariableDbgInfo(MDNode *N, unsigned Slot, DebugLoc Loc) {
-    VariableDbgInfo Info = { N, Slot, Loc };
+  void setVariableDbgInfo(MDNode *Var, MDNode *Expr, unsigned Slot,
+                          DebugLoc Loc) {
+    VariableDbgInfo Info = {Var, Expr, Slot, Loc};
     VariableDbgInfos.push_back(std::move(Info));
   }
 

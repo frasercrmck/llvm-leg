@@ -15,9 +15,12 @@
 
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Timer.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "loop-pass-manager"
 
 namespace {
 
@@ -42,7 +45,10 @@ public:
     for (Loop::block_iterator b = L->block_begin(), be = L->block_end();
          b != be;
          ++b) {
-      (*b)->print(Out);
+      if (*b)
+        (*b)->print(Out);
+      else
+        Out << "Printing <null> block";
     }
     return false;
   }
@@ -61,14 +67,17 @@ LPPassManager::LPPassManager()
   : FunctionPass(ID), PMDataManager() {
   skipThisLoop = false;
   redoThisLoop = false;
-  LI = NULL;
-  CurrentLoop = NULL;
+  LI = nullptr;
+  CurrentLoop = nullptr;
 }
 
 /// Delete loop from the loop queue and loop hierarchy (LoopInfo).
 void LPPassManager::deleteLoopFromQueue(Loop *L) {
 
   LI->updateUnloop(L);
+
+  // Notify passes that the loop is being deleted.
+  deleteSimpleAnalysisLoop(L);
 
   // If L is current loop then skip rest of the passes and let
   // runOnFunction remove L from LQ. Otherwise, remove L from LQ now
@@ -155,6 +164,14 @@ void LPPassManager::deleteSimpleAnalysisValue(Value *V, Loop *L) {
   for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index) {
     LoopPass *LP = getContainedPass(Index);
     LP->deleteAnalysisValue(V, L);
+  }
+}
+
+/// Invoke deleteAnalysisLoop hook for all passes.
+void LPPassManager::deleteSimpleAnalysisLoop(Loop *L) {
+  for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index) {
+    LoopPass *LP = getContainedPass(Index);
+    LP->deleteAnalysisLoop(L);
   }
 }
 
@@ -251,6 +268,8 @@ bool LPPassManager::runOnFunction(Function &F) {
 
         // Then call the regular verifyAnalysis functions.
         verifyPreservedAnalysis(P);
+
+        F.getContext().yield();
       }
 
       removeNotPreservedAnalysis(P);

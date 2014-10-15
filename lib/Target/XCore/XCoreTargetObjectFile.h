@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_XCORE_TARGETOBJECTFILE_H
-#define LLVM_TARGET_XCORE_TARGETOBJECTFILE_H
+#ifndef LLVM_LIB_TARGET_XCORE_XCORETARGETOBJECTFILE_H
+#define LLVM_LIB_TARGET_XCORE_XCORETARGETOBJECTFILE_H
 
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 
@@ -22,7 +22,7 @@ static const unsigned CodeModelLargeSize = 256;
    const MCSection *ReadOnlySectionLarge;
    const MCSection *DataRelROSectionLarge;
   public:
-    void Initialize(MCContext &Ctx, const TargetMachine &TM);
+    void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
     const MCSection *
       getExplicitSectionGlobal(const GlobalValue *GV,
@@ -34,7 +34,8 @@ static const unsigned CodeModelLargeSize = 256;
                              Mangler &Mang,
                              const TargetMachine &TM) const override;
 
-    const MCSection *getSectionForConstant(SectionKind Kind) const override;
+    const MCSection *getSectionForConstant(SectionKind Kind,
+                                           const Constant *C) const override;
   };
 } // end namespace llvm
 

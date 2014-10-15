@@ -73,8 +73,8 @@ namespace llvm {
                Instruction *Destination) :
       Src(Source),
       Dst(Destination),
-      NextPredecessor(NULL),
-      NextSuccessor(NULL) {}
+      NextPredecessor(nullptr),
+      NextSuccessor(nullptr) {}
     virtual ~Dependence() {}
 
     /// Dependence::DVEntry - Each level in the distance/direction vector
@@ -96,7 +96,7 @@ namespace llvm {
       bool Splitable : 1; // Splitting the loop will break dependence.
       const SCEV *Distance; // NULL implies no distance available.
       DVEntry() : Direction(ALL), Scalar(true), PeelFirst(false),
-                  PeelLast(false), Splitable(false), Distance(NULL) { }
+                  PeelLast(false), Splitable(false), Distance(nullptr) { }
     };
 
     /// getSrc - Returns the source instruction for this dependence.
@@ -154,7 +154,7 @@ namespace llvm {
 
     /// getDistance - Returns the distance (or NULL) associated with a
     /// particular level.
-    virtual const SCEV *getDistance(unsigned Level) const { return NULL; }
+    virtual const SCEV *getDistance(unsigned Level) const { return nullptr; }
 
     /// isPeelFirst - Returns true if peeling the first iteration from
     /// this loop will break this dependence.
@@ -287,9 +287,9 @@ namespace llvm {
     /// The flag PossiblyLoopIndependent should be set by the caller
     /// if it appears that control flow can reach from Src to Dst
     /// without traversing a loop back edge.
-    Dependence *depends(Instruction *Src,
-                        Instruction *Dst,
-                        bool PossiblyLoopIndependent);
+    std::unique_ptr<Dependence> depends(Instruction *Src,
+                                        Instruction *Dst,
+                                        bool PossiblyLoopIndependent);
 
     /// getSplitIteration - Give a dependence that's splittable at some
     /// particular level, return the iteration that should be used to split
@@ -331,7 +331,7 @@ namespace llvm {
     ///
     /// breaks the dependence and allows us to vectorize/parallelize
     /// both loops.
-    const SCEV *getSplitIteration(const Dependence *Dep, unsigned Level);
+    const SCEV *getSplitIteration(const Dependence &Dep, unsigned Level);
 
   private:
     AliasAnalysis *AA;
@@ -910,7 +910,8 @@ namespace llvm {
                          const Constraint &CurConstraint) const;
 
     bool tryDelinearize(const SCEV *SrcSCEV, const SCEV *DstSCEV,
-                        SmallVectorImpl<Subscript> &Pair) const;
+                        SmallVectorImpl<Subscript> &Pair,
+                        const SCEV *ElementSize) const;
 
   public:
     static char ID; // Class identification, replacement for typeinfo
@@ -921,7 +922,7 @@ namespace llvm {
     bool runOnFunction(Function &F) override;
     void releaseMemory() override;
     void getAnalysisUsage(AnalysisUsage &) const override;
-    void print(raw_ostream &, const Module * = 0) const override;
+    void print(raw_ostream &, const Module * = nullptr) const override;
   }; // class DependenceAnalysis
 
   /// createDependenceAnalysisPass - This creates an instance of the

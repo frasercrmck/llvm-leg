@@ -19,7 +19,7 @@ namespace {
 
 TEST(LockFileManagerTest, Basic) {
   SmallString<64> TmpDir;
-  error_code EC;
+  std::error_code EC;
   EC = sys::fs::createUniqueDirectory("LockFileManagerTestDir", TmpDir);
   ASSERT_FALSE(EC);
 
@@ -46,7 +46,7 @@ TEST(LockFileManagerTest, Basic) {
 
 TEST(LockFileManagerTest, LinkLockExists) {
   SmallString<64> TmpDir;
-  error_code EC;
+  std::error_code EC;
   EC = sys::fs::createUniqueDirectory("LockFileManagerTestDir", TmpDir);
   ASSERT_FALSE(EC);
 
@@ -89,13 +89,13 @@ TEST(LockFileManagerTest, LinkLockExists) {
 
 TEST(LockFileManagerTest, RelativePath) {
   SmallString<64> TmpDir;
-  error_code EC;
+  std::error_code EC;
   EC = sys::fs::createUniqueDirectory("LockFileManagerTestDir", TmpDir);
   ASSERT_FALSE(EC);
 
   char PathBuf[1024];
   const char *OrigPath = getcwd(PathBuf, 1024);
-  chdir(TmpDir.c_str());
+  ASSERT_FALSE(chdir(TmpDir.c_str()));
 
   sys::fs::create_directory("inner");
   SmallString<64> LockedFile("inner");
@@ -118,7 +118,7 @@ TEST(LockFileManagerTest, RelativePath) {
   EC = sys::fs::remove("inner");
   ASSERT_FALSE(EC);
 
-  chdir(OrigPath);
+  ASSERT_FALSE(chdir(OrigPath));
 
   EC = sys::fs::remove(StringRef(TmpDir));
   ASSERT_FALSE(EC);

@@ -12,14 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef LLVM_LIB_TARGET_MIPS_MIPS16HARDFLOAT_H
+#define LLVM_LIB_TARGET_MIPS_MIPS16HARDFLOAT_H
+
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "MipsTargetMachine.h"
 #include "llvm/Pass.h"
 #include "llvm/Target/TargetMachine.h"
-
-
-#ifndef MIPS16HARDFLOAT_H
-#define MIPS16HARDFLOAT_H
 
 using namespace llvm;
 
@@ -34,11 +33,11 @@ public:
     TM(TM_), Subtarget(TM.getSubtarget<MipsSubtarget>()) {
   }
 
-  virtual const char *getPassName() const {
+  const char *getPassName() const override {
     return "MIPS16 Hard Float Pass";
   }
 
-  virtual bool runOnModule(Module &M);
+  bool runOnModule(Module &M) override;
 
 protected:
   /// Keep a pointer to the MipsSubtarget around so that we can make the right

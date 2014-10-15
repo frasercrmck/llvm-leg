@@ -11,13 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef LLVM_IR_PREDITERATORCACHE_H
+#define LLVM_IR_PREDITERATORCACHE_H
+
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/Support/Allocator.h"
-
-#ifndef LLVM_IR_PREDITERATORCACHE_H
-#define LLVM_IR_PREDITERATORCACHE_H
 
 namespace llvm {
 
@@ -44,7 +44,7 @@ namespace llvm {
       if (Entry) return Entry;
 
       SmallVector<BasicBlock*, 32> PredCache(pred_begin(BB), pred_end(BB));
-      PredCache.push_back(0); // null terminator.
+      PredCache.push_back(nullptr); // null terminator.
       
       BlockToPredCountMap[BB] = PredCache.size()-1;
 

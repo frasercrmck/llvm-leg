@@ -31,16 +31,29 @@ protected:
   std::unique_ptr<ObjectBuffer> Buffer;
 
 public:
-  ObjectImage(ObjectBuffer *Input) : Buffer(Input) {}
+  ObjectImage(std::unique_ptr<ObjectBuffer> Input) : Buffer(std::move(Input)) {}
   virtual ~ObjectImage() {}
 
   virtual object::symbol_iterator begin_symbols() const = 0;
   virtual object::symbol_iterator end_symbols() const = 0;
+  iterator_range<object::symbol_iterator> symbols() const {
+    return iterator_range<object::symbol_iterator>(begin_symbols(),
+                                                   end_symbols());
+  }
 
   virtual object::section_iterator begin_sections() const = 0;
   virtual object::section_iterator end_sections() const  = 0;
+  iterator_range<object::section_iterator> sections() const {
+    return iterator_range<object::section_iterator>(begin_sections(),
+                                                    end_sections());
+  }
 
   virtual /* Triple::ArchType */ unsigned getArch() const = 0;
+
+  // Return the name associated with this ObjectImage.
+  // This is usually the name of the file or MemoryBuffer that the the
+  // ObjectBuffer was constructed from.
+  StringRef getImageName() const { return Buffer->getBufferIdentifier(); }
 
   // Subclasses can override these methods to update the image with loaded
   // addresses for sections and common symbols

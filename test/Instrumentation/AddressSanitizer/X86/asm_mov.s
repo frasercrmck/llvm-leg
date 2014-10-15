@@ -1,4 +1,4 @@
-# RUN: llvm-mc %s -triple=x86_64-unknown-linux-gnu -mcpu=corei7 -mattr=+sse2 -asan-instrument-inline-assembly | FileCheck %s
+# RUN: llvm-mc %s -triple=x86_64-unknown-linux-gnu -mcpu=corei7 -mattr=+sse2 -asm-instrumentation=address -asan-instrument-assembly | FileCheck %s
 
 	.text
 	.globl	mov1b
@@ -6,23 +6,17 @@
 	.type	mov1b,@function
 # CHECK-LABEL: mov1b:
 #
-# CHECK: subq $128, %rsp
-# CHECK-NEXT: pushq %rdi
-# CHECK-NEXT: leaq (%rsi), %rdi
-# CHECK-NEXT: callq __sanitizer_sanitize_load1@PLT
-# CHECK-NEXT: popq %rdi
-# CHECK-NEXT: addq $128, %rsp
+# CHECK: leaq -128(%rsp), %rsp
+# CHECK: callq __asan_report_load1@PLT
+# CHECK: leaq 128(%rsp), %rsp
 #
-# CHECK-NEXT: movb (%rsi), %al
+# CHECK: movb (%rsi), %al
 #
-# CHECK-NEXT: subq $128, %rsp
-# CHECK-NEXT: pushq %rdi
-# CHECK-NEXT: leaq (%rdi), %rdi
-# CHECK-NEXT: callq __sanitizer_sanitize_store1@PLT
-# CHECK-NEXT: popq %rdi
-# CHECK-NEXT: addq $128, %rsp
+# CHECK: leaq -128(%rsp), %rsp
+# CHECK: callq __asan_report_store1@PLT
+# CHECK: leaq 128(%rsp), %rsp
 #
-# CHECK-NEXT: movb %al, (%rdi)
+# CHECK: movb %al, (%rdi)
 mov1b:                                  # @mov1b
 	.cfi_startproc
 # BB#0:
@@ -41,23 +35,17 @@ mov1b:                                  # @mov1b
 	.type	mov16b,@function
 # CHECK-LABEL: mov16b:
 #
-# CHECK: subq $128, %rsp
-# CHECK-NEXT: pushq %rdi
-# CHECK-NEXT: leaq (%rsi), %rdi
-# CHECK-NEXT: callq __sanitizer_sanitize_load16@PLT
-# CHECK-NEXT: popq %rdi
-# CHECK-NEXT: addq $128, %rsp
+# CHECK: leaq -128(%rsp), %rsp
+# CHECK: callq __asan_report_load16@PLT
+# CHECK: leaq 128(%rsp), %rsp
 #
-# CHECK-NEXT: movaps (%rsi), %xmm0
+# CHECK: movaps (%rsi), %xmm0
 #
-# CHECK-NEXT: subq $128, %rsp
-# CHECK-NEXT: pushq %rdi
-# CHECK-NEXT: leaq (%rdi), %rdi
-# CHECK-NEXT: callq __sanitizer_sanitize_store16@PLT
-# CHECK-NEXT: popq %rdi
-# CHECK-NEXT: addq $128, %rsp
+# CHECK: leaq -128(%rsp), %rsp
+# CHECK: callq __asan_report_store16@PLT
+# CHECK: leaq 128(%rsp), %rsp
 #
-# CHECK-NEXT: movaps %xmm0, (%rdi)
+# CHECK: movaps %xmm0, (%rdi)
 mov16b:                                 # @mov16b
 	.cfi_startproc
 # BB#0:

@@ -26,12 +26,15 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+
+using namespace llvm;
+
+#define DEBUG_TYPE "hexagon-instrinfo"
+
 #define GET_INSTRINFO_CTOR_DTOR
 #define GET_INSTRMAP_INFO
 #include "HexagonGenInstrInfo.inc"
 #include "HexagonGenDFAPacketizer.inc"
-
-using namespace llvm;
 
 ///
 /// Constants for Hexagon instructions.
@@ -135,7 +138,7 @@ HexagonInstrInfo::InsertBranch(MachineBasicBlock &MBB,MachineBasicBlock *TBB,
       regPos = 1;
     }
 
-    if (FBB == 0) {
+    if (!FBB) {
       if (Cond.empty()) {
         // Due to a bug in TailMerging/CFG Optimization, we need to add a
         // special case handling of a predicated jump followed by an
@@ -151,7 +154,7 @@ HexagonInstrInfo::InsertBranch(MachineBasicBlock &MBB,MachineBasicBlock *TBB,
           if (NewTBB == NextBB) {
             ReverseBranchCondition(Cond);
             RemoveBranch(MBB);
-            return InsertBranch(MBB, TBB, 0, Cond, DL);
+            return InsertBranch(MBB, TBB, nullptr, Cond, DL);
           }
         }
         BuildMI(&MBB, DL, get(BOpc)).addMBB(TBB);
@@ -174,8 +177,8 @@ bool HexagonInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB,
                                  MachineBasicBlock *&FBB,
                                  SmallVectorImpl<MachineOperand> &Cond,
                                  bool AllowModify) const {
-  TBB = NULL;
-  FBB = NULL;
+  TBB = nullptr;
+  FBB = nullptr;
 
   // If the block has no terminators, it just falls into the block after it.
   MachineBasicBlock::instr_iterator I = MBB.instr_end();
@@ -224,7 +227,7 @@ bool HexagonInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB,
 
   // Get the last instruction in the block.
   MachineInstr *LastInst = I;
-  MachineInstr *SecondLastInst = NULL;
+  MachineInstr *SecondLastInst = nullptr;
   // Find one more terminator if present.
   do {
     if (&*I != LastInst && !I->isBundle() && isUnpredicatedTerminator(I)) {
@@ -557,7 +560,7 @@ MachineInstr *HexagonInstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
                                           const SmallVectorImpl<unsigned> &Ops,
                                                     int FI) const {
   // Hexagon_TODO: Implement.
-  return(0);
+  return nullptr;
 }
 
 unsigned HexagonInstrInfo::createVR(MachineFunction* MF, MVT VT) const {
@@ -1535,14 +1538,13 @@ int HexagonInstrInfo::GetDotOldOp(const int opc) const {
   int NewOp = opc;
   if (isPredicated(NewOp) && isPredicatedNew(NewOp)) { // Get predicate old form
     NewOp = Hexagon::getPredOldOpcode(NewOp);
-    if (NewOp < 0)
-      assert(0 && "Couldn't change predicate new instruction to its old form.");
+    assert(NewOp >= 0 &&
+           "Couldn't change predicate new instruction to its old form.");
   }
 
   if (isNewValueStore(NewOp)) { // Convert into non-new-value format
     NewOp = Hexagon::getNonNVStore(NewOp);
-    if (NewOp < 0)
-      assert(0 && "Couldn't change new-value store to its old form.");
+    assert(NewOp >= 0 && "Couldn't change new-value store to its old form.");
   }
   return NewOp;
 }
@@ -1634,11 +1636,10 @@ void HexagonInstrInfo::immediateExtend(MachineInstr *MI) const {
   MO.addTargetFlag(HexagonII::HMOTF_ConstExtended);
 }
 
-DFAPacketizer *HexagonInstrInfo::
-CreateTargetScheduleState(const TargetMachine *TM,
-                           const ScheduleDAG *DAG) const {
-  const InstrItineraryData *II = TM->getInstrItineraryData();
-  return TM->getSubtarget<HexagonGenSubtargetInfo>().createDFAPacketizer(II);
+DFAPacketizer *HexagonInstrInfo::CreateTargetScheduleState(
+    const TargetSubtargetInfo &STI) const {
+  const InstrItineraryData *II = STI.getInstrItineraryData();
+  return static_cast<const HexagonSubtarget &>(STI).createDFAPacketizer(II);
 }
 
 bool HexagonInstrInfo::isSchedulingBoundary(const MachineInstr *MI,
@@ -1763,7 +1764,7 @@ int HexagonInstrInfo::getMinValue(const MachineInstr *MI) const {
                     & HexagonII::ExtentBitsMask;
 
   if (isSigned) // if value is signed
-    return -1 << (bits - 1);
+    return -1U << (bits - 1);
   else
     return 0;
 }
@@ -1777,9 +1778,9 @@ int HexagonInstrInfo::getMaxValue(const MachineInstr *MI) const {
                     & HexagonII::ExtentBitsMask;
 
   if (isSigned) // if value is signed
-    return ~(-1 << (bits - 1));
+    return ~(-1U << (bits - 1));
   else
-    return ~(-1 << bits);
+    return ~(-1U << bits);
 }
 
 // Returns true if an instruction can be converted into a non-extended

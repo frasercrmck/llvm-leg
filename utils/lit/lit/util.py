@@ -156,14 +156,36 @@ def executeCommand(command, cwd=None, env=None):
     if exitCode == -signal.SIGINT:
         raise KeyboardInterrupt
 
+    def to_string(bytes):
+        if isinstance(bytes, str):
+            return bytes
+        return bytes.encode('utf-8')
+
     # Ensure the resulting output is always of string type.
     try:
-        out = str(out.decode('ascii'))
+        out = to_string(out.decode('utf-8'))
     except:
         out = str(out)
     try:
-        err = str(err.decode('ascii'))
+        err = to_string(err.decode('utf-8'))
     except:
         err = str(err)
 
     return out, err, exitCode
+
+def usePlatformSdkOnDarwin(config, lit_config):
+    # On Darwin, support relocatable SDKs by providing Clang with a
+    # default system root path.
+    if 'darwin' in config.target_triple:
+        try:
+            cmd = subprocess.Popen(['xcrun', '--show-sdk-path'],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = cmd.communicate()
+            out = out.strip()
+            res = cmd.wait()
+        except OSError:
+            res = -1
+        if res == 0 and out:
+            sdk_path = out
+            lit_config.note('using SDKROOT: %r' % sdk_path)
+            config.environment['SDKROOT'] = sdk_path

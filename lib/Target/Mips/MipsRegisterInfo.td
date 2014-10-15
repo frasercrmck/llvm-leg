@@ -205,6 +205,10 @@ let Namespace = "Mips" in {
   foreach I = 0-31 in
   def COP2#I : MipsReg<#I, ""#I>;
 
+  // COP3 registers.
+  foreach I = 0-31 in
+  def COP3#I : MipsReg<#I, ""#I>;
+
   // PC register
   def PC : Register<"pc">;
 
@@ -336,6 +340,15 @@ def AFGR64 : RegisterClass<"Mips", [f64], 64, (add
 
 def FGR64 : RegisterClass<"Mips", [f64], 64, (sequence "D%u_64", 0, 31)>;
 
+// Used to reserve odd registers when given -mattr=+nooddspreg
+// FIXME: Remove double precision registers from this set.
+def OddSP : RegisterClass<"Mips", [f32], 32,
+                          (add (decimate (sequence "F%u", 1, 31), 2),
+                               (decimate (sequence "F_HI%u", 1, 31), 2),
+                               (decimate (sequence "D%u", 1, 15), 2),
+                               (decimate (sequence "D%u_64", 1, 31), 2))>,
+            Unallocatable;
+
 // FP control registers.
 def CCR : RegisterClass<"Mips", [i32], 32, (sequence "FCR%u", 0, 31)>,
           Unallocatable;
@@ -343,6 +356,10 @@ def CCR : RegisterClass<"Mips", [i32], 32, (sequence "FCR%u", 0, 31)>,
 // FP condition code registers.
 def FCC : RegisterClass<"Mips", [i32], 32, (sequence "FCC%u", 0, 7)>,
           Unallocatable;
+
+// MIPS32r6/MIPS64r6 store FPU condition codes in normal FGR registers.
+// This class allows us to represent this in codegen patterns.
+def FGRCC : RegisterClass<"Mips", [i32], 32, (sequence "F%u", 0, 31)>;
 
 def MSA128B: RegisterClass<"Mips", [v16i8], 128,
                            (sequence "W%u", 0, 31)>;
@@ -387,6 +404,10 @@ def DSPCC : RegisterClass<"Mips", [v4i8, v2i16], 32, (add DSPCCond)>;
 def COP2 : RegisterClass<"Mips", [i32], 32, (sequence "COP2%u", 0, 31)>,
            Unallocatable;
 
+// Coprocessor 3 registers.
+def COP3 : RegisterClass<"Mips", [i32], 32, (sequence "COP3%u", 0, 31)>,
+           Unallocatable;
+
 // Octeon multiplier and product registers
 def OCTEON_MPL : RegisterClass<"Mips", [i64], 64, (add MPL0, MPL1, MPL2)>,
                  Unallocatable;
@@ -396,7 +417,7 @@ def OCTEON_P : RegisterClass<"Mips", [i64], 64, (add P0, P1, P2)>,
 // Register Operands.
 
 class MipsAsmRegOperand : AsmOperandClass {
-  let ParserMethod = "ParseAnyRegister";
+  let ParserMethod = "parseAnyRegister";
 }
 
 def GPR64AsmOperand : MipsAsmRegOperand {
@@ -484,6 +505,10 @@ def COP2AsmOperand : MipsAsmRegOperand {
   let Name = "COP2AsmReg";
 }
 
+def COP3AsmOperand : MipsAsmRegOperand {
+  let Name = "COP3AsmReg";
+}
+
 def HWRegsOpnd : RegisterOperand<HWRegs> {
   let ParserMatchClass = HWRegsAsmOperand;
 }
@@ -497,6 +522,12 @@ def FGR64Opnd : RegisterOperand<FGR64> {
 }
 
 def FGR32Opnd : RegisterOperand<FGR32> {
+  let ParserMatchClass = FGR32AsmOperand;
+}
+
+def FGRCCOpnd : RegisterOperand<FGRCC> {
+  // The assembler doesn't use register classes so we can re-use
+  // FGR32AsmOperand.
   let ParserMatchClass = FGR32AsmOperand;
 }
 
@@ -522,6 +553,10 @@ def ACC64DSPOpnd : RegisterOperand<ACC64DSP> {
 
 def COP2Opnd : RegisterOperand<COP2> {
   let ParserMatchClass = COP2AsmOperand;
+}
+
+def COP3Opnd : RegisterOperand<COP3> {
+  let ParserMatchClass = COP3AsmOperand;
 }
 
 def MSA128BOpnd : RegisterOperand<MSA128B> {

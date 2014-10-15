@@ -52,8 +52,6 @@
 // http://wiki.dwarfstd.org/index.php?title=Path_Discriminators
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "add-discriminators"
-
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -68,6 +66,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "add-discriminators"
 
 namespace {
   struct AddDiscriminators : public FunctionPass {
@@ -99,7 +99,7 @@ FunctionPass *llvm::createAddDiscriminatorsPass() {
 
 static bool hasDebugInfo(const Function &F) {
   NamedMDNode *CUNodes = F.getParent()->getNamedMetadata("llvm.dbg.cu");
-  return CUNodes != 0;
+  return CUNodes != nullptr;
 }
 
 /// \brief Assign DWARF discriminators.
@@ -154,10 +154,15 @@ static bool hasDebugInfo(const Function &F) {
 /// file and line location as I2. This new lexical block will have a
 /// different discriminator number than I1.
 bool AddDiscriminators::runOnFunction(Function &F) {
-  // No need to do anything if there is no debug info for this function.
   // If the function has debug information, but the user has disabled
   // discriminators, do nothing.
-  if (!hasDebugInfo(F) || NoDiscriminators) return false;
+  // Simlarly, if the function has no debug info, do nothing.
+  // Finally, if this module is built with dwarf versions earlier than 4,
+  // do nothing (discriminator support is a DWARF 4 feature).
+  if (NoDiscriminators ||
+      !hasDebugInfo(F) ||
+      F.getParent()->getDwarfVersion() < 4)
+    return false;
 
   bool Changed = false;
   Module *M = F.getParent();
@@ -188,13 +193,11 @@ bool AddDiscriminators::runOnFunction(Function &F) {
         // Create a new lexical scope and compute a new discriminator
         // number for it.
         StringRef Filename = FirstDIL.getFilename();
-        unsigned LineNumber = FirstDIL.getLineNumber();
-        unsigned ColumnNumber = FirstDIL.getColumnNumber();
         DIScope Scope = FirstDIL.getScope();
         DIFile File = Builder.createFile(Filename, Scope.getDirectory());
         unsigned Discriminator = FirstDIL.computeNewDiscriminator(Ctx);
-        DILexicalBlock NewScope = Builder.createLexicalBlock(
-            Scope, File, LineNumber, ColumnNumber, Discriminator);
+        DILexicalBlockFile NewScope =
+            Builder.createLexicalBlockFile(Scope, File, Discriminator);
         DILocation NewDIL = FirstDIL.copyWithNewScope(Ctx, NewScope);
         DebugLoc newDebugLoc = DebugLoc::getFromDILocation(NewDIL);
 

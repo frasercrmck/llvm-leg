@@ -31,18 +31,25 @@ class TargetRegisterInfo;
 class CCValAssign {
 public:
   enum LocInfo {
-    Full,   // The value fills the full location.
-    SExt,   // The value is sign extended in the location.
-    ZExt,   // The value is zero extended in the location.
-    AExt,   // The value is extended with undefined upper bits.
-    BCvt,   // The value is bit-converted in the location.
-    VExt,   // The value is vector-widened in the location.
-            // FIXME: Not implemented yet. Code that uses AExt to mean
-            // vector-widen should be fixed to use VExt instead.
-    FPExt,  // The floating-point value is fp-extended in the location.
-    Indirect // The location contains pointer to the value.
+    Full,      // The value fills the full location.
+    SExt,      // The value is sign extended in the location.
+    ZExt,      // The value is zero extended in the location.
+    AExt,      // The value is extended with undefined upper bits.
+    SExtUpper, // The value is in the upper bits of the location and should be
+               // sign extended when retrieved.
+    ZExtUpper, // The value is in the upper bits of the location and should be
+               // zero extended when retrieved.
+    AExtUpper, // The value is in the upper bits of the location and should be
+               // extended with undefined upper bits when retrieved.
+    BCvt,      // The value is bit-converted in the location.
+    VExt,      // The value is vector-widened in the location.
+               // FIXME: Not implemented yet. Code that uses AExt to mean
+               // vector-widen should be fixed to use VExt instead.
+    FPExt,     // The floating-point value is fp-extended in the location.
+    Indirect   // The location contains pointer to the value.
     // TODO: a subset of the value is in the location.
   };
+
 private:
   /// ValNo - This is the value number begin assigned (e.g. an argument number).
   unsigned ValNo;
@@ -112,6 +119,23 @@ public:
     return Ret;
   }
 
+  // There is no need to differentiate between a pending CCValAssign and other
+  // kinds, as they are stored in a different list.
+  static CCValAssign getPending(unsigned ValNo, MVT ValVT, MVT LocVT,
+                                LocInfo HTP) {
+    return getReg(ValNo, ValVT, 0, LocVT, HTP);
+  }
+
+  void convertToReg(unsigned RegNo) {
+    Loc = RegNo;
+    isMem = false;
+  }
+
+  void convertToMem(unsigned Offset) {
+    Loc = Offset;
+    isMem = true;
+  }
+
   unsigned getValNo() const { return ValNo; }
   MVT getValVT() const { return ValVT; }
 
@@ -129,6 +153,9 @@ public:
     return (HTP == AExt || HTP == SExt || HTP == ZExt);
   }
 
+  bool isUpperBitsInLoc() const {
+    return HTP == AExtUpper || HTP == SExtUpper || HTP == ZExtUpper;
+  }
 };
 
 /// CCAssignFn - This function assigns a location for Val, updating State to
@@ -157,13 +184,13 @@ private:
   CallingConv::ID CallingConv;
   bool IsVarArg;
   MachineFunction &MF;
-  const TargetMachine &TM;
   const TargetRegisterInfo &TRI;
   SmallVectorImpl<CCValAssign> &Locs;
   LLVMContext &Context;
 
   unsigned StackOffset;
   SmallVector<uint32_t, 16> UsedRegs;
+  SmallVector<CCValAssign, 4> PendingLocs;
 
   // ByValInfo and SmallVector<ByValInfo, 4> ByValRegs:
   //
@@ -220,15 +247,13 @@ protected:
 
 public:
   CCState(CallingConv::ID CC, bool isVarArg, MachineFunction &MF,
-          const TargetMachine &TM, SmallVectorImpl<CCValAssign> &locs,
-          LLVMContext &C);
+          SmallVectorImpl<CCValAssign> &locs, LLVMContext &C);
 
   void addLoc(const CCValAssign &V) {
     Locs.push_back(V);
   }
 
   LLVMContext &getContext() const { return Context; }
-  const TargetMachine &getTarget() const { return TM; }
   MachineFunction &getMachineFunction() const { return MF; }
   CallingConv::ID getCallingConv() const { return CallingConv; }
   bool isVarArg() const { return IsVarArg; }
@@ -279,7 +304,7 @@ public:
 
   /// getFirstUnallocated - Return the first unallocated register in the set, or
   /// NumRegs if they are all allocated.
-  unsigned getFirstUnallocated(const uint16_t *Regs, unsigned NumRegs) const {
+  unsigned getFirstUnallocated(const MCPhysReg *Regs, unsigned NumRegs) const {
     for (unsigned i = 0; i != NumRegs; ++i)
       if (!isAllocated(Regs[i]))
         return i;
@@ -306,7 +331,7 @@ public:
   /// AllocateReg - Attempt to allocate one of the specified registers.  If none
   /// are available, return zero.  Otherwise, return the first one available,
   /// marking it and any aliases as allocated.
-  unsigned AllocateReg(const uint16_t *Regs, unsigned NumRegs) {
+  unsigned AllocateReg(const MCPhysReg *Regs, unsigned NumRegs) {
     unsigned FirstUnalloc = getFirstUnallocated(Regs, NumRegs);
     if (FirstUnalloc == NumRegs)
       return 0;    // Didn't find the reg.
@@ -317,8 +342,33 @@ public:
     return Reg;
   }
 
+  /// AllocateRegBlock - Attempt to allocate a block of RegsRequired consecutive
+  /// registers. If this is not possible, return zero. Otherwise, return the first
+  /// register of the block that were allocated, marking the entire block as allocated.
+  unsigned AllocateRegBlock(const uint16_t *Regs, unsigned NumRegs, unsigned RegsRequired) {
+    for (unsigned StartIdx = 0; StartIdx <= NumRegs - RegsRequired; ++StartIdx) {
+      bool BlockAvailable = true;
+      // Check for already-allocated regs in this block
+      for (unsigned BlockIdx = 0; BlockIdx < RegsRequired; ++BlockIdx) {
+        if (isAllocated(Regs[StartIdx + BlockIdx])) {
+          BlockAvailable = false;
+          break;
+        }
+      }
+      if (BlockAvailable) {
+        // Mark the entire block as allocated
+        for (unsigned BlockIdx = 0; BlockIdx < RegsRequired; ++BlockIdx) {
+          MarkAllocated(Regs[StartIdx + BlockIdx]);
+        }
+        return Regs[StartIdx];
+      }
+    }
+    // No block was available
+    return 0;
+  }
+
   /// Version of AllocateReg with list of registers to be shadowed.
-  unsigned AllocateReg(const uint16_t *Regs, const uint16_t *ShadowRegs,
+  unsigned AllocateReg(const MCPhysReg *Regs, const MCPhysReg *ShadowRegs,
                        unsigned NumRegs) {
     unsigned FirstUnalloc = getFirstUnallocated(Regs, NumRegs);
     if (FirstUnalloc == NumRegs)
@@ -334,8 +384,8 @@ public:
   /// AllocateStack - Allocate a chunk of stack space with the specified size
   /// and alignment.
   unsigned AllocateStack(unsigned Size, unsigned Align) {
-    assert(Align && ((Align-1) & Align) == 0); // Align is power of 2.
-    StackOffset = ((StackOffset + Align-1) & ~(Align-1));
+    assert(Align && ((Align - 1) & Align) == 0); // Align is power of 2.
+    StackOffset = ((StackOffset + Align - 1) & ~(Align - 1));
     unsigned Result = StackOffset;
     StackOffset += Size;
     MF.getFrameInfo()->ensureMaxAlignment(Align);
@@ -351,7 +401,7 @@ public:
   /// Version of AllocateStack with list of extra registers to be shadowed.
   /// Note that, unlike AllocateReg, this shadows ALL of the shadow registers.
   unsigned AllocateStack(unsigned Size, unsigned Align,
-                         const uint16_t *ShadowRegs, unsigned NumShadowRegs) {
+                         const MCPhysReg *ShadowRegs, unsigned NumShadowRegs) {
     for (unsigned i = 0; i < NumShadowRegs; ++i)
       MarkAllocated(ShadowRegs[i]);
     return AllocateStack(Size, Align);
@@ -410,6 +460,11 @@ public:
   }
 
   ParmContext getCallOrPrologue() const { return CallOrPrologue; }
+
+  // Get list of pending assignments
+  SmallVectorImpl<llvm::CCValAssign> &getPendingLocs() {
+    return PendingLocs;
+  }
 
 private:
   /// MarkAllocated - Mark a register and all of its aliases as allocated.

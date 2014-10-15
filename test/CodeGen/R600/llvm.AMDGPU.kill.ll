@@ -1,6 +1,6 @@
-; RUN: llc < %s -march=r600 -mcpu=verde -verify-machineinstrs | FileCheck --check-prefix=SI %s
+; RUN: llc -march=r600 -mcpu=verde -verify-machineinstrs < %s | FileCheck -check-prefix=SI %s
 
-; SI-LABEL: @kill_gs_const
+; SI-LABEL: {{^}}kill_gs_const:
 ; SI-NOT: V_CMPX_LE_F32
 ; SI: S_MOV_B64 exec, 0
 

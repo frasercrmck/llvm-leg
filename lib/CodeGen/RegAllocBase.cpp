@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "regalloc"
 #include "RegAllocBase.h"
 #include "Spiller.h"
 #include "llvm/ADT/Statistic.h"
@@ -34,6 +33,8 @@
 #include "llvm/Support/Timer.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "regalloc"
 
 STATISTIC(NumNewQueued    , "Number of new live ranges queued");
 
@@ -110,7 +111,7 @@ void RegAllocBase::allocatePhysRegs() {
     if (AvailablePhysReg == ~0u) {
       // selectOrSplit failed to find a register!
       // Probably caused by an inline asm.
-      MachineInstr *MI = 0;
+      MachineInstr *MI = nullptr;
       for (MachineRegisterInfo::reg_instr_iterator
            I = MRI->reg_instr_begin(VirtReg->reg), E = MRI->reg_instr_end();
            I != E; ) {

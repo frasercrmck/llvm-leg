@@ -59,8 +59,9 @@ bool LEGDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset) {
   }
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
-      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress) {
     return false; // direct calls.
+  }
 
   Base = Addr;
   Offset = CurDAG->getTargetConstant(0, MVT::i32);
@@ -72,8 +73,9 @@ SDNode *LEGDAGToDAGISel::SelectMoveImmediate(SDNode *N) {
   ConstantSDNode *ConstVal = cast<ConstantSDNode>(N);
   uint64_t ImmVal = ConstVal->getZExtValue();
   uint64_t SupportedMask = 0xfffffffff;
-  if ((ImmVal & SupportedMask) != ImmVal)
+  if ((ImmVal & SupportedMask) != ImmVal) {
     return SelectCode(N);
+  }
 
   // Select the low part of the immediate move.
   uint64_t LoMask = 0xffff;

@@ -14,7 +14,7 @@
 #ifndef LLVM_MC_MCSECTIONELF_H
 #define LLVM_MC_MCSECTIONELF_H
 
-#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Debug.h"
@@ -53,6 +53,9 @@ private:
     : MCSection(SV_ELF, K), SectionName(Section), Type(type), Flags(flags),
       EntrySize(entrySize), Group(group) {}
   ~MCSectionELF();
+
+  void setSectionName(StringRef Name) { SectionName = Name; }
+
 public:
 
   /// ShouldOmitSectionDirective - Decides whether a '.section' directive

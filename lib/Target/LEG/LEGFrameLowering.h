@@ -23,7 +23,7 @@ class LEGSubtarget;
 
 class LEGFrameLowering : public TargetFrameLowering {
 public:
-  LEGFrameLowering(const LEGSubtarget &STI);
+  LEGFrameLowering();
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.

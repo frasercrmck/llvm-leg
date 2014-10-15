@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef X86REGISTERINFO_H
-#define X86REGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_X86_X86REGISTERINFO_H
+#define LLVM_LIB_TARGET_X86_X86REGISTERINFO_H
 
 #include "llvm/Target/TargetRegisterInfo.h"
 
@@ -22,11 +22,11 @@
 namespace llvm {
   class Type;
   class TargetInstrInfo;
-  class X86TargetMachine;
+  class X86Subtarget;
 
 class X86RegisterInfo final : public X86GenRegisterInfo {
 public:
-  X86TargetMachine &TM;
+  const X86Subtarget &Subtarget;
 
 private:
   /// Is64Bit - Is the target 64-bits.
@@ -55,14 +55,10 @@ private:
   unsigned BasePtr;
 
 public:
-  X86RegisterInfo(X86TargetMachine &tm);
+  X86RegisterInfo(const X86Subtarget &STI);
 
   // FIXME: This should be tablegen'd like getDwarfRegNum is
   int getSEHRegNum(unsigned i) const;
-
-  /// getCompactUnwindRegNum - This function maps the register to the number for
-  /// compact unwind encoding. Return -1 if the register isn't valid.
-  int getCompactUnwindRegNum(unsigned RegNum, bool isEH) const override;
 
   /// Code Generation virtual methods...
   ///
@@ -100,7 +96,7 @@ public:
 
   /// getCalleeSavedRegs - Return a null-terminated list of all of the
   /// callee-save registers on this target.
-  const uint16_t *
+  const MCPhysReg *
   getCalleeSavedRegs(const MachineFunction* MF) const override;
   const uint32_t *getCallPreservedMask(CallingConv::ID) const override;
   const uint32_t *getNoPreservedMask() const;
@@ -122,7 +118,7 @@ public:
 
   void eliminateFrameIndex(MachineBasicBlock::iterator MI,
                            int SPAdj, unsigned FIOperandNum,
-                           RegScavenger *RS = NULL) const override;
+                           RegScavenger *RS = nullptr) const override;
 
   // Debug information queries.
   unsigned getFrameRegister(const MachineFunction &MF) const override;

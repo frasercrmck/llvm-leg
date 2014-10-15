@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CODEGEN_ASMPRINTER_DIE_H__
-#define CODEGEN_ASMPRINTER_DIE_H__
+#ifndef LLVM_LIB_CODEGEN_ASMPRINTER_DIE_H
+#define LLVM_LIB_CODEGEN_ASMPRINTER_DIE_H
 
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -124,7 +124,13 @@ protected:
 
   /// Children DIEs.
   ///
-  std::vector<DIE *> Children;
+  // This can't be a vector<DIE> because pointer validity is requirent for the
+  // Parent pointer and DIEEntry.
+  // It can't be a list<DIE> because some clients need pointer validity before
+  // the object has been added to any child list
+  // (eg: DwarfUnit::constructVariableDIE). These aren't insurmountable, but may
+  // be more convoluted than beneficial.
+  std::vector<std::unique_ptr<DIE>> Children;
 
   DIE *Parent;
 
@@ -132,11 +138,15 @@ protected:
   ///
   SmallVector<DIEValue *, 12> Values;
 
+protected:
+  DIE()
+      : Offset(0), Size(0), Abbrev((dwarf::Tag)0, dwarf::DW_CHILDREN_no),
+        Parent(nullptr) {}
+
 public:
-  explicit DIE(unsigned Tag)
+  explicit DIE(dwarf::Tag Tag)
       : Offset(0), Size(0), Abbrev((dwarf::Tag)Tag, dwarf::DW_CHILDREN_no),
-        Parent(0) {}
-  ~DIE();
+        Parent(nullptr) {}
 
   // Accessors.
   DIEAbbrev &getAbbrev() { return Abbrev; }
@@ -145,7 +155,9 @@ public:
   dwarf::Tag getTag() const { return Abbrev.getTag(); }
   unsigned getOffset() const { return Offset; }
   unsigned getSize() const { return Size; }
-  const std::vector<DIE *> &getChildren() const { return Children; }
+  const std::vector<std::unique_ptr<DIE>> &getChildren() const {
+    return Children;
+  }
   const SmallVectorImpl<DIEValue *> &getValues() const { return Values; }
   DIE *getParent() const { return Parent; }
   /// Climb up the parent chain to get the compile or type unit DIE this DIE
@@ -166,11 +178,11 @@ public:
 
   /// addChild - Add a child to the DIE.
   ///
-  void addChild(DIE *Child) {
+  void addChild(std::unique_ptr<DIE> Child) {
     assert(!Child->getParent());
     Abbrev.setChildrenFlag(dwarf::DW_CHILDREN_yes);
-    Children.push_back(Child);
     Child->Parent = this;
+    Children.push_back(std::move(Child));
   }
 
   /// findAttribute - Find a value in the DIE with the attribute given,
@@ -369,10 +381,10 @@ public:
 ///
 class DIEString : public DIEValue {
   const DIEValue *Access;
-  const StringRef Str;
+  StringRef Str;
 
 public:
-  DIEString(const DIEValue *Acc, const StringRef S)
+  DIEString(const DIEValue *Acc, StringRef S)
       : DIEValue(isString), Access(Acc), Str(S) {}
 
   /// getString - Grab the string out of the object.
@@ -399,14 +411,13 @@ public:
 /// this class can also be used as a proxy for a debug information entry not
 /// yet defined (ie. types.)
 class DIEEntry : public DIEValue {
-  DIE *const Entry;
+  DIE &Entry;
 
 public:
-  explicit DIEEntry(DIE *E) : DIEValue(isEntry), Entry(E) {
-    assert(E && "Cannot construct a DIEEntry with a null DIE");
+  explicit DIEEntry(DIE &E) : DIEValue(isEntry), Entry(E) {
   }
 
-  DIE *getEntry() const { return Entry; }
+  DIE &getEntry() const { return Entry; }
 
   /// EmitValue - Emit debug information entry offset.
   ///
@@ -464,7 +475,7 @@ public:
 class DIELoc : public DIEValue, public DIE {
   mutable unsigned Size; // Size in bytes excluding size header.
 public:
-  DIELoc() : DIEValue(isLoc), DIE(0), Size(0) {}
+  DIELoc() : DIEValue(isLoc), Size(0) {}
 
   /// ComputeSize - Calculate the size of the location expression.
   ///
@@ -507,7 +518,7 @@ public:
 class DIEBlock : public DIEValue, public DIE {
   mutable unsigned Size; // Size in bytes excluding size header.
 public:
-  DIEBlock() : DIEValue(isBlock), DIE(0), Size(0) {}
+  DIEBlock() : DIEValue(isBlock), Size(0) {}
 
   /// ComputeSize - Calculate the size of the location expression.
   ///

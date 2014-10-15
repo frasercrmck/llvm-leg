@@ -41,14 +41,14 @@ namespace cl {
 // ParseCommandLineOptions - Command line option processing entry point.
 //
 void ParseCommandLineOptions(int argc, const char * const *argv,
-                             const char *Overview = 0);
+                             const char *Overview = nullptr);
 
 //===----------------------------------------------------------------------===//
 // ParseEnvironmentOptions - Environment variable option processing alternate
 //                           entry point.
 //
 void ParseEnvironmentOptions(const char *progName, const char *envvar,
-                             const char *Overview = 0);
+                             const char *Overview = nullptr);
 
 ///===---------------------------------------------------------------------===//
 /// SetVersionPrinter - Override the default (LLVM specific) version printer
@@ -146,7 +146,7 @@ private:
   const char *const Description;
   void registerCategory();
 public:
-  OptionCategory(const char *const Name, const char *const Description = 0)
+  OptionCategory(const char *const Name, const char *const Description = nullptr)
       : Name(Name), Description(Description) { registerCategory(); }
   const char *getName() const { return Name; }
   const char *getDescription() const { return Description; }
@@ -238,7 +238,7 @@ protected:
                   enum OptionHidden Hidden)
     : NumOccurrences(0), Occurrences(OccurrencesFlag), Value(0),
       HiddenFlag(Hidden), Formatting(NormalFormatting), Misc(0),
-      Position(0), AdditionalVals(0), NextRegistered(0),
+      Position(0), AdditionalVals(0), NextRegistered(nullptr),
       ArgStr(""), HelpStr(""), ValueStr(""), Category(&GeneralCategory) {
   }
 
@@ -270,8 +270,8 @@ public:
 
   // addOccurrence - Wrapper around handleOccurrence that enforces Flags.
   //
-  bool addOccurrence(unsigned pos, StringRef ArgName,
-                     StringRef Value, bool MultiArg = false);
+  virtual bool addOccurrence(unsigned pos, StringRef ArgName,
+                             StringRef Value, bool MultiArg = false);
 
   // Prints option name followed by message.  Always returns true.
   bool error(const Twine &Message, StringRef ArgName = StringRef());
@@ -763,7 +763,7 @@ public:
   }
 
   // getValueName - Do not print =<value> at all.
-  const char *getValueName() const override { return 0; }
+  const char *getValueName() const override { return nullptr; }
 
   void printOptionDiff(const Option &O, bool V, OptVal Default,
                        size_t GlobalWidth) const;
@@ -787,7 +787,7 @@ public:
   }
 
   // getValueName - Do not print =<value> at all.
-  const char *getValueName() const override { return 0; }
+  const char *getValueName() const override { return nullptr; }
 
   void printOptionDiff(const Option &O, boolOrDefault V, OptVal Default,
                        size_t GlobalWidth) const;
@@ -1063,12 +1063,12 @@ class opt_storage {
   OptionValue<DataType> Default;
 
   void check_location() const {
-    assert(Location != 0 && "cl::location(...) not specified for a command "
+    assert(Location && "cl::location(...) not specified for a command "
            "line option with external storage, "
            "or cl::init specified before cl::location()!!");
   }
 public:
-  opt_storage() : Location(0) {}
+  opt_storage() : Location(nullptr) {}
 
   bool setLocation(Option &O, DataType &L) {
     if (Location)
@@ -1469,7 +1469,7 @@ class bits_storage {
   }
 
 public:
-  bits_storage() : Location(0) {}
+  bits_storage() : Location(nullptr) {}
 
   bool setLocation(Option &O, unsigned &L) {
     if (Location)
@@ -1649,6 +1649,10 @@ class alias : public Option {
                                 StringRef Arg) override {
     return AliasFor->handleOccurrence(pos, AliasFor->ArgStr, Arg);
   }
+  bool addOccurrence(unsigned pos, StringRef /*ArgName*/,
+                     StringRef Value, bool MultiArg = false) override {
+    return AliasFor->addOccurrence(pos, AliasFor->ArgStr, Value, MultiArg);
+  }
   // Handle printing stuff...
   size_t getOptionWidth() const override;
   void printOptionInfo(size_t GlobalWidth) const override;
@@ -1664,7 +1668,7 @@ class alias : public Option {
   void done() {
     if (!hasArgStr())
       error("cl::alias must have argument name specified!");
-    if (AliasFor == 0)
+    if (!AliasFor)
       error("cl::alias must have an cl::aliasopt(option) specified!");
       addArgument();
   }
@@ -1677,27 +1681,28 @@ public:
 
   // One option...
   template<class M0t>
-  explicit alias(const M0t &M0) : Option(Optional, Hidden), AliasFor(0) {
+  explicit alias(const M0t &M0) : Option(Optional, Hidden), AliasFor(nullptr) {
     apply(M0, this);
     done();
   }
   // Two options...
   template<class M0t, class M1t>
-  alias(const M0t &M0, const M1t &M1) : Option(Optional, Hidden), AliasFor(0) {
+  alias(const M0t &M0, const M1t &M1)
+    : Option(Optional, Hidden), AliasFor(nullptr) {
     apply(M0, this); apply(M1, this);
     done();
   }
   // Three options...
   template<class M0t, class M1t, class M2t>
   alias(const M0t &M0, const M1t &M1, const M2t &M2)
-    : Option(Optional, Hidden), AliasFor(0) {
+    : Option(Optional, Hidden), AliasFor(nullptr) {
     apply(M0, this); apply(M1, this); apply(M2, this);
     done();
   }
   // Four options...
   template<class M0t, class M1t, class M2t, class M3t>
   alias(const M0t &M0, const M1t &M1, const M2t &M2, const M3t &M3)
-    : Option(Optional, Hidden), AliasFor(0) {
+    : Option(Optional, Hidden), AliasFor(nullptr) {
     apply(M0, this); apply(M1, this); apply(M2, this); apply(M3, this);
     done();
   }
@@ -1785,9 +1790,12 @@ public:
 ///
 /// \param [in] Source The string to be split on whitespace with quotes.
 /// \param [in] Saver Delegates back to the caller for saving parsed strings.
+/// \param [in] MarkEOLs true if tokenizing a response file and you want end of
+/// lines and end of the response file to be marked with a nullptr string.
 /// \param [out] NewArgv All parsed strings are appended to NewArgv.
 void TokenizeGNUCommandLine(StringRef Source, StringSaver &Saver,
-                            SmallVectorImpl<const char *> &NewArgv);
+                            SmallVectorImpl<const char *> &NewArgv,
+                            bool MarkEOLs = false);
 
 /// \brief Tokenizes a Windows command line which may contain quotes and escaped
 /// quotes.
@@ -1797,25 +1805,36 @@ void TokenizeGNUCommandLine(StringRef Source, StringSaver &Saver,
 ///
 /// \param [in] Source The string to be split on whitespace with quotes.
 /// \param [in] Saver Delegates back to the caller for saving parsed strings.
+/// \param [in] MarkEOLs true if tokenizing a response file and you want end of
+/// lines and end of the response file to be marked with a nullptr string.
 /// \param [out] NewArgv All parsed strings are appended to NewArgv.
 void TokenizeWindowsCommandLine(StringRef Source, StringSaver &Saver,
-                                SmallVectorImpl<const char *> &NewArgv);
+                                SmallVectorImpl<const char *> &NewArgv,
+                                bool MarkEOLs = false);
 
 /// \brief String tokenization function type.  Should be compatible with either
 /// Windows or Unix command line tokenizers.
 typedef void (*TokenizerCallback)(StringRef Source, StringSaver &Saver,
-                                  SmallVectorImpl<const char *> &NewArgv);
+                                  SmallVectorImpl<const char *> &NewArgv,
+                                  bool MarkEOLs);
 
 /// \brief Expand response files on a command line recursively using the given
 /// StringSaver and tokenization strategy.  Argv should contain the command line
-/// before expansion and will be modified in place.
+/// before expansion and will be modified in place. If requested, Argv will
+/// also be populated with nullptrs indicating where each response file line
+/// ends, which is useful for the "/link" argument that needs to consume all
+/// remaining arguments only until the next end of line, when in a response
+/// file.
 ///
 /// \param [in] Saver Delegates back to the caller for saving parsed strings.
 /// \param [in] Tokenizer Tokenization strategy. Typically Unix or Windows.
 /// \param [in,out] Argv Command line into which to expand response files.
+/// \param [in] MarkEOLs Mark end of lines and the end of the response file
+/// with nullptrs in the Argv vector.
 /// \return true if all @files were expanded successfully or there were none.
 bool ExpandResponseFiles(StringSaver &Saver, TokenizerCallback Tokenizer,
-                         SmallVectorImpl<const char *> &Argv);
+                         SmallVectorImpl<const char *> &Argv,
+                         bool MarkEOLs = false);
 
 } // End namespace cl
 

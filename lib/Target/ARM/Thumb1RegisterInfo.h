@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef THUMB1REGISTERINFO_H
-#define THUMB1REGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_ARM_THUMB1REGISTERINFO_H
+#define LLVM_LIB_TARGET_ARM_THUMB1REGISTERINFO_H
 
 #include "ARMBaseRegisterInfo.h"
 #include "llvm/Target/TargetRegisterInfo.h"
@@ -47,8 +47,8 @@ public:
   bool rewriteFrameIndex(MachineBasicBlock::iterator II, unsigned FrameRegIdx,
                          unsigned FrameReg, int &Offset,
                          const ARMBaseInstrInfo &TII) const;
-  void resolveFrameIndex(MachineBasicBlock::iterator I,
-                         unsigned BaseReg, int64_t Offset) const override;
+  void resolveFrameIndex(MachineInstr &MI, unsigned BaseReg,
+                         int64_t Offset) const override;
   bool saveScavengerRegister(MachineBasicBlock &MBB,
                              MachineBasicBlock::iterator I,
                              MachineBasicBlock::iterator &UseMI,
@@ -56,8 +56,8 @@ public:
                              unsigned Reg) const override;
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, unsigned FIOperandNum,
-                           RegScavenger *RS = NULL) const override;
+                           RegScavenger *RS = nullptr) const override;
 };
 }
 
-#endif // THUMB1REGISTERINFO_H
+#endif

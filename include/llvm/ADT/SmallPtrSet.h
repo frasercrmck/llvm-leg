@@ -73,8 +73,9 @@ protected:
   ~SmallPtrSetImplBase();
 
 public:
+  typedef unsigned size_type;
   bool LLVM_ATTRIBUTE_UNUSED_RESULT empty() const { return size() == 0; }
-  unsigned size() const { return NumElements; }
+  size_type size() const { return NumElements; }
 
   void clear() {
     // If the capacity of the array is huge, and the # elements used is small,
@@ -239,6 +240,8 @@ struct RoundUpToPowerOfTwo {
 template <typename PtrType>
 class SmallPtrSetImpl : public SmallPtrSetImplBase {
   typedef PointerLikeTypeTraits<PtrType> PtrTraits;
+
+  SmallPtrSetImpl(const SmallPtrSetImpl&) LLVM_DELETED_FUNCTION;
 protected:
   // Constructors that forward to the base.
   SmallPtrSetImpl(const void **SmallStorage, const SmallPtrSetImpl &that)
@@ -263,7 +266,7 @@ public:
   }
 
   /// count - Return 1 if the specified pointer is in the set, 0 otherwise.
-  unsigned count(PtrType Ptr) const {
+  size_type count(PtrType Ptr) const {
     return count_imp(PtrTraits::getAsVoidPointer(Ptr)) ? 1 : 0;
   }
 

@@ -13,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TRANSFORMS_INSTRUMENTATION_DEBUGIR_H
-#define LLVM_TRANSFORMS_INSTRUMENTATION_DEBUGIR_H
+#ifndef LLVM_LIB_TRANSFORMS_INSTRUMENTATION_DEBUGIR_H
+#define LLVM_LIB_TRANSFORMS_INSTRUMENTATION_DEBUGIR_H
 
 #include "llvm/Pass.h"
 
@@ -90,9 +90,9 @@ private:
   /// Write M to disk, optionally passing in an fd to an open file which is
   /// closed by this function after writing. If no fd is specified, a new file
   /// is opened, written, and closed.
-  void writeDebugBitcode(const llvm::Module *M, int *fd = 0);
+  void writeDebugBitcode(const llvm::Module *M, int *fd = nullptr);
 };
 
 } // llvm namespace
 
-#endif // LLVM_TRANSFORMS_INSTRUMENTATION_DEBUGIR_H
+#endif

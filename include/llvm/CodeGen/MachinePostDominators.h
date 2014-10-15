@@ -22,7 +22,7 @@ namespace llvm {
 
 ///
 /// PostDominatorTree Class - Concrete subclass of DominatorTree that is used
-/// to compute the a post-dominator tree.
+/// to compute the post-dominator tree.
 ///
 struct MachinePostDominatorTree : public MachineFunctionPass {
 private:
@@ -79,7 +79,7 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
   void getAnalysisUsage(AnalysisUsage &AU) const override;
-  void print(llvm::raw_ostream &OS, const Module *M = 0) const override;
+  void print(llvm::raw_ostream &OS, const Module *M = nullptr) const override;
 };
 } //end of namespace llvm
 

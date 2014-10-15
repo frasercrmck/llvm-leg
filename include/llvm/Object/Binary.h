@@ -17,11 +17,11 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 namespace llvm {
 
 class LLVMContext;
-class MemoryBuffer;
 class StringRef;
 
 namespace object {
@@ -32,12 +32,11 @@ private:
   Binary(const Binary &other) LLVM_DELETED_FUNCTION;
 
   unsigned int TypeID;
-  bool BufferOwned;
 
 protected:
-  MemoryBuffer *Data;
+  MemoryBufferRef Data;
 
-  Binary(unsigned int Type, MemoryBuffer *Source, bool BufferOwned = true);
+  Binary(unsigned int Type, MemoryBufferRef Source);
 
   enum {
     ID_Archive,
@@ -80,6 +79,7 @@ public:
 
   StringRef getData() const;
   StringRef getFileName() const;
+  MemoryBufferRef getMemoryBufferRef() const;
 
   // Cast methods.
   unsigned int getType() const { return TypeID; }
@@ -125,12 +125,52 @@ public:
 
 /// @brief Create a Binary from Source, autodetecting the file type.
 ///
-/// @param Source The data to create the Binary from. Ownership is transferred
-///        to the Binary if successful. If an error is returned,
-///        Source is destroyed by createBinary before returning.
-ErrorOr<Binary *> createBinary(MemoryBuffer *Source, LLVMContext *Context = 0);
+/// @param Source The data to create the Binary from.
+ErrorOr<std::unique_ptr<Binary>> createBinary(MemoryBufferRef Source,
+                                              LLVMContext *Context = nullptr);
 
-ErrorOr<Binary *> createBinary(StringRef Path);
+template <typename T> class OwningBinary {
+  std::unique_ptr<T> Bin;
+  std::unique_ptr<MemoryBuffer> Buf;
+
+public:
+  OwningBinary();
+  OwningBinary(std::unique_ptr<T> Bin, std::unique_ptr<MemoryBuffer> Buf);
+  OwningBinary(OwningBinary<T>&& Other);
+  OwningBinary<T> &operator=(OwningBinary<T> &&Other);
+
+  std::unique_ptr<T> &getBinary();
+  std::unique_ptr<MemoryBuffer> &getBuffer();
+};
+
+template <typename T>
+OwningBinary<T>::OwningBinary(std::unique_ptr<T> Bin,
+                              std::unique_ptr<MemoryBuffer> Buf)
+    : Bin(std::move(Bin)), Buf(std::move(Buf)) {}
+
+template <typename T> OwningBinary<T>::OwningBinary() {}
+
+template <typename T>
+OwningBinary<T>::OwningBinary(OwningBinary &&Other)
+    : Bin(std::move(Other.Bin)), Buf(std::move(Other.Buf)) {}
+
+template <typename T>
+OwningBinary<T> &OwningBinary<T>::operator=(OwningBinary &&Other) {
+  Bin = std::move(Other.Bin);
+  Buf = std::move(Other.Buf);
+  return *this;
+}
+
+template <typename T> std::unique_ptr<T> &OwningBinary<T>::getBinary() {
+  return Bin;
+}
+
+template <typename T>
+std::unique_ptr<MemoryBuffer> &OwningBinary<T>::getBuffer() {
+  return Buf;
+}
+
+ErrorOr<OwningBinary<Binary>> createBinary(StringRef Path);
 }
 }
 

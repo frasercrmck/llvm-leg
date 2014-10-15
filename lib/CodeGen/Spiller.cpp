@@ -7,8 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "spiller"
-
 #include "Spiller.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/LiveRangeEdit.h"
@@ -27,6 +25,8 @@
 #include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "spiller"
 
 namespace {
   enum SpillerName { trivial, inline_ };
@@ -65,8 +65,8 @@ protected:
     lis = &pass.getAnalysis<LiveIntervals>();
     mfi = mf.getFrameInfo();
     mri = &mf.getRegInfo();
-    tii = mf.getTarget().getInstrInfo();
-    tri = mf.getTarget().getRegisterInfo();
+    tii = mf.getSubtarget().getInstrInfo();
+    tri = mf.getSubtarget().getRegisterInfo();
   }
 
   /// Add spill ranges for every use/def of the live interval, inserting loads

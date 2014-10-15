@@ -30,6 +30,7 @@
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -42,11 +43,11 @@ using namespace llvm;
 void TargetLoweringObjectFile::Initialize(MCContext &ctx,
                                           const TargetMachine &TM) {
   Ctx = &ctx;
-  DL = TM.getDataLayout();
+  DL = TM.getSubtargetImpl()->getDataLayout();
   InitMCObjectFileInfo(TM.getTargetTriple(),
                        TM.getRelocationModel(), TM.getCodeModel(), *Ctx);
 }
-  
+
 TargetLoweringObjectFile::~TargetLoweringObjectFile() {
 }
 
@@ -62,7 +63,7 @@ static bool isSuitableForBSS(const GlobalVariable *GV, bool NoZerosInBSS) {
     return false;
 
   // If the global has an explicit section specified, don't put it in BSS.
-  if (!GV->getSection().empty())
+  if (GV->hasSection())
     return false;
 
   // If -nozero-initialized-in-bss is specified, don't ever use BSS.
@@ -138,7 +139,7 @@ SectionKind TargetLoweringObjectFile::getKindForGlobal(const GlobalValue *GV,
 
   // Early exit - functions should be always in text sections.
   const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
-  if (GVar == 0)
+  if (!GVar)
     return SectionKind::getText();
 
   // Handle thread-local data first.
@@ -199,7 +200,8 @@ SectionKind TargetLoweringObjectFile::getKindForGlobal(const GlobalValue *GV,
       // Otherwise, just drop it into a mergable constant section.  If we have
       // a section for this size, use it, otherwise use the arbitrary sized
       // mergable section.
-      switch (TM.getDataLayout()->getTypeAllocSize(C->getType())) {
+      switch (TM.getSubtargetImpl()->getDataLayout()->getTypeAllocSize(
+          C->getType())) {
       case 4:  return SectionKind::getMergeableConst4();
       case 8:  return SectionKind::getMergeableConst8();
       case 16: return SectionKind::getMergeableConst16();
@@ -284,10 +286,10 @@ TargetLoweringObjectFile::SelectSectionForGlobal(const GlobalValue *GV,
   if (Kind.isText())
     return getTextSection();
 
-  if (Kind.isBSS() && BSSSection != 0)
+  if (Kind.isBSS() && BSSSection != nullptr)
     return BSSSection;
 
-  if (Kind.isReadOnly() && ReadOnlySection != 0)
+  if (Kind.isReadOnly() && ReadOnlySection != nullptr)
     return ReadOnlySection;
 
   return getDataSection();
@@ -297,8 +299,9 @@ TargetLoweringObjectFile::SelectSectionForGlobal(const GlobalValue *GV,
 /// specified size and relocation information, return a section that it
 /// should be placed in.
 const MCSection *
-TargetLoweringObjectFile::getSectionForConstant(SectionKind Kind) const {
-  if (Kind.isReadOnly() && ReadOnlySection != 0)
+TargetLoweringObjectFile::getSectionForConstant(SectionKind Kind,
+                                                const Constant *C) const {
+  if (Kind.isReadOnly() && ReadOnlySection != nullptr)
     return ReadOnlySection;
 
   return DataSection;

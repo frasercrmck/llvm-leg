@@ -6,8 +6,8 @@ LLVM 3.5 Release Notes
     :local:
 
 .. warning::
-   These are in-progress notes for the upcoming LLVM 3.5 release.  You may
-   prefer the `LLVM 3.4 Release Notes <http://llvm.org/releases/3.4/docs
+   These are in-progress notes for the upcoming LLVM 3.6 release.  You may
+   prefer the `LLVM 3.5 Release Notes <http://llvm.org/releases/3.5.0/docs
    /ReleaseNotes.html>`_.
 
 
@@ -15,7 +15,7 @@ Introduction
 ============
 
 This document contains the release notes for the LLVM Compiler Infrastructure,
-release 3.5.  Here we describe the status of LLVM, including major improvements
+release 3.6.  Here we describe the status of LLVM, including major improvements
 from the previous release, improvements in various subprojects of LLVM, and
 some of the current users of the code.  All LLVM releases may be downloaded
 from the `LLVM releases web site <http://llvm.org/releases/>`_.
@@ -34,30 +34,17 @@ page <http://llvm.org/releases/>`_.
 Non-comprehensive list of changes in this release
 =================================================
 
-* All backends have been changed to use the MC asm printer and support for the
-  non MC one has been removed.
-
-* Clang can now successfully self-host itself on Linux/Sparc64 and on
-  FreeBSD/Sparc64.
-
-* LLVM now assumes the assembler supports ``.loc`` for generating debug line
-  numbers. The old support for printing the debug line info directly was only
-  used by ``llc`` and has been removed.
-
-* All inline assembly is parsed by the integrated assembler when it is enabled.
-  Previously this was only the case for object-file output. It is now the case
-  for assembly output as well. The integrated assembler can be disabled with
-  the ``-no-integrated-as`` option,
-
-* llvm-ar now handles IR files like regular object files. In particular, a
-  regular symbol table is created for symbols defined in IR files.
-
 .. NOTE
    For small 1-3 sentence descriptions, just add an entry at the end of
    this list. If your description won't fit comfortably in one bullet
    point (e.g. maybe you would like to give an example of the
    functionality, or simply have a lot to talk about), see the `NOTE` below
    for adding a new subsection.
+
+* Support for AuroraUX has been removed.
+
+* Added support for a `native object file-based bitcode wrapper format
+  <BitCodeFormat.html#native-object-file>`_.
 
 * ... next change ...
 
@@ -74,40 +61,27 @@ Non-comprehensive list of changes in this release
 Changes to the ARM Backend
 --------------------------
 
-Since release 3.3, a lot of new features have been included in the ARM
-back-end but weren't production ready (ie. well tested) on release 3.4.
-Just after the 3.4 release, we started heavily testing two major parts
-of the back-end: the integrated assembler (IAS) and the ARM exception
-handling (EHABI), and now they are enabled by default on LLVM/Clang.
+ During this release ...
 
-The IAS received a lot of GNU extensions and directives, as well as some
-specific pre-UAL instructions. Not all remaining directives will be
-implemented, as we made judgement calls on the need versus the complexity,
-and have chosen simplicity and future compatibility where hard decisions
-had to be made. The major difference is, as stated above, the IAS validates
-all inline ASM, not just for object emission, and that cause trouble with
-some uses of inline ASM as pre-processor magic.
 
-So, while the IAS is good enough to compile large projects (including most
-of the Linux kernel), there are a few things that we can't (and probably
-won't) do. For those cases, please use ``-fno-integrated-as`` in Clang.
+Changes to the MIPS Target
+--------------------------
 
-Exception handling is another big change. After extensive testing and
-changes to cooperate with Dwarf unwinding, EHABI is enabled by default.
-The options ``-arm-enable-ehabi`` and ``-arm-enable-ehabi-descriptors``,
-which were used to enable EHABI in the previous releases, are removed now.
+During this release ...
 
-This means all ARM code will emit EH unwind tables, or CFI unwinding (for
-debug/profiling), or both. To avoid run-time inconsistencies, C code will
-also emit EH tables (in case they interoperate with C++ code), as is the
-case for other architectures (ex. x86_64).
+Changes to the PowerPC Target
+-----------------------------
 
-External Open Source Projects Using LLVM 3.5
+During this release ...
+
+External Open Source Projects Using LLVM 3.6
 ============================================
 
 An exciting aspect of LLVM is that it is used as an enabling technology for
 a lot of other language and tools projects. This section lists some of the
-projects that have already been updated to work with LLVM 3.5.
+projects that have already been updated to work with LLVM 3.6.
+
+* A project
 
 
 Additional Information

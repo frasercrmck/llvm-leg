@@ -16,28 +16,22 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
 // Pin the vtable to this file.
 void MachineRegisterInfo::Delegate::anchor() {}
 
-MachineRegisterInfo::MachineRegisterInfo(const TargetMachine &TM)
-  : TM(TM), TheDelegate(0), IsSSA(true), TracksLiveness(true) {
+MachineRegisterInfo::MachineRegisterInfo(const MachineFunction *MF)
+  : MF(MF), TheDelegate(nullptr), IsSSA(true), TracksLiveness(true) {
   VRegInfo.reserve(256);
   RegAllocHints.reserve(256);
   UsedRegUnits.resize(getTargetRegisterInfo()->getNumRegUnits());
   UsedPhysRegMask.resize(getTargetRegisterInfo()->getNumRegs());
 
   // Create the physreg use/def lists.
-  PhysRegUseDefLists =
-    new MachineOperand*[getTargetRegisterInfo()->getNumRegs()];
-  memset(PhysRegUseDefLists, 0,
-         sizeof(MachineOperand*)*getTargetRegisterInfo()->getNumRegs());
-}
-
-MachineRegisterInfo::~MachineRegisterInfo() {
-  delete [] PhysRegUseDefLists;
+  PhysRegUseDefLists.resize(getTargetRegisterInfo()->getNumRegs(), nullptr);
 }
 
 /// setRegClass - Set the register class of the specified virtual register.
@@ -60,14 +54,14 @@ MachineRegisterInfo::constrainRegClass(unsigned Reg,
   if (!NewRC || NewRC == OldRC)
     return NewRC;
   if (NewRC->getNumRegs() < MinNumRegs)
-    return 0;
+    return nullptr;
   setRegClass(Reg, NewRC);
   return NewRC;
 }
 
 bool
 MachineRegisterInfo::recomputeRegClass(unsigned Reg, const TargetMachine &TM) {
-  const TargetInstrInfo *TII = TM.getInstrInfo();
+  const TargetInstrInfo *TII = TM.getSubtargetImpl()->getInstrInfo();
   const TargetRegisterClass *OldRC = getRegClass(Reg);
   const TargetRegisterClass *NewRC =
     getTargetRegisterInfo()->getLargestLegalSuperClass(OldRC);
@@ -182,7 +176,7 @@ void MachineRegisterInfo::addRegOperandToUseList(MachineOperand *MO) {
   // Head is NULL for an empty list.
   if (!Head) {
     MO->Contents.Reg.Prev = MO;
-    MO->Contents.Reg.Next = 0;
+    MO->Contents.Reg.Next = nullptr;
     HeadRef = MO;
     return;
   }
@@ -203,7 +197,7 @@ void MachineRegisterInfo::addRegOperandToUseList(MachineOperand *MO) {
     HeadRef = MO;
   } else {
     // Insert use at the end.
-    MO->Contents.Reg.Next = 0;
+    MO->Contents.Reg.Next = nullptr;
     Last->Contents.Reg.Next = MO;
   }
 }
@@ -227,8 +221,8 @@ void MachineRegisterInfo::removeRegOperandFromUseList(MachineOperand *MO) {
 
   (Next ? Next : Head)->Contents.Reg.Prev = Prev;
 
-  MO->Contents.Reg.Prev = 0;
-  MO->Contents.Reg.Next = 0;
+  MO->Contents.Reg.Prev = nullptr;
+  MO->Contents.Reg.Next = nullptr;
 }
 
 /// Move NumOps operands from Src to Dst, updating use-def lists as needed.
@@ -283,17 +277,24 @@ void MachineRegisterInfo::moveOperands(MachineOperand *Dst,
 /// replaceRegWith - Replace all instances of FromReg with ToReg in the
 /// machine function.  This is like llvm-level X->replaceAllUsesWith(Y),
 /// except that it also changes any definitions of the register as well.
+/// If ToReg is a physical register we apply the sub register to obtain the
+/// final/proper physical register.
 void MachineRegisterInfo::replaceRegWith(unsigned FromReg, unsigned ToReg) {
   assert(FromReg != ToReg && "Cannot replace a reg with itself");
 
+  const TargetRegisterInfo *TRI = getTargetRegisterInfo();
+  
   // TODO: This could be more efficient by bulk changing the operands.
   for (reg_iterator I = reg_begin(FromReg), E = reg_end(); I != E; ) {
     MachineOperand &O = *I;
     ++I;
-    O.setReg(ToReg);
+    if (TargetRegisterInfo::isPhysicalRegister(ToReg)) {
+      O.substPhysReg(ToReg, *TRI);
+    } else {
+      O.setReg(ToReg);
+    }
   }
 }
-
 
 /// getVRegDef - Return the machine instr that defines the specified virtual
 /// register or null if none is found.  This assumes that the code is in SSA
@@ -303,17 +304,17 @@ MachineInstr *MachineRegisterInfo::getVRegDef(unsigned Reg) const {
   def_instr_iterator I = def_instr_begin(Reg);
   assert((I.atEnd() || std::next(I) == def_instr_end()) &&
          "getVRegDef assumes a single definition or no definition");
-  return !I.atEnd() ? &*I : 0;
+  return !I.atEnd() ? &*I : nullptr;
 }
 
 /// getUniqueVRegDef - Return the unique machine instr that defines the
 /// specified virtual register or null if none is found.  If there are
 /// multiple definitions or no definition, return null.
 MachineInstr *MachineRegisterInfo::getUniqueVRegDef(unsigned Reg) const {
-  if (def_empty(Reg)) return 0;
+  if (def_empty(Reg)) return nullptr;
   def_instr_iterator I = def_instr_begin(Reg);
   if (std::next(I) != def_instr_end())
-    return 0;
+    return nullptr;
   return &*I;
 }
 

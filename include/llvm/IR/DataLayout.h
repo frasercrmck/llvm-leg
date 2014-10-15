@@ -27,6 +27,9 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/DataTypes.h"
 
+// this needs to be outside of the namespace, to avoid conflict with llvm-c decl
+typedef struct LLVMOpaqueTargetData *LLVMTargetDataRef;
+
 namespace llvm {
 
 class Value;
@@ -174,14 +177,16 @@ private:
 
 public:
   /// Constructs a DataLayout from a specification string. See reset().
-  explicit DataLayout(StringRef LayoutDescription) : LayoutMap(0) {
+  explicit DataLayout(StringRef LayoutDescription) : LayoutMap(nullptr) {
     reset(LayoutDescription);
   }
 
   /// Initialize target data from properties stored in the module.
   explicit DataLayout(const Module *M);
 
-  DataLayout(const DataLayout &DL) : LayoutMap(0) { *this = DL; }
+  void init(const Module *M);
+
+  DataLayout(const DataLayout &DL) : LayoutMap(nullptr) { *this = DL; }
 
   DataLayout &operator=(const DataLayout &DL) {
     clear();
@@ -408,11 +413,11 @@ public:
   /// none are set.
   Type *getLargestLegalIntType(LLVMContext &C) const {
     unsigned LargestSize = getLargestLegalIntTypeSize();
-    return (LargestSize == 0) ? 0 : Type::getIntNTy(C, LargestSize);
+    return (LargestSize == 0) ? nullptr : Type::getIntNTy(C, LargestSize);
   }
 
-  /// getLargestLegalIntType - Return the size of largest legal integer type
-  /// size, or 0 if none are set.
+  /// getLargestLegalIntTypeSize - Return the size of largest legal integer
+  /// type size, or 0 if none are set.
   unsigned getLargestLegalIntTypeSize() const;
 
   /// getIndexedOffset - return the offset from the beginning of the type for
@@ -445,6 +450,14 @@ public:
   }
 };
 
+inline DataLayout *unwrap(LLVMTargetDataRef P) {
+   return reinterpret_cast<DataLayout*>(P);
+}
+
+inline LLVMTargetDataRef wrap(const DataLayout *P) {
+   return reinterpret_cast<LLVMTargetDataRef>(const_cast<DataLayout*>(P));
+}
+
 class DataLayoutPass : public ImmutablePass {
   DataLayout DL;
 
@@ -455,13 +468,10 @@ public:
 
   const DataLayout &getDataLayout() const { return DL; }
 
-  // For use with the C API. C++ code should always use the constructor that
-  // takes a module.
-  explicit DataLayoutPass(const DataLayout &DL);
-
-  explicit DataLayoutPass(const Module *M);
-
   static char ID; // Pass identification, replacement for typeid
+
+  bool doFinalization(Module &M) override;
+  bool doInitialization(Module &M) override;
 };
 
 /// StructLayout - used to lazily calculate structure layout information for a

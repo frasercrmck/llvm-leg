@@ -3,16 +3,17 @@ add_llvm_library(LLVMCore
   Attributes.cpp
   AutoUpgrade.cpp
   BasicBlock.cpp
+  Comdat.cpp
   ConstantFold.cpp
   ConstantRange.cpp
   Constants.cpp
   Core.cpp
-  DiagnosticInfo.cpp
-  DiagnosticPrinter.cpp
   DIBuilder.cpp
   DataLayout.cpp
   DebugInfo.cpp
   DebugLoc.cpp
+  DiagnosticInfo.cpp
+  DiagnosticPrinter.cpp
   Dominators.cpp
   Function.cpp
   GCOV.cpp
@@ -28,6 +29,7 @@ add_llvm_library(LLVMCore
   LLVMContextImpl.cpp
   LeakDetector.cpp
   LegacyPassManager.cpp
+  MDBuilder.cpp
   Mangler.cpp
   Metadata.cpp
   Module.cpp
@@ -37,6 +39,7 @@ add_llvm_library(LLVMCore
   Type.cpp
   TypeFinder.cpp
   Use.cpp
+  UseListOrder.cpp
   User.cpp
   Value.cpp
   ValueSymbolTable.cpp

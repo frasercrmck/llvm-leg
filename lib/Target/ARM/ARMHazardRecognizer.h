@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARMHAZARDRECOGNIZER_H
-#define ARMHAZARDRECOGNIZER_H
+#ifndef LLVM_LIB_TARGET_ARM_ARMHAZARDRECOGNIZER_H
+#define LLVM_LIB_TARGET_ARM_ARMHAZARDRECOGNIZER_H
 
 #include "llvm/CodeGen/ScoreboardHazardRecognizer.h"
 
@@ -35,7 +35,7 @@ public:
   ARMHazardRecognizer(const InstrItineraryData *ItinData,
                       const ScheduleDAG *DAG)
     : ScoreboardHazardRecognizer(ItinData, DAG, "post-RA-sched"),
-      LastMI(0) {}
+      LastMI(nullptr) {}
 
   HazardType getHazardType(SUnit *SU, int Stalls) override;
   void Reset() override;
@@ -46,4 +46,4 @@ public:
 
 } // end namespace llvm
 
-#endif // ARMHAZARDRECOGNIZER_H
+#endif

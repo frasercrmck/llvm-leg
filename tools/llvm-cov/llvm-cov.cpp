@@ -11,124 +11,63 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/SmallString.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/GCOV.h"
-#include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/MemoryObject.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/Signals.h"
-#include "llvm/Support/system_error.h"
+#include <string>
+
 using namespace llvm;
 
-static cl::opt<std::string> SourceFile(cl::Positional, cl::Required,
-                                       cl::desc("SOURCEFILE"));
+/// \brief The main entry point for the 'show' subcommand.
+int show_main(int argc, const char **argv);
 
-static cl::opt<bool> AllBlocks("a", cl::init(false),
-                               cl::desc("Display all basic blocks"));
-static cl::alias AllBlocksA("all-blocks", cl::aliasopt(AllBlocks));
+/// \brief The main entry point for the 'report' subcommand.
+int report_main(int argc, const char **argv);
 
-static cl::opt<bool> BranchProb("b", cl::init(false),
-                                cl::desc("Display branch probabilities"));
-static cl::alias BranchProbA("branch-probabilities", cl::aliasopt(BranchProb));
+/// \brief The main entry point for the 'convert-for-testing' subcommand.
+int convert_for_testing_main(int argc, const char **argv);
 
-static cl::opt<bool> BranchCount("c", cl::init(false),
-                                 cl::desc("Display branch counts instead "
-                                           "of percentages (requires -b)"));
-static cl::alias BranchCountA("branch-counts", cl::aliasopt(BranchCount));
+/// \brief The main entry point for the gcov compatible coverage tool.
+int gcov_main(int argc, const char **argv);
 
-static cl::opt<bool> FuncSummary("f", cl::init(false),
-                                 cl::desc("Show coverage for each function"));
-static cl::alias FuncSummaryA("function-summaries", cl::aliasopt(FuncSummary));
+int main(int argc, const char **argv) {
+  // If argv[0] is or ends with 'gcov', always be gcov compatible
+  if (sys::path::stem(argv[0]).endswith_lower("gcov"))
+    return gcov_main(argc, argv);
 
-static cl::opt<std::string>
-ObjectDir("o", cl::value_desc("DIR|FILE"), cl::init(""),
-          cl::desc("Find objects in DIR or based on FILE's path"));
-static cl::alias ObjectDirA("object-directory", cl::aliasopt(ObjectDir));
-static cl::alias ObjectDirB("object-file", cl::aliasopt(ObjectDir));
+  // Check if we are invoking a specific tool command.
+  if (argc > 1) {
+    int (*func)(int, const char **) = nullptr;
 
-static cl::opt<bool> PreservePaths("p", cl::init(false),
-                                   cl::desc("Preserve path components"));
-static cl::alias PreservePathsA("preserve-paths", cl::aliasopt(PreservePaths));
+    StringRef command = argv[1];
+    if (command.equals_lower("show"))
+      func = show_main;
+    else if (command.equals_lower("report"))
+      func = report_main;
+    else if (command.equals_lower("convert-for-testing"))
+      func = convert_for_testing_main;
+    else if (command.equals_lower("gcov"))
+      func = gcov_main;
 
-static cl::opt<bool> UncondBranch("u", cl::init(false),
-                                  cl::desc("Display unconditional branch info "
-                                           "(requires -b)"));
-static cl::alias UncondBranchA("unconditional-branches",
-                               cl::aliasopt(UncondBranch));
-
-static cl::OptionCategory DebugCat("Internal and debugging options");
-static cl::opt<bool> DumpGCOV("dump", cl::init(false), cl::cat(DebugCat),
-                              cl::desc("Dump the gcov file to stderr"));
-static cl::opt<std::string> InputGCNO("gcno", cl::cat(DebugCat), cl::init(""),
-                                      cl::desc("Override inferred gcno file"));
-static cl::opt<std::string> InputGCDA("gcda", cl::cat(DebugCat), cl::init(""),
-                                      cl::desc("Override inferred gcda file"));
-
-//===----------------------------------------------------------------------===//
-int main(int argc, char **argv) {
-  // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal();
-  PrettyStackTraceProgram X(argc, argv);
-  llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
-
-  cl::ParseCommandLineOptions(argc, argv, "LLVM code coverage tool\n");
-
-  SmallString<128> CoverageFileStem(ObjectDir);
-  if (CoverageFileStem.empty()) {
-    // If no directory was specified with -o, look next to the source file.
-    CoverageFileStem = sys::path::parent_path(SourceFile);
-    sys::path::append(CoverageFileStem, sys::path::stem(SourceFile));
-  } else if (sys::fs::is_directory(ObjectDir))
-    // A directory name was given. Use it and the source file name.
-    sys::path::append(CoverageFileStem, sys::path::stem(SourceFile));
-  else
-    // A file was given. Ignore the source file and look next to this file.
-    sys::path::replace_extension(CoverageFileStem, "");
-
-  if (InputGCNO.empty())
-    InputGCNO = (CoverageFileStem.str() + ".gcno").str();
-  if (InputGCDA.empty())
-    InputGCDA = (CoverageFileStem.str() + ".gcda").str();
-
-  GCOVFile GF;
-
-  std::unique_ptr<MemoryBuffer> GCNO_Buff;
-  if (error_code ec = MemoryBuffer::getFileOrSTDIN(InputGCNO, GCNO_Buff)) {
-    errs() << InputGCNO << ": " << ec.message() << "\n";
-    return 1;
-  }
-  GCOVBuffer GCNO_GB(GCNO_Buff.get());
-  if (!GF.readGCNO(GCNO_GB)) {
-    errs() << "Invalid .gcno File!\n";
-    return 1;
-  }
-
-  std::unique_ptr<MemoryBuffer> GCDA_Buff;
-  if (error_code ec = MemoryBuffer::getFileOrSTDIN(InputGCDA, GCDA_Buff)) {
-    if (ec != errc::no_such_file_or_directory) {
-      errs() << InputGCDA << ": " << ec.message() << "\n";
-      return 1;
-    }
-    // Clear the filename to make it clear we didn't read anything.
-    InputGCDA = "-";
-  } else {
-    GCOVBuffer GCDA_GB(GCDA_Buff.get());
-    if (!GF.readGCDA(GCDA_GB)) {
-      errs() << "Invalid .gcda File!\n";
-      return 1;
+    if (func) {
+      std::string Invocation = std::string(argv[0]) + " " + argv[1];
+      argv[1] = Invocation.c_str();
+      return func(argc - 1, argv + 1);
     }
   }
 
-  if (DumpGCOV)
-    GF.dump();
+  // Give a warning and fall back to gcov
+  errs().changeColor(raw_ostream::RED);
+  errs() << "warning:";
+  // Assume that argv[1] wasn't a command when it stats with a '-' or is a
+  // filename (i.e. contains a '.')
+  if (argc > 1 && !StringRef(argv[1]).startswith("-") &&
+      StringRef(argv[1]).find(".") == StringRef::npos)
+    errs() << " Unrecognized command '" << argv[1] << "'.";
+  errs() << " Using the gcov compatible mode "
+            "(this behaviour may be dropped in the future).";
+  errs().resetColor();
+  errs() << "\n";
 
-  GCOVOptions Options(AllBlocks, BranchProb, BranchCount, FuncSummary,
-                      PreservePaths, UncondBranch);
-  FileInfo FI(Options);
-  GF.collectLineCounts(FI);
-  FI.print(InputGCNO, InputGCDA);
-  return 0;
+  return gcov_main(argc, argv);
 }

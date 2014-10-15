@@ -21,6 +21,9 @@ def SandyBridgeModel : SchedMachineModel {
   let LoadLatency = 4;
   let MispredictPenalty = 16;
 
+  // Based on the LSD (loop-stream detector) queue size.
+  let LoopMicroOpBufferSize = 28;
+
   // FIXME: SSE4 and AVX are unimplemented. This flag is set to allow
   // the scheduler to assign a default model to unrecognized opcodes.
   let CompleteModel = 0;
@@ -114,6 +117,7 @@ defm : SBWriteResPair<WriteFAdd,   SBPort1, 3>;
 defm : SBWriteResPair<WriteFMul,   SBPort0, 5>;
 defm : SBWriteResPair<WriteFDiv,   SBPort0, 12>; // 10-14 cycles.
 defm : SBWriteResPair<WriteFRcp,   SBPort0, 5>;
+defm : SBWriteResPair<WriteFRsqrt, SBPort0, 5>;
 defm : SBWriteResPair<WriteFSqrt,  SBPort0, 15>;
 defm : SBWriteResPair<WriteCvtF2I, SBPort1, 3>;
 defm : SBWriteResPair<WriteCvtI2F, SBPort1, 4>;

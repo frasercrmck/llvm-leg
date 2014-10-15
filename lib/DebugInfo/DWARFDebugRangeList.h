@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEBUGINFO_DWARFDEBUGRANGELIST_H
-#define LLVM_DEBUGINFO_DWARFDEBUGRANGELIST_H
+#ifndef LLVM_LIB_DEBUGINFO_DWARFDEBUGRANGELIST_H
+#define LLVM_LIB_DEBUGINFO_DWARFDEBUGRANGELIST_H
 
 #include "llvm/Support/DataExtractor.h"
 #include <vector>
@@ -16,6 +16,9 @@
 namespace llvm {
 
 class raw_ostream;
+
+/// DWARFAddressRangesVector - represents a set of absolute address ranges.
+typedef std::vector<std::pair<uint64_t, uint64_t>> DWARFAddressRangesVector;
 
 class DWARFDebugRangeList {
 public:
@@ -50,10 +53,6 @@ public:
       else
         return StartAddress == -1ULL;
     }
-    bool containsAddress(uint64_t BaseAddress, uint64_t Address) const {
-      return (BaseAddress + StartAddress <= Address) &&
-             (Address < BaseAddress + EndAddress);
-    }
   };
 
 private:
@@ -67,10 +66,10 @@ public:
   void clear();
   void dump(raw_ostream &OS) const;
   bool extract(DataExtractor data, uint32_t *offset_ptr);
-  /// containsAddress - Returns true if range list contains the given
-  /// address. Has to be passed base address of the compile unit that
-  /// references this range list.
-  bool containsAddress(uint64_t BaseAddress, uint64_t Address) const;
+  /// getAbsoluteRanges - Returns absolute address ranges defined by this range
+  /// list. Has to be passed base address of the compile unit referencing this
+  /// range list.
+  DWARFAddressRangesVector getAbsoluteRanges(uint64_t BaseAddress) const;
 };
 
 }  // namespace llvm

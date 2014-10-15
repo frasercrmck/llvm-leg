@@ -26,11 +26,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "loop-unswitch"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AssumptionTracker.h"
 #include "llvm/Analysis/CodeMetrics.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -52,6 +52,8 @@
 #include <map>
 #include <set>
 using namespace llvm;
+
+#define DEBUG_TYPE "loop-unswitch"
 
 STATISTIC(NumBranches, "Number of branches unswitched");
 STATISTIC(NumSwitches, "Number of switches unswitched");
@@ -96,13 +98,14 @@ namespace {
     public:
 
       LUAnalysisCache() :
-        CurLoopInstructions(0), CurrentLoopProperties(0),
+        CurLoopInstructions(nullptr), CurrentLoopProperties(nullptr),
         MaxSize(Threshold)
       {}
 
       // Analyze loop. Check its size, calculate is it possible to unswitch
       // it. Returns true if we can unswitch this loop.
-      bool countLoop(const Loop *L, const TargetTransformInfo &TTI);
+      bool countLoop(const Loop *L, const TargetTransformInfo &TTI,
+                     AssumptionTracker *AT);
 
       // Clean all data related to given loop.
       void forgetLoop(const Loop *L);
@@ -125,6 +128,7 @@ namespace {
   class LoopUnswitch : public LoopPass {
     LoopInfo *LI;  // Loop information
     LPPassManager *LPM;
+    AssumptionTracker *AT;
 
     // LoopProcessWorklist - Used to check if second loop needs processing
     // after RewriteLoopBodyWithConditionConstant rewrites first loop.
@@ -151,8 +155,8 @@ namespace {
     static char ID; // Pass ID, replacement for typeid
     explicit LoopUnswitch(bool Os = false) :
       LoopPass(ID), OptimizeForSize(Os), redoLoop(false),
-      currentLoop(0), DT(0), loopHeader(0),
-      loopPreheader(0) {
+      currentLoop(nullptr), DT(nullptr), loopHeader(nullptr),
+      loopPreheader(nullptr) {
         initializeLoopUnswitchPass(*PassRegistry::getPassRegistry());
       }
 
@@ -163,6 +167,7 @@ namespace {
     /// loop preheaders be inserted into the CFG.
     ///
     void getAnalysisUsage(AnalysisUsage &AU) const override {
+      AU.addRequired<AssumptionTracker>();
       AU.addRequiredID(LoopSimplifyID);
       AU.addPreservedID(LoopSimplifyID);
       AU.addRequired<LoopInfo>();
@@ -178,15 +183,6 @@ namespace {
 
     void releaseMemory() override {
       BranchesInfo.forgetLoop(currentLoop);
-    }
-
-    /// RemoveLoopFromWorklist - If the specified loop is on the loop worklist,
-    /// remove it.
-    void RemoveLoopFromWorklist(Loop *L) {
-      std::vector<Loop*>::iterator I = std::find(LoopProcessWorklist.begin(),
-                                                 LoopProcessWorklist.end(), L);
-      if (I != LoopProcessWorklist.end())
-        LoopProcessWorklist.erase(I);
     }
 
     void initLoopData() {
@@ -212,16 +208,16 @@ namespace {
                                         Instruction *InsertPt);
 
     void SimplifyCode(std::vector<Instruction*> &Worklist, Loop *L);
-    void RemoveLoopFromHierarchy(Loop *L);
-    bool IsTrivialUnswitchCondition(Value *Cond, Constant **Val = 0,
-                                    BasicBlock **LoopExit = 0);
+    bool IsTrivialUnswitchCondition(Value *Cond, Constant **Val = nullptr,
+                                    BasicBlock **LoopExit = nullptr);
 
   };
 }
 
 // Analyze loop. Check its size, calculate is it possible to unswitch
 // it. Returns true if we can unswitch this loop.
-bool LUAnalysisCache::countLoop(const Loop *L, const TargetTransformInfo &TTI) {
+bool LUAnalysisCache::countLoop(const Loop *L, const TargetTransformInfo &TTI,
+                                AssumptionTracker *AT) {
 
   LoopPropsMapIt PropsIt;
   bool Inserted;
@@ -238,13 +234,16 @@ bool LUAnalysisCache::countLoop(const Loop *L, const TargetTransformInfo &TTI) {
     // large numbers of branches which cause loop unswitching to go crazy.
     // This is a very ad-hoc heuristic.
 
+    SmallPtrSet<const Value *, 32> EphValues;
+    CodeMetrics::collectEphemeralValues(L, AT, EphValues);
+
     // FIXME: This is overly conservative because it does not take into
     // consideration code simplification opportunities and code that can
     // be shared by the resultant unswitched loops.
     CodeMetrics Metrics;
     for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
          I != E; ++I)
-      Metrics.analyzeBasicBlock(*I, TTI);
+      Metrics.analyzeBasicBlock(*I, TTI, EphValues);
 
     Props.SizeEstimation = std::min(Metrics.NumInsts, Metrics.NumBlocks * 5);
     Props.CanBeUnswitchedCount = MaxSize / (Props.SizeEstimation);
@@ -283,8 +282,8 @@ void LUAnalysisCache::forgetLoop(const Loop *L) {
     LoopsProperties.erase(LIt);
   }
 
-  CurrentLoopProperties = 0;
-  CurLoopInstructions = 0;
+  CurrentLoopProperties = nullptr;
+  CurLoopInstructions = nullptr;
 }
 
 // Mark case value as unswitched.
@@ -335,6 +334,7 @@ char LoopUnswitch::ID = 0;
 INITIALIZE_PASS_BEGIN(LoopUnswitch, "loop-unswitch", "Unswitch loops",
                       false, false)
 INITIALIZE_AG_DEPENDENCY(TargetTransformInfo)
+INITIALIZE_PASS_DEPENDENCY(AssumptionTracker)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
@@ -355,10 +355,10 @@ static Value *FindLIVLoopCondition(Value *Cond, Loop *L, bool &Changed) {
 
   // We can never unswitch on vector conditions.
   if (Cond->getType()->isVectorTy())
-    return 0;
+    return nullptr;
 
   // Constants should be folded, not unswitched on!
-  if (isa<Constant>(Cond)) return 0;
+  if (isa<Constant>(Cond)) return nullptr;
 
   // TODO: Handle: br (VARIANT|INVARIANT).
 
@@ -378,18 +378,19 @@ static Value *FindLIVLoopCondition(Value *Cond, Loop *L, bool &Changed) {
         return RHS;
     }
 
-  return 0;
+  return nullptr;
 }
 
 bool LoopUnswitch::runOnLoop(Loop *L, LPPassManager &LPM_Ref) {
   if (skipOptnoneFunction(L))
     return false;
 
+  AT = &getAnalysis<AssumptionTracker>();
   LI = &getAnalysis<LoopInfo>();
   LPM = &LPM_Ref;
   DominatorTreeWrapperPass *DTWP =
       getAnalysisIfAvailable<DominatorTreeWrapperPass>();
-  DT = DTWP ? &DTWP->getDomTree() : 0;
+  DT = DTWP ? &DTWP->getDomTree() : nullptr;
   currentLoop = L;
   Function *F = currentLoop->getHeader()->getParent();
   bool Changed = false;
@@ -430,7 +431,8 @@ bool LoopUnswitch::processCurrentLoop() {
 
   // Probably we reach the quota of branches for this loop. If so
   // stop unswitching.
-  if (!BranchesInfo.countLoop(currentLoop, getAnalysis<TargetTransformInfo>()))
+  if (!BranchesInfo.countLoop(currentLoop, getAnalysis<TargetTransformInfo>(),
+                              AT))
     return false;
 
   // Loop over all of the basic blocks in the loop.  If we find an interior
@@ -461,7 +463,7 @@ bool LoopUnswitch::processCurrentLoop() {
         // Find a value to unswitch on:
         // FIXME: this should chose the most expensive case!
         // FIXME: scan for a case with a non-critical edge?
-        Constant *UnswitchVal = 0;
+        Constant *UnswitchVal = nullptr;
 
         // Do not process same value again and again.
         // At this point we have some cases already unswitched and
@@ -518,7 +520,7 @@ static bool isTrivialLoopExitBlockHelper(Loop *L, BasicBlock *BB,
   if (!L->contains(BB)) {
     // Otherwise, this is a loop exit, this is fine so long as this is the
     // first exit.
-    if (ExitBB != 0) return false;
+    if (ExitBB) return false;
     ExitBB = BB;
     return true;
   }
@@ -545,10 +547,10 @@ static bool isTrivialLoopExitBlockHelper(Loop *L, BasicBlock *BB,
 static BasicBlock *isTrivialLoopExitBlock(Loop *L, BasicBlock *BB) {
   std::set<BasicBlock*> Visited;
   Visited.insert(L->getHeader());  // Branches to header make infinite loops.
-  BasicBlock *ExitBB = 0;
+  BasicBlock *ExitBB = nullptr;
   if (isTrivialLoopExitBlockHelper(L, BB, ExitBB, Visited))
     return ExitBB;
-  return 0;
+  return nullptr;
 }
 
 /// IsTrivialUnswitchCondition - Check to see if this unswitch condition is
@@ -569,7 +571,7 @@ bool LoopUnswitch::IsTrivialUnswitchCondition(Value *Cond, Constant **Val,
   TerminatorInst *HeaderTerm = Header->getTerminator();
   LLVMContext &Context = Header->getContext();
 
-  BasicBlock *LoopExitBB = 0;
+  BasicBlock *LoopExitBB = nullptr;
   if (BranchInst *BI = dyn_cast<BranchInst>(HeaderTerm)) {
     // If the header block doesn't end with a conditional branch on Cond, we
     // can't handle it.
@@ -639,8 +641,8 @@ bool LoopUnswitch::IsTrivialUnswitchCondition(Value *Cond, Constant **Val,
 /// unswitch the loop, reprocess the pieces, then return true.
 bool LoopUnswitch::UnswitchIfProfitable(Value *LoopCond, Constant *Val) {
   Function *F = loopHeader->getParent();
-  Constant *CondVal = 0;
-  BasicBlock *ExitBlock = 0;
+  Constant *CondVal = nullptr;
+  BasicBlock *ExitBlock = nullptr;
 
   if (IsTrivialUnswitchCondition(LoopCond, &CondVal, &ExitBlock)) {
     // If the condition is trivial, always unswitch. There is no code growth
@@ -832,6 +834,10 @@ void LoopUnswitch::UnswitchNontrivialCondition(Value *LIC, Constant *Val,
   F->getBasicBlockList().splice(NewPreheader, F->getBasicBlockList(),
                                 NewBlocks[0], F->end());
 
+  // FIXME: We could register any cloned assumptions instead of clearing the
+  // whole function's cache.
+  AT->forgetCachedAssumptions(F);
+
   // Now we create the new Loop object for the versioned loop.
   Loop *NewLoop = CloneLoop(L, L->getParentLoop(), VMap, LI, LPM);
 
@@ -948,17 +954,6 @@ static void ReplaceUsesOfWith(Instruction *I, Value *V,
   ++NumSimplify;
 }
 
-/// RemoveLoopFromHierarchy - We have discovered that the specified loop has
-/// become unwrapped, either because the backedge was deleted, or because the
-/// edge into the header was removed.  If the edge into the header from the
-/// latch block was removed, the loop is unwrapped but subloops are still alive,
-/// so they just reparent loops.  If the loops are actually dead, they will be
-/// removed later.
-void LoopUnswitch::RemoveLoopFromHierarchy(Loop *L) {
-  LPM->deleteLoopFromQueue(L);
-  RemoveLoopFromWorklist(L);
-}
-
 // RewriteLoopBodyWithConditionConstant - We know either that the value LIC has
 // the value specified by Val in the specified loop, or we know it does NOT have
 // that value.  Rewrite any uses of LIC or of properties correlated to it.
@@ -1020,7 +1015,7 @@ void LoopUnswitch::RewriteLoopBodyWithConditionConstant(Loop *L, Value *LIC,
 
     // If we know that LIC is not Val, use this info to simplify code.
     SwitchInst *SI = dyn_cast<SwitchInst>(UI);
-    if (SI == 0 || !isa<ConstantInt>(Val)) continue;
+    if (!SI || !isa<ConstantInt>(Val)) continue;
 
     SwitchInst::CaseIt DeadCase = SI->findCaseValue(cast<ConstantInt>(Val));
     // Default case is live for multiple values.

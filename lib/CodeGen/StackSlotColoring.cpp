@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "stackslotcoloring"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallVector.h"
@@ -30,8 +29,11 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <vector>
 using namespace llvm;
+
+#define DEBUG_TYPE "stackslotcoloring"
 
 static cl::opt<bool>
 DisableSharing("no-stack-slot-sharing",
@@ -161,13 +163,12 @@ void StackSlotColoring::ScanForSpillSlotRefs(MachineFunction &MF) {
       for (MachineInstr::mmo_iterator MMOI = MI->memoperands_begin(),
            EE = MI->memoperands_end(); MMOI != EE; ++MMOI) {
         MachineMemOperand *MMO = *MMOI;
-        if (const Value *V = MMO->getValue()) {
-          if (const FixedStackPseudoSourceValue *FSV =
-              dyn_cast<FixedStackPseudoSourceValue>(V)) {
-            int FI = FSV->getFrameIndex();
-            if (FI >= 0)
-              SSRefs[FI].push_back(MMO);
-          }
+        if (const FixedStackPseudoSourceValue *FSV =
+            dyn_cast_or_null<FixedStackPseudoSourceValue>(
+                MMO->getPseudoValue())) {
+          int FI = FSV->getFrameIndex();
+          if (FI >= 0)
+            SSRefs[FI].push_back(MMO);
         }
       }
     }
@@ -310,7 +311,7 @@ bool StackSlotColoring::ColorSlots(MachineFunction &MF) {
     if (NewFI == -1 || (NewFI == (int)SS))
       continue;
 
-    const Value *NewSV = PseudoSourceValue::getFixedStack(NewFI);
+    const PseudoSourceValue *NewSV = PseudoSourceValue::getFixedStack(NewFI);
     SmallVectorImpl<MachineMemOperand *> &RefMMOs = SSRefs[SS];
     for (unsigned i = 0, e = RefMMOs.size(); i != e; ++i)
       RefMMOs[i]->setValue(NewSV);
@@ -398,7 +399,7 @@ bool StackSlotColoring::RemoveDeadStores(MachineBasicBlock* MBB) {
     ++NumDead;
     changed = true;
 
-    if (NextMI->findRegisterUseOperandIdx(LoadReg, true, 0) != -1) {
+    if (NextMI->findRegisterUseOperandIdx(LoadReg, true, nullptr) != -1) {
       ++NumDead;
       toErase.push_back(I);
     }
@@ -422,7 +423,7 @@ bool StackSlotColoring::runOnMachineFunction(MachineFunction &MF) {
     });
 
   MFI = MF.getFrameInfo();
-  TII = MF.getTarget().getInstrInfo();
+  TII = MF.getSubtarget().getInstrInfo();
   LS = &getAnalysis<LiveStacks>();
   MBFI = &getAnalysis<MachineBlockFrequencyInfo>();
 

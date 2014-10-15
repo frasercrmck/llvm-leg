@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SYSTEMZSELECTIONDAGINFO_H
-#define SYSTEMZSELECTIONDAGINFO_H
+#ifndef LLVM_LIB_TARGET_SYSTEMZ_SYSTEMZSELECTIONDAGINFO_H
+#define LLVM_LIB_TARGET_SYSTEMZ_SYSTEMZSELECTIONDAGINFO_H
 
 #include "llvm/Target/TargetSelectionDAGInfo.h"
 
@@ -22,7 +22,7 @@ class SystemZTargetMachine;
 
 class SystemZSelectionDAGInfo : public TargetSelectionDAGInfo {
 public:
-  explicit SystemZSelectionDAGInfo(const SystemZTargetMachine &TM);
+  explicit SystemZSelectionDAGInfo(const DataLayout &DL);
   ~SystemZSelectionDAGInfo();
 
   SDValue EmitTargetCodeForMemcpy(SelectionDAG &DAG, SDLoc DL, SDValue Chain,

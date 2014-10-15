@@ -13,43 +13,53 @@
 //===----------------------------------------------------------------------===//
 
 
-#ifndef SIREGISTERINFO_H_
-#define SIREGISTERINFO_H_
+#ifndef LLVM_LIB_TARGET_R600_SIREGISTERINFO_H
+#define LLVM_LIB_TARGET_R600_SIREGISTERINFO_H
 
 #include "AMDGPURegisterInfo.h"
 
 namespace llvm {
 
-class AMDGPUTargetMachine;
-
 struct SIRegisterInfo : public AMDGPURegisterInfo {
-  AMDGPUTargetMachine &TM;
 
-  SIRegisterInfo(AMDGPUTargetMachine &tm);
+  SIRegisterInfo(const AMDGPUSubtarget &st);
 
-  virtual BitVector getReservedRegs(const MachineFunction &MF) const;
+  BitVector getReservedRegs(const MachineFunction &MF) const override;
 
-  virtual unsigned getRegPressureLimit(const TargetRegisterClass *RC,
-                                       MachineFunction &MF) const;
+  unsigned getRegPressureLimit(const TargetRegisterClass *RC,
+                               MachineFunction &MF) const override;
 
-  /// \param RC is an AMDIL reg class.
-  ///
-  /// \returns the SI register class that is equivalent to \p RC.
-  virtual const TargetRegisterClass *
-    getISARegClass(const TargetRegisterClass *RC) const;
+  bool requiresRegisterScavenging(const MachineFunction &Fn) const override;
+
+  void eliminateFrameIndex(MachineBasicBlock::iterator MI, int SPAdj,
+                           unsigned FIOperandNum,
+                           RegScavenger *RS) const override;
 
   /// \brief get the register class of the specified type to use in the
   /// CFGStructurizer
-  virtual const TargetRegisterClass * getCFGStructurizerRegClass(MVT VT) const;
+  const TargetRegisterClass * getCFGStructurizerRegClass(MVT VT) const override;
 
-  virtual unsigned getHWRegIndex(unsigned Reg) const;
+  unsigned getHWRegIndex(unsigned Reg) const override;
 
   /// \brief Return the 'base' register class for this register.
   /// e.g. SGPR0 => SReg_32, VGPR => VReg_32 SGPR0_SGPR1 -> SReg_32, etc.
   const TargetRegisterClass *getPhysRegClass(unsigned Reg) const;
 
   /// \returns true if this class contains only SGPR registers
-  bool isSGPRClass(const TargetRegisterClass *RC) const;
+  bool isSGPRClass(const TargetRegisterClass *RC) const {
+    if (!RC)
+      return false;
+
+    return !hasVGPRs(RC);
+  }
+
+  /// \returns true if this class ID contains only SGPR registers
+  bool isSGPRClassID(unsigned RCID) const {
+    if (static_cast<int>(RCID) == -1)
+      return false;
+
+    return isSGPRClass(getRegClass(RCID));
+  }
 
   /// \returns true if this class contains VGPR registers.
   bool hasVGPRs(const TargetRegisterClass *RC) const;
@@ -63,8 +73,49 @@ struct SIRegisterInfo : public AMDGPURegisterInfo {
   /// be returned.
   const TargetRegisterClass *getSubRegClass(const TargetRegisterClass *RC,
                                             unsigned SubIdx) const;
+
+  /// \p Channel This is the register channel (e.g. a value from 0-16), not the
+  ///            SubReg index.
+  /// \returns The sub-register of Reg that is in Channel.
+  unsigned getPhysRegSubReg(unsigned Reg, const TargetRegisterClass *SubRC,
+                            unsigned Channel) const;
+
+  /// \returns True if operands defined with this register class can accept
+  /// a literal constant (i.e. any 32-bit immediate).
+  bool regClassCanUseLiteralConstant(int RCID) const;
+
+  /// \returns True if operands defined with this register class can accept
+  /// a literal constant (i.e. any 32-bit immediate).
+  bool regClassCanUseLiteralConstant(const TargetRegisterClass *RC) const;
+
+  /// \returns True if operands defined with this register class can accept
+  /// an inline constant. i.e. An integer value in the range (-16, 64) or
+  /// -4.0f, -2.0f, -1.0f, -0.5f, 0.0f, 0.5f, 1.0f, 2.0f, 4.0f. 
+  bool regClassCanUseInlineConstant(int RCID) const;
+
+  /// \returns True if operands defined with this register class can accept
+  /// a literal constant. i.e. A value in the range (-16, 64).
+  bool regClassCanUseInlineConstant(const TargetRegisterClass *RC) const;
+
+  enum PreloadedValue {
+    TGID_X,
+    TGID_Y,
+    TGID_Z,
+    SCRATCH_WAVE_OFFSET,
+    SCRATCH_PTR,
+    INPUT_PTR,
+    TIDIG_X,
+    TIDIG_Y,
+    TIDIG_Z
+  };
+
+  /// \brief Returns the physical register that \p Value is stored in.
+  unsigned getPreloadedValue(const MachineFunction &MF,
+                             enum PreloadedValue Value) const;
+
+  unsigned findUnusedVGPR(const MachineRegisterInfo &MRI) const;
 };
 
 } // End namespace llvm
 
-#endif // SIREGISTERINFO_H_
+#endif

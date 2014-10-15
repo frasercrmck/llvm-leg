@@ -14,7 +14,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "armtti"
 #include "ARM.h"
 #include "ARMTargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -23,8 +22,10 @@
 #include "llvm/Target/TargetLowering.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "armtti"
+
 // Declare the pass initialization routine locally as target-specific passes
-// don't havve a target-wide initialization entry point, and so we rely on the
+// don't have a target-wide initialization entry point, and so we rely on the
 // pass constructor initialization.
 namespace llvm {
 void initializeARMTTIPass(PassRegistry &);
@@ -42,13 +43,13 @@ class ARMTTI final : public ImmutablePass, public TargetTransformInfo {
   unsigned getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) const;
 
 public:
-  ARMTTI() : ImmutablePass(ID), TM(0), ST(0), TLI(0) {
+  ARMTTI() : ImmutablePass(ID), TM(nullptr), ST(nullptr), TLI(nullptr) {
     llvm_unreachable("This pass cannot be directly constructed");
   }
 
   ARMTTI(const ARMBaseTargetMachine *TM)
       : ImmutablePass(ID), TM(TM), ST(TM->getSubtargetImpl()),
-        TLI(TM->getTargetLowering()) {
+        TLI(TM->getSubtargetImpl()->getTargetLowering()) {
     initializeARMTTIPass(*PassRegistry::getPassRegistry());
   }
 
@@ -103,7 +104,7 @@ public:
     return 32;
   }
 
-  unsigned getMaximumUnrollFactor() const override {
+  unsigned getMaxInterleaveFactor() const override {
     // These are out of order CPUs:
     if (ST->isCortexA15() || ST->isSwift())
       return 2;
@@ -125,10 +126,11 @@ public:
   unsigned getAddressComputationCost(Type *Val,
                                      bool IsComplex) const override;
 
-  unsigned
-  getArithmeticInstrCost(unsigned Opcode, Type *Ty,
-                         OperandValueKind Op1Info = OK_AnyValue,
-                         OperandValueKind Op2Info = OK_AnyValue) const override;
+  unsigned getArithmeticInstrCost(
+      unsigned Opcode, Type *Ty, OperandValueKind Op1Info = OK_AnyValue,
+      OperandValueKind Op2Info = OK_AnyValue,
+      OperandValueProperties Opd1PropInfo = OP_None,
+      OperandValueProperties Opd2PropInfo = OP_None) const override;
 
   unsigned getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
                            unsigned AddressSpace) const override;
@@ -388,6 +390,13 @@ unsigned ARMTTI::getVectorInstrCost(unsigned Opcode, Type *ValTy,
       ValTy->getScalarSizeInBits() <= 32)
     return 3;
 
+  // Cross-class copies are expensive on many microarchitectures,
+  // so assume they are expensive by default.
+  if ((Opcode == Instruction::InsertElement ||
+       Opcode == Instruction::ExtractElement) &&
+      ValTy->getVectorElementType()->isIntegerTy())
+    return 3;
+
   return TargetTransformInfo::getVectorInstrCost(Opcode, ValTy, Index);
 }
 
@@ -442,36 +451,64 @@ unsigned ARMTTI::getAddressComputationCost(Type *Ty, bool IsComplex) const {
 
 unsigned ARMTTI::getShuffleCost(ShuffleKind Kind, Type *Tp, int Index,
                                 Type *SubTp) const {
-  // We only handle costs of reverse shuffles for now.
-  if (Kind != SK_Reverse)
+  // We only handle costs of reverse and alternate shuffles for now.
+  if (Kind != SK_Reverse && Kind != SK_Alternate)
     return TargetTransformInfo::getShuffleCost(Kind, Tp, Index, SubTp);
 
-  static const CostTblEntry<MVT::SimpleValueType> NEONShuffleTbl[] = {
-    // Reverse shuffle cost one instruction if we are shuffling within a double
-    // word (vrev) or two if we shuffle a quad word (vrev, vext).
-    { ISD::VECTOR_SHUFFLE, MVT::v2i32, 1 },
-    { ISD::VECTOR_SHUFFLE, MVT::v2f32, 1 },
-    { ISD::VECTOR_SHUFFLE, MVT::v2i64, 1 },
-    { ISD::VECTOR_SHUFFLE, MVT::v2f64, 1 },
+  if (Kind == SK_Reverse) {
+    static const CostTblEntry<MVT::SimpleValueType> NEONShuffleTbl[] = {
+        // Reverse shuffle cost one instruction if we are shuffling within a
+        // double word (vrev) or two if we shuffle a quad word (vrev, vext).
+        {ISD::VECTOR_SHUFFLE, MVT::v2i32, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2f32, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2i64, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2f64, 1},
 
-    { ISD::VECTOR_SHUFFLE, MVT::v4i32, 2 },
-    { ISD::VECTOR_SHUFFLE, MVT::v4f32, 2 },
-    { ISD::VECTOR_SHUFFLE, MVT::v8i16, 2 },
-    { ISD::VECTOR_SHUFFLE, MVT::v16i8, 2 }
-  };
+        {ISD::VECTOR_SHUFFLE, MVT::v4i32, 2},
+        {ISD::VECTOR_SHUFFLE, MVT::v4f32, 2},
+        {ISD::VECTOR_SHUFFLE, MVT::v8i16, 2},
+        {ISD::VECTOR_SHUFFLE, MVT::v16i8, 2}};
 
-  std::pair<unsigned, MVT> LT = TLI->getTypeLegalizationCost(Tp);
+    std::pair<unsigned, MVT> LT = TLI->getTypeLegalizationCost(Tp);
 
-  int Idx = CostTableLookup(NEONShuffleTbl, ISD::VECTOR_SHUFFLE, LT.second);
-  if (Idx == -1)
-    return TargetTransformInfo::getShuffleCost(Kind, Tp, Index, SubTp);
+    int Idx = CostTableLookup(NEONShuffleTbl, ISD::VECTOR_SHUFFLE, LT.second);
+    if (Idx == -1)
+      return TargetTransformInfo::getShuffleCost(Kind, Tp, Index, SubTp);
 
-  return LT.first * NEONShuffleTbl[Idx].Cost;
+    return LT.first * NEONShuffleTbl[Idx].Cost;
+  }
+  if (Kind == SK_Alternate) {
+    static const CostTblEntry<MVT::SimpleValueType> NEONAltShuffleTbl[] = {
+        // Alt shuffle cost table for ARM. Cost is the number of instructions
+        // required to create the shuffled vector.
+
+        {ISD::VECTOR_SHUFFLE, MVT::v2f32, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2i64, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2f64, 1},
+        {ISD::VECTOR_SHUFFLE, MVT::v2i32, 1},
+
+        {ISD::VECTOR_SHUFFLE, MVT::v4i32, 2},
+        {ISD::VECTOR_SHUFFLE, MVT::v4f32, 2},
+        {ISD::VECTOR_SHUFFLE, MVT::v4i16, 2},
+
+        {ISD::VECTOR_SHUFFLE, MVT::v8i16, 16},
+
+        {ISD::VECTOR_SHUFFLE, MVT::v16i8, 32}};
+
+    std::pair<unsigned, MVT> LT = TLI->getTypeLegalizationCost(Tp);
+    int Idx =
+        CostTableLookup(NEONAltShuffleTbl, ISD::VECTOR_SHUFFLE, LT.second);
+    if (Idx == -1)
+      return TargetTransformInfo::getShuffleCost(Kind, Tp, Index, SubTp);
+    return LT.first * NEONAltShuffleTbl[Idx].Cost;
+  }
+  return TargetTransformInfo::getShuffleCost(Kind, Tp, Index, SubTp);
 }
 
-unsigned ARMTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
-                                        OperandValueKind Op1Info,
-                                        OperandValueKind Op2Info) const {
+unsigned ARMTTI::getArithmeticInstrCost(
+    unsigned Opcode, Type *Ty, OperandValueKind Op1Info,
+    OperandValueKind Op2Info, OperandValueProperties Opd1PropInfo,
+    OperandValueProperties Opd2PropInfo) const {
 
   int ISDOpcode = TLI->InstructionOpcodeToISD(Opcode);
   std::pair<unsigned, MVT> LT = TLI->getTypeLegalizationCost(Ty);
@@ -527,8 +564,8 @@ unsigned ARMTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
   if (Idx != -1)
     return LT.first * CostTbl[Idx].Cost;
 
-  unsigned Cost =
-      TargetTransformInfo::getArithmeticInstrCost(Opcode, Ty, Op1Info, Op2Info);
+  unsigned Cost = TargetTransformInfo::getArithmeticInstrCost(
+      Opcode, Ty, Op1Info, Op2Info, Opd1PropInfo, Opd2PropInfo);
 
   // This is somewhat of a hack. The problem that we are facing is that SROA
   // creates a sequence of shift, and, or instructions to construct values.
