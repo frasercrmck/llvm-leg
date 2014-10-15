@@ -15,6 +15,8 @@ Fraser Cormack & Pierre-André Saulais, Codeplay Software
 Getting Started
 ===============
 
+The LEG repositories (llvm-leg, clang-leg) both track tip, and aren't tied to any specific revision of LLVM/Clang.
+
 Tried & tested build systems:
 *  CMake
 Tried & tested compilers:
