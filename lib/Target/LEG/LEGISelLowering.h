@@ -53,7 +53,6 @@ public:
   virtual const char *getTargetNodeName(unsigned Opcode) const;
 
 private:
-  const LEGTargetMachine &TM;
   const LEGSubtarget &Subtarget;
 
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
