@@ -30,16 +30,16 @@ Building with make
 ------------------
 
     cd llvm-leg
+    mkdir build && cd build
     cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE:STRING=DEBUG(/RELEASE) -DLLVM_TARGETS_TO_BUILD:STRING=LEG(,X86,...) ../
-    cd build
     make -j9
 
 Building with ninja
 -------------------
 
     cd llvm-leg
+    mkdir build && cd build
     cmake -G "Ninja" -DCMAKE_BUILD_TYPE:STRING=DEBUG(/RELEASE) -DLLVM_TARGETS_TO_BUILD:STRING=LEG(,X86,...) ../
-    cd build
     ninja
 
 
