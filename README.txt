@@ -19,6 +19,7 @@ Tried & tested build systems:
 *  CMake
 Tried & tested compilers:
 *  gcc 4.9.1
+*  clang 3.5
 
 Building with in-tree clang (optional)
 --------------------------------------
