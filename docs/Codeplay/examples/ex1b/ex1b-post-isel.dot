@@ -19,8 +19,8 @@ digraph "scheduler input for foo:" {
 	Node0x3fb4480:s0 -> Node0x3f8a010:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3fb4480:s2 -> Node0x3fb4378:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3fb4480:s1 -> Node0x3fb4270:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x3fb4588 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|RET [ORD=3]|0x3fb4588|{<d0>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x3fb4588:s0 -> Node0x3fb4378:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x3fb4588:s1 -> Node0x3fb4480:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3fb4588 [shape=record,shape=Mrecord,label="{{<s0>1|<s1>0|<s2>2}|RET [ORD=3]|0x3fb4588|{<d0>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3fb4588:s1 -> Node0x3fb4378:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3fb4588:s0 -> Node0x3fb4480:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3fb4588:s2 -> Node0x3fb4480:d1[style=bold, penwidth=3,color="magenta",fontname="Calibri",fontsize=16,fontcolor="white"];
 }
