@@ -321,18 +321,18 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
     \item The two instructions must be ordered:
     \begin{itemize}
         \item Because MOVW clears the high 16 bits
-        \item Achieved by having MOVT reading MOVW's output
+        \item Achieved by having MOVT reading MOVW's output (\texttt{\$fakesrc})
     \end{itemize}
     \item Source and destination registers must be the same
     \begin{itemize}
-        \item Use 'Constraints' in Tablegen (unless using pseudo)
+        \item Use 'Constraints' in Tablegen (when generated pre-RA)
     \end{itemize}
 \end{itemize}
 
-\begin{codebox}
+\begin{codebox}[commandchars=\\¬|]
 def MOVTi16 : InstLEG<(outs GRRegs:$dst),
-                      (ins GRRegs:$src1, i32imm:$src2),
-                      "movw $dst, $src2",
+                      (ins GRRegs:\codeempha¬$fakesrc|, i32imm:$src),
+                      "movw $dst, $src",
                       [/* No pattern */]> {
   let Constraints = "$src1 = $dst";
 }
@@ -382,6 +382,6 @@ Example IR:
 
 Outputs:
 
-\examplebox[firstline=7,lastline=12,gobble=1]{ex5/ex5.s}
+\examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
 
 \end{frame}
