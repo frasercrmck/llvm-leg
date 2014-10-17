@@ -131,7 +131,7 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
     ret i32 \codeemphc[%c]
 }
     \end{codebox}
-    \codecaption{ex1.ll}
+    \codecaption{ex1b.ll}
 
     Two target hooks:
     \begin{itemize}
@@ -142,7 +142,7 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
     % FIXME Add 'a', 'b', 'c' circles
     \begin{block}{}
         \vspace{-5ex}
-        \includegraphics[width = 1.0\textwidth]{examples/ex1b-pre-isel.pdf}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
     \end{block}
 \end{columns}    
 
@@ -168,7 +168,7 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
     % FIXME Add 'a', 'b', 'c' circles and arrows from Lower*() to white circles
     \begin{block}{}
         \vspace{-5ex}
-        \includegraphics[width = 1.0\textwidth]{examples/ex1b-pre-isel.pdf}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
     \end{block}
 \end{columns}    
 
@@ -374,7 +374,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
     \item The previous example translates to:
 \end{itemize}
 
-\examplebox[firstline=7,lastline=8,gobble=1]{ex2-ADDrr-MOVW.s}
+\examplebox[firstline=7,lastline=8,gobble=1]{ex2/ex2-ADDrr-MOVW.s}
 
 \end{frame}
 
@@ -399,7 +399,7 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
 
 Output:
 
-\examplebox[firstline=7,lastline=7,gobble=1]{ex2-ADDri.s}
+\examplebox[firstline=7,lastline=7,gobble=1]{ex2/ex2-ADDri.s}
 
 \end{frame}
 
@@ -437,7 +437,7 @@ def MLA : InstLEG<(outs GRRegs:$dst),
 
 % FIXME center image, add dotted line circles, arrows
 % FIXME also add text "With MLA pattern" and assembly output, "Without" etc
-\includegraphics[width = 0.80\textwidth]{examples/ex3-selection1.png}
+\includegraphics[width = 0.80\textwidth]{examples/ex3/ex3-selection1.png}
 
 \end{frame}
 
@@ -469,13 +469,13 @@ def MLA : InstLEG<(outs GRRegs:$dst),
     \item Example that uses the stack:
 \end{itemize}
 
-\examplebox[firstline=7,lastline=10]{ex4.ll}
+\examplebox[firstline=7,lastline=10]{ex4/ex4.ll}
 
 \begin{itemize}
     \item Output when compiled with -O2:
 \end{itemize}
 
-\examplebox[firstline=7,lastline=11]{ex4-O2.s}
+\examplebox[firstline=7,lastline=11]{ex4/ex4-O2.s}
 
 \end{frame}
 
@@ -598,6 +598,6 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
     \end{itemize}
 \end{itemize}
 
-\examplebox[firstline=1,lastline=10]{ex1.s}
+\examplebox[firstline=1,lastline=10]{ex1/ex1.s}
 
 \end{frame}
