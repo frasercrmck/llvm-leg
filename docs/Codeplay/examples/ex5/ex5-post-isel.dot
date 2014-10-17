@@ -1,0 +1,12 @@
+digraph "scheduler input for foo:" {
+	rankdir="BT";
+	bgcolor="transparent";
+
+	Node0x410dd88 [shape=record,shape=Mrecord,label="{TargetConstant\<2\>|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410de90 [shape=record,shape=Mrecord,label="{{<s0>0}|MOVWi16|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410de90:s0 -> Node0x410dd88:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410df98 [shape=record,shape=Mrecord,label="{TargetConstant\<1\>|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410e0a0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|MOVTi16|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410e0a0:s0 -> Node0x410de90:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x410e0a0:s1 -> Node0x410df98:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+}

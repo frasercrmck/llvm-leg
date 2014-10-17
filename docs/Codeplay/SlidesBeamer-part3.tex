@@ -376,12 +376,18 @@ bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
 
 \begin{frame}{Lowering to multiple instructions}
 
-Example IR:
+\begin{columns}[t]
+\column{.5\textwidth}
+    Example IR:
+    \examplebox[firstline=6,lastline=9]{ex5/ex5.ll}
 
-\examplebox[firstline=6,lastline=9]{ex5/ex5.ll}
-
-Outputs:
-
-\examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
+    Result assembly:
+    \examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
+\column{.5\textwidth}
+    \begin{figure}
+        \vspace{-5ex}
+        \includegraphics[width = 0.78\textwidth]{examples/ex5/ex5-post-isel.pdf}
+    \end{figure}
+\end{columns}
 
 \end{frame}

@@ -1,0 +1,31 @@
+digraph "scheduler input for foo:" {
+	rankdir="BT";
+	label="scheduler input for foo:";
+
+	Node0x40e3810 [shape=record,shape=Mrecord,label="{EntryToken|0x40e3810|{<d0>ch}}"];
+	Node0x410d650 [shape=record,shape=Mrecord,label="{Register %vreg0|0x410d650|{<d0>i32}}"];
+	Node0x410da70 [shape=record,shape=Mrecord,label="{Register %R0|0x410da70|{<d0>i32}}"];
+	Node0x410d758 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x410d758|{<d0>i32|<d1>ch}}"];
+	Node0x410d758:s0 -> Node0x40e3810:d0[color=blue,style=dashed];
+	Node0x410d758:s1 -> Node0x410d650:d0;
+	Node0x410d968 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|ADDrr [ORD=2]|0x410d968|{<d0>i32}}"];
+	Node0x410d968:s0 -> Node0x410d758:d0;
+	Node0x410d968:s1 -> Node0x410e0a0:d0;
+	Node0x410db78 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|CopyToReg [ORD=3]|0x410db78|{<d0>ch|<d1>glue}}"];
+	Node0x410db78:s0 -> Node0x40e3810:d0[color=blue,style=dashed];
+	Node0x410db78:s1 -> Node0x410da70:d0;
+	Node0x410db78:s2 -> Node0x410d968:d0;
+	Node0x410dc80 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|RET [ORD=3]|0x410dc80|{<d0>ch}}"];
+	Node0x410dc80:s0 -> Node0x410da70:d0;
+	Node0x410dc80:s1 -> Node0x410db78:d0[color=blue,style=dashed];
+	Node0x410dc80:s2 -> Node0x410db78:d1[color=red,style=bold];
+	Node0x410dd88 [shape=record,shape=Mrecord,label="{TargetConstant\<2\>|0x410dd88|{<d0>i32}}"];
+	Node0x410de90 [shape=record,shape=Mrecord,label="{{<s0>0}|MOVWi16|0x410de90|{<d0>i32}}"];
+	Node0x410de90:s0 -> Node0x410dd88:d0;
+	Node0x410df98 [shape=record,shape=Mrecord,label="{TargetConstant\<1\>|0x410df98|{<d0>i32}}"];
+	Node0x410e0a0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|MOVTi16|0x410e0a0|{<d0>i32}}"];
+	Node0x410e0a0:s0 -> Node0x410de90:d0;
+	Node0x410e0a0:s1 -> Node0x410df98:d0;
+	Node0x0[ plaintext=circle, label ="GraphRoot"];
+	Node0x0 -> Node0x410dc80:d0[color=blue,style=dashed];
+}
