@@ -315,17 +315,41 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\begin{frame}{Lowering to multiple instructions}
+
+\begin{columns}[t]
+\column{.5\textwidth}
+    \begin{itemize}
+        \item The two instructions must be ordered
+        \begin{itemize}
+            \item MOVW clears the high 16 bits
+            \item MOVT followed by MOVW gives the wrong result
+        \end{itemize}
+        \item Achieved by having MOVT reading MOVW's output
+        \begin{itemize}
+            \item Add a 'fake' operand to MOVT
+            \item Enforces the ordering
+        \end{itemize}
+        \item Example: \texttt{0x00010002}
+    \end{itemize}
+\column{.5\textwidth}
+    \begin{figure}
+        \vspace{-5ex}
+        \includegraphics[width = 0.78\textwidth]{examples/ex5/ex5-post-isel.pdf}
+    \end{figure}
+\end{columns}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \begin{frame}[fragile]{Lowering to multiple instructions}
 
 \begin{itemize}
-    \item The two instructions must be ordered:
-    \begin{itemize}
-        \item Because MOVW clears the high 16 bits
-        \item Achieved by having MOVT reading MOVW's output (\texttt{\$fakesrc})
-    \end{itemize}
+    \item Let's define MOVT with the extra operand: fakesrc
     \item Source and destination registers must be the same
     \begin{itemize}
-        \item Use 'Constraints' in Tablegen (when generated pre-RA)
+        \item Use 'Constraints' in Tablegen
     \end{itemize}
 \end{itemize}
 
