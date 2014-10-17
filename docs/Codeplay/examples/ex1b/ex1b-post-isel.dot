@@ -1,6 +1,6 @@
 digraph "scheduler input for foo:" {
 	rankdir="BT";
-	bgcolor="black";
+	bgcolor="transparent";
 
 	Node0x3f8a010 [shape=record,shape=Mrecord,label="{EntryToken|0x3f8a010|{<d0>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3fb3e50 [shape=record,shape=Mrecord,label="{Register %vreg0|0x3fb3e50|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
