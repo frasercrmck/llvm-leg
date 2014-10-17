@@ -59,11 +59,11 @@ Compiling some code
     ./build/bin/llc -march leg -filetype=obj -o ex1.o docs/Codeplay/examples/ex1.ll
     xxd ex1.o
 
-    ### Compile Source -> Assembly with in-tree clang (via clang-leg: optional) ###
+    ### Compile Source -> Assembly with in-tree clang (via clang-leg) ###
     ./build/bin/clang -cc1 -triple leg-unknown-unknown -S -o ex1.s docs/Codeplay/example/ex1.c
     cat ex1.s
 
-    ### Compile Source -> Assembly with in-tree clang (via clang-leg: optional) ###
+    ### Compile Source -> Assembly with in-tree clang (via clang-leg) ###
     ./build/bin/clang -cc1 -triple leg-unknown-unknown -o ex1.o docs/Codeplay/example/ex1.c
     xxd ex1.0
 
