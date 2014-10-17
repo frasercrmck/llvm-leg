@@ -50,7 +50,7 @@ const char *LEGTargetLowering::getTargetNodeName(unsigned Opcode) const {
 }
 
 LEGTargetLowering::LEGTargetLowering(LEGTargetMachine &LEGTM)
-    : TargetLowering(LEGTM, new TargetLoweringObjectFileELF()), TM(LEGTM),
+    : TargetLowering(LEGTM, new TargetLoweringObjectFileELF()),
       Subtarget(*LEGTM.getSubtargetImpl()) {
   // Set up the register classes.
   addRegisterClass(MVT::i32, &LEG::GRRegsRegClass);

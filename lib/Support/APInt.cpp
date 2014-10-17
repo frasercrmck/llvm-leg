@@ -2064,16 +2064,26 @@ APInt APInt::umul_ov(const APInt &RHS, bool &Overflow) const {
   return Res;
 }
 
-APInt APInt::sshl_ov(unsigned ShAmt, bool &Overflow) const {
-  Overflow = ShAmt >= getBitWidth();
+APInt APInt::sshl_ov(const APInt &ShAmt, bool &Overflow) const {
+  Overflow = ShAmt.uge(getBitWidth());
   if (Overflow)
-    ShAmt = getBitWidth()-1;
+    return APInt(BitWidth, 0);
 
   if (isNonNegative()) // Don't allow sign change.
-    Overflow = ShAmt >= countLeadingZeros();
+    Overflow = ShAmt.uge(countLeadingZeros());
   else
-    Overflow = ShAmt >= countLeadingOnes();
+    Overflow = ShAmt.uge(countLeadingOnes());
   
+  return *this << ShAmt;
+}
+
+APInt APInt::ushl_ov(const APInt &ShAmt, bool &Overflow) const {
+  Overflow = ShAmt.uge(getBitWidth());
+  if (Overflow)
+    return APInt(BitWidth, 0);
+
+  Overflow = ShAmt.ugt(countLeadingZeros());
+
   return *this << ShAmt;
 }
 
@@ -2288,8 +2298,7 @@ void APInt::print(raw_ostream &OS, bool isSigned) const {
 
 // Assumed by lowHalf, highHalf, partMSB and partLSB.  A fairly safe
 // and unrestricting assumption.
-#define COMPILE_TIME_ASSERT(cond) extern int CTAssert[(cond) ? 1 : -1]
-COMPILE_TIME_ASSERT(integerPartWidth % 2 == 0);
+static_assert(integerPartWidth % 2 == 0, "Part width must be divisible by 2!");
 
 /* Some handy functions local to this file.  */
 namespace {

@@ -1312,14 +1312,8 @@ void DwarfDebug::addScopeVariable(LexicalScope *LS, DbgVariable *Var) {
 
 // Gather and emit post-function debug information.
 void DwarfDebug::endFunction(const MachineFunction *MF) {
-  // Every beginFunction(MF) call should be followed by an endFunction(MF) call,
-  // though the beginFunction may not be called at all.
-  // We should handle both cases.
-  if (!CurFn)
-    CurFn = MF;
-  else
-    assert(CurFn == MF);
-  assert(CurFn != nullptr);
+  assert(CurFn == MF &&
+      "endFunction should be called with the same function as beginFunction");
 
   if (!MMI->hasDebugInfo() || LScopes.empty() ||
       !FunctionDIs.count(MF->getFunction())) {
@@ -1365,6 +1359,9 @@ void DwarfDebug::endFunction(const MachineFunction *MF) {
     return;
   }
 
+#ifndef NDEBUG
+  size_t NumAbstractScopes = LScopes.getAbstractScopesList().size();
+#endif
   // Construct abstract scopes.
   for (LexicalScope *AScope : LScopes.getAbstractScopesList()) {
     DISubprogram SP(AScope->getScopeNode());
@@ -1377,6 +1374,8 @@ void DwarfDebug::endFunction(const MachineFunction *MF) {
       if (!ProcessedVars.insert(DV))
         continue;
       ensureAbstractVariableIsCreated(DV, DV.getContext());
+      assert(LScopes.getAbstractScopesList().size() == NumAbstractScopes
+             && "ensureAbstractVariableIsCreated inserted abstract scopes");
     }
     constructAbstractSubprogramScopeDIE(AScope);
   }

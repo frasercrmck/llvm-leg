@@ -3572,7 +3572,7 @@ static void RemoveSwitchAfterSelectConversion(SwitchInst *SI, PHINode *PHI,
                                               Value *SelectValue,
                                               IRBuilder<> &Builder) {
   BasicBlock *SelectBB = SI->getParent();
-  if (PHI->getBasicBlockIndex(SelectBB) >= 0)
+  while (PHI->getBasicBlockIndex(SelectBB) >= 0)
     PHI->removeIncomingValue(SelectBB);
   PHI->addIncoming(SelectValue, SelectBB);
 
