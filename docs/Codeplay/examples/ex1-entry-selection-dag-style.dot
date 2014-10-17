@@ -2,7 +2,7 @@ digraph "dag-combine1 input for foo:entry" {
 	rankdir="BT";
 	bgcolor="transparent";
 
-	Node0x3422d70 [shape=record,shape=Mrecord,label="{EntryToken|0x3422d70|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3422d70 [shape=record,shape=Mrecord,label="{EntryToken|0x3422d70|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x34489d0 [shape=record,shape=Mrecord,label="{Register %vreg1|0x34489d0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3448ad8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3448ad8|{<d0>i32|<d1>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3448ad8:s0 -> Node0x3422d70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri",fontsize=16,fontcolor="white"];
