@@ -8,19 +8,19 @@ digraph "isel input for foo:" {
 	Node0x36c91f8 [shape=record,shape=Mrecord,label="{Register %R0 [ID=3]|0x36c91f8|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c8dd8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1] [ID=4]|0x36c8dd8|{<d0>i32|<d1>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c8dd8:s0 -> Node0x36a34b0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c8dd8:s1 -> Node0x36c8cd0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c8dd8:s1 -> Node0x36c8cd0:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c8fe8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1] [ID=5]|0x36c8fe8|{<d0>i32|<d1>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c8fe8:s0 -> Node0x36a34b0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c8fe8:s1 -> Node0x36c8ee0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c8fe8:s1 -> Node0x36c8ee0:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c90f0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|add [ORD=2] [ID=6]|0x36c90f0|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c90f0:s0 -> Node0x36c8dd8:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c90f0:s1 -> Node0x36c8fe8:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c90f0:s0 -> Node0x36c8dd8:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c90f0:s1 -> Node0x36c8fe8:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c9300 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>2|<s2>1}|CopyToReg [ORD=3] [ID=7]|0x36c9300|{<d0>ch|<d1>glue}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c9300:s0 -> Node0x36a34b0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c9300:s2 -> Node0x36c91f8:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c9300:s1 -> Node0x36c90f0:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c9300:s2 -> Node0x36c91f8:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c9300:s1 -> Node0x36c90f0:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c9408 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|RetFlag [ORD=3] [ID=8]|0x36c9408|{<d0>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c9408:s0 -> Node0x36c9300:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x36c9408:s1 -> Node0x36c91f8:d0[style=dashed, penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x36c9408:s1 -> Node0x36c91f8:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x36c9408:s2 -> Node0x36c9300:d1[style=bold, penwidth=3,color="magenta",fontname="Calibri",fontsize=16,fontcolor="white"];
 }
