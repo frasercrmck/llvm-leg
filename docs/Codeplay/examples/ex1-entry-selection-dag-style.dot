@@ -1,0 +1,24 @@
+digraph "dag-combine1 input for foo:entry" {
+	rankdir="BT";
+	bgcolor="transparent";
+
+	Node0x3422d70 [shape=record,shape=Mrecord,label="{EntryToken|0x3422d70|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x34489d0 [shape=record,shape=Mrecord,label="{Register %vreg1|0x34489d0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ad8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3448ad8|{<d0>i32|<d1>ch}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ad8:s0 -> Node0x3422d70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ad8:s1 -> Node0x34489d0:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448be0 [shape=record,shape=Mrecord,label="{Register %vreg2|0x3448be0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ce8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3448ce8|{<d0>i32|<d1>ch}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ce8:s0 -> Node0x3422d70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ce8:s1 -> Node0x3448be0:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448df0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|add [ORD=2]|0x3448df0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448df0:s0 -> Node0x3448ad8:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448df0:s1 -> Node0x3448ce8:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3448ef8 [shape=record,shape=Mrecord,label="{Register %vreg0|0x3448ef8|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3449000 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|CopyToReg [ORD=2]|0x3449000|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3449000:s0 -> Node0x3422d70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3449000:s1 -> Node0x3448ef8:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x3449000:s2 -> Node0x3448df0:d0[penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x0[ plaintext=circle, label ="GraphRoot",penwidth=3,color="white",fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+	Node0x0 -> Node0x3449000:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri Bold",fontsize=16,fontcolor="white"];
+}

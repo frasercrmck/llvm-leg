@@ -9,7 +9,7 @@ digraph "dag-combine1 input for foo:entry" {
 	Node0x3448ad8:s1 -> Node0x34489d0:d0;
 	Node0x3448be0 [shape=record,shape=Mrecord,label="{Register %vreg2|0x3448be0|{<d0>i32}}"];
 	Node0x3448ce8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3448ce8|{<d0>i32|<d1>ch}}"];
-	Node0x3448ce8:s0 -> Node0x3422d70:d0[color=blue,style=dashed];
+	Node0x3448ce8:s0 -> Node0x3422d70:d0[color=cyan,style=dashed];
 	Node0x3448ce8:s1 -> Node0x3448be0:d0;
 	Node0x3448df0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|add [ORD=2]|0x3448df0|{<d0>i32}}"];
 	Node0x3448df0:s0 -> Node0x3448ad8:d0;
