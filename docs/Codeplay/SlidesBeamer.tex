@@ -27,7 +27,12 @@
   \setbeamertemplate{itemize subitem}{\tiny\raise1.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
   \setbeamertemplate{section in toc shaded}[default][100]
   \setbeamertemplate{subsection in toc shaded}[default][100]
-  \setbeamertemplate{subsection in toc}[square]
+
+\setbeamertemplate{subsection in toc}{%
+\leavevmode\leftskip=4.00ex%
+  \llap{\raisebox{0.15ex}{\textcolor{structure}{\small$\bullet$}}\kern1ex}%
+  \inserttocsubsection\par%
+}
 }
 
 % set fonts
