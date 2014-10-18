@@ -464,21 +464,26 @@ def MLA : InstLEG<(outs GRRegs:$dst),
 \end{itemize}
 
 \begin{codebox}
-// LEGInstrInfo::storeRegToStackSlot()
+// 'storeRegToStackSlot()' hook
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STR))
   .addReg(SrcReg, getKillRegState(KillSrc))
   .addFrameIndex(FrameIndex).addImm(0);
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
 
-// LEGInstrInfo::loadRegFromStackSlot()
+\begin{codebox}
+// 'loadRegFromStackSlot()' hook
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
   .addFrameIndex(FrameIndex).addImm(0);
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
 
-// LEGInstrInfo::copyPhysReg()
+\begin{codebox}
+// 'copyPhysReg()' hook
 BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
   .addReg(SrcReg, getKillRegState(KillSrc));
-
 \end{codebox}
-\codecaption{LEGFrameLowering.cpp}
+\codecaption{LEGInstrInfo.cpp}
 
 \end{frame}
 
