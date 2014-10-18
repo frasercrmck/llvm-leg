@@ -21,6 +21,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\subsection{Describing the target machine}
+
 \begin{frame}{TableGen}
 
 \begin{itemize}
@@ -226,6 +228,8 @@ CCInfo.AnalyzeFormalArguments(Ins, \codeempha[CC_LEG]);
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Describing the instruction set}
 
 \begin{frame}{Describing instructions: Overview}
 
@@ -484,99 +488,5 @@ BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
   .addReg(SrcReg, getKillRegState(KillSrc));
 \end{codebox}
 \codecaption{LEGInstrInfo.cpp}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{frame}{Instruction printer}
-
-\begin{itemize}
-    \item New classes:
-    \begin{itemize}
-        \item LEGAsmPrinter
-        \item LEGMCInstLower
-        \item An MCAsmStreamer (usually stock)
-        \item LEGInstPrinter
-    \end{itemize}
-    \item LEGAsmPrinter works as a gateway to the streamers
-    \item This stages works with MCInsts, lowered from MachineInstrs by LEGMCInstLower
-\end{itemize}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{frame}[fragile]{Instruction printer}
-
-\begin{itemize}
-    \item TableGen provides the 'AsmString' field:
-\end{itemize}
-
-\begin{codebox}
-class InstLEG<... , string asmstr> : Instruction {
-  let AsmString = asmstr;
-  ...
-}
-\end{codebox}
-\codecaption{LEGInstrFormats.t}
-
-\begin{codebox}[commandchars=\\\[\]]
-def ADDrr : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, GRRegs:$src2),
-                    \codeempha["add $dst, $src1, $src2"]> {
-  ...
-}
-\end{codebox}
-\codecaption{LEGInstrInfo.td}
-
-\begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} will be called on each operand.
-\end{itemize}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{frame}[fragile]{Instruction printer}
-
-\begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} is given the stream to print to.
-\end{itemize}
-
-\begin{codebox}
-void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
-                                  raw_ostream &O) {
-  const MCOperand &Op = MI->getOperand(No);
-  if (Op.isReg()) {
-    // TableGen generates this function for us from   
-    // LEGRegisterInfo.td
-    O << getRegisterName(Op.getReg());
-    return;
-  }
-  if (Op.isImm()) {
-    O << '#' << Op.getImm();
-    return;
-  }
-  /* ... */
-}
-\end{codebox}
-\codecaption{LEGInstPrinter.cpp}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{frame}{Instruction printer}
-
-\begin{itemize}
-    \item That's it!
-    \item Directives and labels handled for us
-    \begin{itemize}
-        \item Can emit target-specific syntax if we wish
-    \end{itemize}
-\end{itemize}
-
-\examplebox[firstline=1,lastline=10]{ex1/ex1.s}
 
 \end{frame}
