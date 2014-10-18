@@ -3,9 +3,6 @@
 
 \mode<presentation>
 
-\newif\ifbeamer@secheader
-\beamer@secheaderfalse
-
 \DeclareOptionBeamer{secheader}{\beamer@secheadertrue}
 \ProcessOptionsBeamer
 
@@ -27,9 +24,6 @@
 \setbeamercolor{block}{fg=white}
 \setbeamercolor{block title}{fg=white}
 \setbeamercolor{block item}{fg=white}
-\setbeamercolor{itemize item}{fg=uilightgray}
-\setbeamercolor{itemize subitem}{fg=uilightgray}
-\setbeamercolor{itemize subsubitem}{fg=uilightgray}
 \setbeamercolor{section in toc}{fg=uiwhite}
 \setbeamercolor{subsection in toc}{fg=uiwhite}
 \setbeamercolor{section in toc shaded}{fg=uilightgray}
@@ -39,8 +33,6 @@
 \setbeamertemplate{frametitle}{\vspace{0.4cm} \color{white}  \insertframetitle}
 
 \setbeamersize{text margin left=1em,text margin right=1em}
-
-\ifbeamer@secheader\else\setbeamertemplate{headline}[default]\fi
 
 \mode
 <all>
