@@ -25,6 +25,9 @@
   \setbeamercovered{transparent}
   \setbeamertemplate{itemize item}[circle]
   \setbeamertemplate{itemize subitem}{\tiny\raise1.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
+  \setbeamertemplate{section in toc shaded}[default][100]
+  \setbeamertemplate{subsection in toc shaded}[default][100]
+  \setbeamertemplate{subsection in toc}[square]
 }
 
 % set fonts
@@ -80,8 +83,8 @@
 \newcommand{\codeemphb}[1]{\textcolor{uicyan}{#1}}
 \newcommand{\codeemphc}[1]{\textcolor{uipalegreen}{#1}}
 
-% Create a slide for a part and include the source code.
-\newcommand{\talkpart}[3]{%
+% Create a slide for a part.
+\newcommand{\talkpart}[2]{%
 \section{Part #1: #2}
 
 \begin{frame}[c]{Part #1}
@@ -89,8 +92,16 @@
 \vspace{1cm}
 \centerline{\LARGE{#2}}
 
-\end{frame}
-\input{#3}}
+\end{frame}}
+
+% Create a slide for a part section.
+\newcommand{\talksection}[1]{%
+\subsection{#1}
+\begin{frame}{\insertsectionhead}
+\begin{NoHyper}
+\tableofcontents[sectionstyle=hide,subsectionstyle=show/shaded/hide]
+\end{NoHyper}
+\end{frame}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -113,7 +124,7 @@
 \setbeamertemplate{background}{}
 \setbeamertemplate{footline}[codeplaytheme]
 
-\section{Introduction}
+\section*{Introduction}
 
 \begin{frame}{Introduction}
 
@@ -135,25 +146,26 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{frame}{Overview}
-
-%\tableofcontents[subsectionstyle=hide]
 \tableofcontents
-
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\talkpart{1}{Background}{SlidesBeamer-part1.tex}
+\talkpart{1}{Background}
+\include{SlidesBeamer-part1}
 
-\talkpart{2}{Creating your own target}{SlidesBeamer-part2.tex}
+\talkpart{2}{Creating your own target}
+\include{SlidesBeamer-part2}
 
-\talkpart{3}{How-tos for specific tasks}{SlidesBeamer-part3.tex}
+\talkpart{3}{How-tos for specific tasks}
+\include{SlidesBeamer-part3}
 
-\talkpart{4}{Troubleshooting and resources}{SlidesBeamer-part4.tex}
+\talkpart{4}{Troubleshooting and resources}
+\include{SlidesBeamer-part4}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\section{Conclusion}
+\section*{Conclusion}
 
 \begin{frame}{Summary}
 
