@@ -312,7 +312,7 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\talksection{DAG manipulation}
+\talksection{Selection DAG manipulation}
 
 \begin{frame}[fragile]{Custom SelectionDAG nodes}
 
@@ -321,9 +321,17 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
     \begin{itemize}
         \item Example: 32-bit immediate move on ARM
     \end{itemize}
-    \item Add a value in the \texttt{LEGISD} enum
-    \item Add to \texttt{LEGTargetLowering::getTargetNodeName()}
-    \item Add TableGen node definition:
+    \item How?
+    \begin{itemize}
+        \item Add a value in the \texttt{LEGISD} enum
+        \item Update \texttt{LEGTargetLowering::getTargetNodeName()}
+        \item Add TableGen node definitions
+        \begin{itemize}
+            \item Type definition: number of inputs, outputs, constraints
+            \item Node definition: tablegen name, opcode, type
+        \end{itemize}
+    \end{itemize}
+    \item Custom nodes can be used in TableGen selection patterns
 \end{itemize}
 
 \begin{codebox}
@@ -342,22 +350,46 @@ def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
 \begin{frame}[fragile]{Custom DAG lowering}
 
 \begin{itemize}
-    \item To implement an operation in a more efficient way
+    \item To handle DAG nodes in a special way
     \begin{itemize}
-        \item E.g. by replacing it with a custom DAG node
+        \item Replaces an existing node with one or more other DAG nodes
+        \item Matches nodes by opcode (e.g. \texttt{ISD::Constant})
+        \item Matches nodes by type (e.g. \texttt{i32})
     \end{itemize}
-    \item To work around target limitations
+    \item How?
     \begin{itemize}
-        \item E.g. by replacing it with multiple DAG nodes
+        \item Call \texttt{setOperationAction(\emph{nodeOpcode}, type, Custom)}
+        \item Create a function to handle it (e.g. \texttt{LowerOPCODE})
+        \item Add a 'switch' case in \texttt{LowerOperation} that calls \texttt{LowerOPCODE}
     \end{itemize}
-    \item Add support to \texttt{LEGISelLowering::LowerOperation}
-    \item Set the operation action to 'custom' on given type:
+    \item This all hapens in \texttt{LEGTargetLowering} (\texttt{LEGISelLowering.cpp})
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Custom DAG lowering: \texttt{LowerOPCODE}}
+
+\begin{itemize}
+    \item \texttt{LowerOPCODE} takes a DAG node (\texttt{Op}) and returns a DAG node
+    \item You can:
+    \begin{itemize}
+        \item Return a different node
+        \item Return \texttt{Op} → no change
+        \item Return \texttt{SDValue()} → node not supported (LLVM will expand it)
+    \end{itemize}
+    \item All of the above can be done conditionally (e.g. depending on \texttt{VT})
 \end{itemize}
 
 \begin{codebox}
-LEGISelLowering::LEGISelLowering(/* ... */) {
-  /* ... */
-  setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
+SDValue LEGTargetLowering::LowerConstant(SDValue Op,
+                                         SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  ConstantSDNode *Val = cast<ConstantSDNode>(Op.getNode());
+  SDValue TargetVal = DAG.getTargetConstant(Val->getZExtVaue(),
+                                            MVT::i32);
+  return DAG.getNode(LEGISD::MOVi32, VT, TargetVal);
 }
 \end{codebox}
 \codecaption{LEGISelLowering.cpp}
@@ -371,7 +403,7 @@ LEGISelLowering::LEGISelLowering(/* ... */) {
 \begin{itemize}
     \item Simply call \texttt{DAG.getNode()} with these arguments:
     \begin{itemize}
-        \item Node ID (e.g. \texttt{LEGISD::MOVi32}), type, operand(s)
+        \item Node opcode (e.g. \texttt{LEGISD::MOVi32}), type, operand(s)
     \end{itemize}
     \item Nodes are target-independent (\texttt{ISD}) or not (\texttt{LEGISD})
     \item Use \texttt{DAG.getMachineNode()} in LEGISelDAGToDAG
