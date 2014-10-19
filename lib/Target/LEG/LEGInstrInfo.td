@@ -166,7 +166,7 @@ def STR : InstLEG<(outs), (ins GRRegs:$val, memsrc:$addr),
 // Return Instructions
 //===----------------------------------------------------------------------===//
 
-let isTerminator = 1, isReturn = 1, isBarrier = 1 in {
+let isTerminator = 1, isReturn = 1, isBarrier = 1, Uses = [LR] in {
   def RET : InstLEG<(outs), (ins variable_ops),
                     "bx lr",  [(LEGRetFlag)]> {
     let Inst{27-0}  = 0b0001001011111111111100011110;
