@@ -209,7 +209,7 @@ def ADDrr : InstLEG<(outs GRRegs:\codeemphc[$dst]),
 
 \begin{frame}[fragile]{Instruction encoding}
 
-Returns the encoding of each operand...
+  \texttt{LEGMCCodeEmitter::getMachineOpValue()} returns the binary encoding of each operand...
 
 \begin{codebox}
 unsigned LEGMCCodeEmitter::
@@ -227,7 +227,7 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 \end{codebox}
 \codecaption{LEGMCCodeEmitter.cpp}
 
-...placed, masked, and shifted into position
+...which is placed, masked, and shifted into position by TableGen-erated code
 
 \end{frame}
 
@@ -236,7 +236,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 \begin{frame}[fragile]{Relocations and fixups}
 
 \begin{itemize}
-    \item For values that require fixing up, record the relocation into Fixups and return zero.
+    \item For values that need fixing up, record the relocation and return zero
+    \item LLVM will keep track of the relocation for us and help us fix it up later
 \end{itemize}
 
 \begin{codebox}
