@@ -47,9 +47,9 @@
      inkscape:window-height="1002"
      id="namedview164"
      showgrid="false"
-     inkscape:zoom="0.63"
-     inkscape:cx="429.2537"
-     inkscape:cy="546.5058"
+     inkscape:zoom="0.78"
+     inkscape:cx="537.45044"
+     inkscape:cy="411.65589"
      inkscape:window-x="0"
      inkscape:window-y="38"
      inkscape:window-maximized="1"
@@ -60,11 +60,11 @@
      fit-margin-bottom="10" />
   <image
      y="266.05591"
-     x="377.65381"
+     x="374.04388"
      id="image4984"
      xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbMAAAAYCAYAAABwQRMeAAAABHNCSVQICAgIfAhkiAAAAcJJREFU eJzt3b9KW2EYgPHHKEEKJSUKUukfa9J4B6KLF9ChQ++l9HKCXZSCYjsotkNdRLdWHBwySLuE5gJa CTTpVr5AlHznr4HnN59z8m4P3+ENZ2Y4HCJJ0sR+8ooL3tFim6cc8YBu2SPNlT2AJGnK/GWeLlt0 2aJCnyXOyw6bMZMkJTegeh/CZswkSdkoMWzGTJKUvXFhW+UDL9jPI2wzLoBIkqJc84Yv7CW6t0Kf Rb7zkvdZhs2YSZLipIlZKAzbMw55yHXSR/maUZJUjgFVeqzTY51ToEaHJjs02OURVzGP8mQmSYqT 1cnsLpFhG43ZLzb5zeM855MkTbkeG1zwtrDfq9FhhQOa7LDAt3GXjMbsmI/84HVR80mSFOWWsBkz SdJ0CsJWKXsWSZISm+MPs9y4zShJmh63LIYYM0nS/TbBZqPbjJKkOEVsM9bosEabBruT/Jl69GS2 xFlug0mSdJfIgIV8zShJKk+KgIWMmSSpWBkFLGTMJEn5q3P5f4kjo4CFjJkkKR91LlmjzQoHeQQs ZMwkSdkpMGAhYyZJSq5Cn2VOeM6ntN8kS8OYSZLizHLDEz7TYptlvmb1teg0/gH5zZlnqPxFhAAA AABJRU5ErkJggg== "
      height="25.549206"
-     width="264.19049" />
+     width="279.00046" />
   <image
      y="391.11279"
      x="217.39676"
@@ -81,17 +81,7 @@
      sodipodi:rx="107.93651"
      sodipodi:ry="102.38095"
      d="m 396.82539,983.44446 a 107.93651,102.38095 0 1 1 -215.87301,0 107.93651,102.38095 0 1 1 215.87301,0 z"
-     transform="matrix(0.70110866,0,0,0.69719676,28.851462,-4.94793)" />
-  <path
-     sodipodi:type="arc"
-     style="fill:none;stroke:#ff99ff;stroke-width:4.83837128;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;marker-mid:none"
-     id="path5020-4-4"
-     sodipodi:cx="288.88889"
-     sodipodi:cy="983.44446"
-     sodipodi:rx="107.93651"
-     sodipodi:ry="102.38095"
-     d="m 396.82539,983.44446 a 107.93651,102.38095 0 1 1 -215.87301,0 107.93651,102.38095 0 1 1 215.87301,0 z"
-     transform="matrix(0.7106493,-0.38009316,0.64278387,1.2075896,-84.499931,-857.14971)" />
+     transform="matrix(0.70110866,0,0,0.69719676,30.457498,-6.5463398)" />
   <flowRoot
      xml:space="preserve"
      id="flowRoot3255"
@@ -107,13 +97,13 @@
      xml:space="preserve"
      style="font-size:28.79999924px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:120.00000477%;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:none;font-family:Calibri;-inkscape-font-specification:Calibri"
      x="368.71112"
-     y="669.88647"
+     y="689.08618"
      id="text3263"
      sodipodi:linespacing="120%"><tspan
        sodipodi:role="line"
        id="tspan3265"
        x="368.71112"
-       y="669.88647"
+       y="689.08618"
        style="font-size:44.79999924px">With MLA pattern</tspan></text>
   <text
      xml:space="preserve"
@@ -515,7 +505,7 @@
          sodipodi:role="line">SRC2</tspan></text>
   </g>
   <g
-     id="g6489">
+     id="g7035">
     <g
        transform="translate(9.4999973,718.60795)"
        id="node1-3"
@@ -760,7 +750,7 @@
          inkscape:connector-curvature="0"
          style="fill:none;stroke:#ffffff;stroke-width:3" />
       <polygon
-         points="48.0587,-106.679 41.4384,-104.405 41.4384,-104.405 41.5,-115 "
+         points="41.4384,-104.405 41.5,-115 48.0587,-106.679 41.4384,-104.405 "
          id="polygon4724"
          style="fill:#ffffff;stroke:#ffffff;stroke-width:3" />
     </g>
@@ -776,7 +766,7 @@
          inkscape:connector-curvature="0"
          style="fill:none;stroke:#ffffff;stroke-width:3" />
       <polygon
-         points="226,-105 219,-105 219,-105 222.5,-115 "
+         points="219,-105 222.5,-115 226,-105 219,-105 "
          id="polygon4731"
          style="fill:#ffffff;stroke:#ffffff;stroke-width:3" />
     </g>
@@ -792,7 +782,7 @@
          inkscape:connector-curvature="0"
          style="fill:none;stroke:#ffffff;stroke-width:3" />
       <polygon
-         points="358.815,-118.04 352.66,-121.374 352.66,-121.374 360.5,-128.5 "
+         points="352.66,-121.374 360.5,-128.5 358.815,-118.04 352.66,-121.374 "
          id="polygon4738"
          style="fill:#ffffff;stroke:#ffffff;stroke-width:3" />
     </g>
@@ -1214,4 +1204,32 @@
          id="tspan3265-5-4-1-5"
          sodipodi:role="line">SRC1</tspan></text>
   </g>
+  <path
+     sodipodi:type="arc"
+     style="fill:none;stroke:#ff99ff;stroke-width:7.20875359;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;marker-mid:none"
+     id="path5020-0"
+     sodipodi:cx="288.88889"
+     sodipodi:cy="983.44446"
+     sodipodi:rx="107.93651"
+     sodipodi:ry="102.38095"
+     d="m 396.82539,983.44446 a 107.93651,102.38095 0 1 1 -215.87301,0 107.93651,102.38095 0 1 1 215.87301,0 z"
+     transform="matrix(0.70110866,0,0,0.69719676,576.20036,-406.24995)" />
+  <path
+     sodipodi:type="arc"
+     style="fill:none;stroke:#ff99ff;stroke-width:7.20875359;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;marker-mid:none"
+     id="path5020-7"
+     sodipodi:cx="288.88889"
+     sodipodi:cy="983.44446"
+     sodipodi:rx="107.93651"
+     sodipodi:ry="102.38095"
+     d="m 396.82539,983.44446 a 107.93651,102.38095 0 1 1 -215.87301,0 107.93651,102.38095 0 1 1 215.87301,0 z"
+     transform="matrix(0.70110866,0,0,0.69719676,517.17814,-521.47534)" />
+  <image
+     y="323.59766"
+     x="294.28848"
+     id="image4984-3"
+     xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbMAAAAYCAYAAABwQRMeAAAABHNCSVQICAgIfAhkiAAAAcJJREFU eJzt3b9KW2EYgPHHKEEKJSUKUukfa9J4B6KLF9ChQ++l9HKCXZSCYjsotkNdRLdWHBwySLuE5gJa CTTpVr5AlHznr4HnN59z8m4P3+ENZ2Y4HCJJ0sR+8ooL3tFim6cc8YBu2SPNlT2AJGnK/GWeLlt0 2aJCnyXOyw6bMZMkJTegeh/CZswkSdkoMWzGTJKUvXFhW+UDL9jPI2wzLoBIkqJc84Yv7CW6t0Kf Rb7zkvdZhs2YSZLipIlZKAzbMw55yHXSR/maUZJUjgFVeqzTY51ToEaHJjs02OURVzGP8mQmSYqT 1cnsLpFhG43ZLzb5zeM855MkTbkeG1zwtrDfq9FhhQOa7LDAt3GXjMbsmI/84HVR80mSFOWWsBkz SdJ0CsJWKXsWSZISm+MPs9y4zShJmh63LIYYM0nS/TbBZqPbjJKkOEVsM9bosEabBruT/Jl69GS2 xFlug0mSdJfIgIV8zShJKk+KgIWMmSSpWBkFLGTMJEn5q3P5f4kjo4CFjJkkKR91LlmjzQoHeQQs ZMwkSdkpMGAhYyZJSq5Cn2VOeM6ntN8kS8OYSZLizHLDEz7TYptlvmb1teg0/gH5zZlnqPxFhAAA AABJRU5ErkJggg== "
+     height="25.549206"
+     width="264.19049"
+     transform="matrix(0.96089324,-0.27691909,0.27691909,0.96089324,0,0)" />
 </svg>
