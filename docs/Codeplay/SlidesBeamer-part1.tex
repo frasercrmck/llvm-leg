@@ -116,8 +116,7 @@ define i32 @foo(i32 %a, i32 %b) {
 
 \begin{frame}{A look at a SelectionDAG graph}
 
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.50\linewidth}
     \begin{itemize}
         \item Graph representation
         \item Operations as nodes
@@ -126,7 +125,6 @@ define i32 @foo(i32 %a, i32 %b) {
             \item LEGISD (ISD) namespace
         \end{itemize}
         \item Dependencies as edges
-        % FIXME color formatting for chain and glue
         \begin{itemize}
             \item Data
             \item \codeemphb{Order ("chain")}
@@ -134,12 +132,13 @@ define i32 @foo(i32 %a, i32 %b) {
         \end{itemize}
         \item Typed values
     \end{itemize}
-\column{.5\textwidth}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
     \begin{figure}
-        \vspace{-5ex}
+        \vspace{-2.2ex}
         \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
     \end{figure}
-\end{columns}
+\end{minipage}
 
 \end{frame}
 
@@ -147,8 +146,7 @@ define i32 @foo(i32 %a, i32 %b) {
 
 \begin{frame}{A look at a MachineDAG graph}
 
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.50\linewidth}
     \begin{itemize}
         \item Very similar to SelectionDAG
         \item Instructions as nodes
@@ -159,12 +157,13 @@ define i32 @foo(i32 %a, i32 %b) {
         \item Similar dependencies
         \item Similar types
     \end{itemize}
-\column{.5\textwidth}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
     \begin{figure}
-        \vspace{-5ex}
-        \includegraphics[width = 0.78\textwidth]{examples/ex1b/ex1b-post-isel.pdf}
+        \vspace{-2.2ex}
+        \includegraphics[width = 1.00\textwidth]{examples/ex1b/ex1b-post-isel.pdf}
     \end{figure}
-\end{columns}
+\end{minipage}
 
 \end{frame}
 
@@ -172,17 +171,16 @@ define i32 @foo(i32 %a, i32 %b) {
 
 \begin{frame}{Before and after ISel}
 
-\vspace{-4ex}
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.50\linewidth}
     \begin{figure}
         \includegraphics[width = 1.00\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
     \end{figure}
-\column{.5\textwidth}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
     \begin{figure}
-        \includegraphics[width = 0.78\textwidth]{examples/ex1b/ex1b-post-isel.pdf}
+        \includegraphics[width = 1.00\textwidth]{examples/ex1b/ex1b-post-isel.pdf}
     \end{figure}
-\end{columns}
+\end{minipage}
 
 \end{frame}
 

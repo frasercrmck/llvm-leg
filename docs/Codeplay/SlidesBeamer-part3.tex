@@ -458,8 +458,7 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
 
 \begin{frame}{Lowering to multiple instructions}
 
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.58\linewidth}
     \begin{itemize}
         \item The two instructions must be ordered
         \begin{itemize}
@@ -473,12 +472,13 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
         \end{itemize}
         \item Example: \texttt{0x00010002}
     \end{itemize}
-\column{.5\textwidth}
+\end{minipage}
+\begin{minipage}[t]{0.41\linewidth}
     \begin{figure}
-        \vspace{-5ex}
-        \includegraphics[width = 0.78\textwidth]{examples/ex5/ex5-post-isel.pdf}
+        \vspace{-3.5ex}
+        \includegraphics[width = 1.00\textwidth]{examples/ex5/ex5-post-isel.pdf}
     \end{figure}
-\end{columns}
+\end{minipage}
 
 \end{frame}
 
@@ -541,18 +541,10 @@ bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
 
 \begin{frame}{Lowering to multiple instructions}
 
-\begin{columns}[t]
-\column{.5\textwidth}
-    Example IR:
-    \examplebox[firstline=6,lastline=9]{ex5/ex5.ll}
+Example IR:
+\examplebox[firstline=6,lastline=9]{ex5/ex5.ll}
 
-    Result assembly:
-    \examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
-\column{.5\textwidth}
-    \begin{figure}
-        \vspace{-5ex}
-        \includegraphics[width = 0.78\textwidth]{examples/ex5/ex5-post-isel.pdf}
-    \end{figure}
-\end{columns}
+Result assembly:
+\examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
 
 \end{frame}
