@@ -438,39 +438,28 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
 
 \begin{frame}{Lowering to multiple instructions}
 
-\begin{itemize}
-    \item Example: implement 32-bit immediate load with high/low pairs:
-    \begin{itemize}
-        \item MOVW: load 16-bit 'low' immediate and clear high 16 bits
-        \item MOVT: load 16-bit 'high' immediate
-    \end{itemize}
-    \item The final value is defined by the second instruction
-    \item Different ways to implement this:
-    \begin{itemize}
-        \item At the DAG level, in LEGISelDAGToDAG.cpp
-        \item Using a pseudo-instruction (placeholder)
-    \end{itemize}
-\end{itemize}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{frame}{Lowering to multiple instructions}
-
 \begin{minipage}[t]{0.58\linewidth}
     \begin{itemize}
+        \item Example: 32-bit immediate load
+        \begin{itemize}
+            \item MOVW: loads 16-bit 'low' part
+            \item MOVT: loads 16-bit 'high' part
+        \end{itemize}
+        %\item The final value is defined by the second instruction
+        
         \item The two instructions must be ordered
         \begin{itemize}
-            \item MOVW clears the high 16 bits
-            \item MOVT followed by MOVW gives the wrong result
-        \end{itemize}
-        \item Achieved by having MOVT reading MOVW's output
-        \begin{itemize}
-            \item Add a 'fake' operand to MOVT
-            \item Enforces the ordering
+            \item \texttt{MOVW} clears the 'high' part
+            \item \texttt{MOVT, MOVW} gives the wrong result
+            \item Make \texttt{MOVT} read the output of \texttt{MOVW}
         \end{itemize}
         \item Example: \texttt{0x00010002}
+        
+        %\item Different ways to implement this:
+        %\begin{itemize}
+        %    \item At the DAG level, in LEGISelDAGToDAG.cpp
+        %    \item Using a pseudo-instruction (placeholder)
+        %\end{itemize}
     \end{itemize}
 \end{minipage}
 \begin{minipage}[t]{0.41\linewidth}
@@ -487,19 +476,53 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
 \begin{frame}[fragile]{Lowering to multiple instructions}
 
 \begin{itemize}
-    \item Let's define MOVT with the extra operand: fakesrc
-    \item Source and destination registers must be the same
+    \item To define MOVT, we need an extra operand ('\texttt{fakesrc}')
     \begin{itemize}
-        \item Use 'Constraints' in Tablegen
+        \item Source and destination registers must be the same
+        \item Use '\texttt{Constraints}' in Tablegen
     \end{itemize}
 \end{itemize}
 
 \begin{codebox}[commandchars=\\¬|]
 def MOVTi16 : InstLEG<(outs GRRegs:$dst),
-                      (ins GRRegs:\codeempha¬$fakesrc|, i32imm:$src),
+                      (ins \codeempha¬GRRegs:$fakesrc|, i32imm:$src),
                       "movw $dst, $src",
                       [/* No pattern */]> {
   let Constraints = "$src1 = $dst";
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\begin{itemize}
+    \item Different ways to emit multiple instructions from one DAG node
+    \begin{itemize}
+        \item Using custom C++ instruction selection code
+            \begin{itemize}
+                \item Not covered here
+            \end{itemize}
+        \item Using a pseudo-instruction as a placeholder
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Using a pseudo instruction
+    \begin{itemize}
+        \item Behaves like a placeholder for 'real' machine instruction(s)
+        \item Lowered by a target hook into these instruction instructions
+        \item Can be selected from the custom DAG node we previously defined
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}
+def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
+                     [(set i32:$dst, (movei32 i32imm:$src))]> {
+  let isPseudo = 1;
 }
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
@@ -511,19 +534,10 @@ def MOVTi16 : InstLEG<(outs GRRegs:$dst),
 \begin{frame}[fragile]{Lowering to multiple instructions}
 
 \begin{itemize}
-    \item Define a pseudo instruction, can be selected from the custom DAG node we previously defined
     \item The pseudo is lowered by a target hook
 \end{itemize}
 
-\begin{codebox}
-def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
-                     [(set i32:$dst, (movei32 i32imm:$src))]> {
-  let isPseudo = 1;
-}
-\end{codebox}
-\codecaption{LEGInstrInfo.td}
 
-% FIXME split into two slides: pseudo and lowering
 \begin{codebox}
 bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
    if (MI->getOpcode() != LEG::MOVi32) return false;
