@@ -44,7 +44,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} will be called on each operand.
+  \item \texttt{LEGInstPrinter::printOperand()} will be called on each operand.
 \end{itemize}
 
 \end{frame}
@@ -54,7 +54,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \begin{frame}[fragile]{Instruction printer}
 
 \begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} is given the stream to print to.
+  \item \texttt{LEGInstPrinter::printOperand()} prints the assembly string of a given operand...
 \end{itemize}
 
 \begin{codebox}
@@ -75,6 +75,10 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
 }
 \end{codebox}
 \codecaption{LEGInstPrinter.cpp}
+
+\begin{itemize}
+  \item ...and is given the stream to print it to
+\end{itemize}
 
 \end{frame}
 
@@ -209,7 +213,9 @@ def ADDrr : InstLEG<(outs GRRegs:\codeemphc[$dst]),
 
 \begin{frame}[fragile]{Instruction encoding}
 
-  \texttt{LEGMCCodeEmitter::getMachineOpValue()} returns the binary encoding of each operand...
+\begin{itemize}
+  \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} returns the binary encoding of a given operand...
+\end{itemize}
 
 \begin{codebox}
 unsigned LEGMCCodeEmitter::
@@ -227,7 +233,9 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 \end{codebox}
 \codecaption{LEGMCCodeEmitter.cpp}
 
-...which is placed, masked, and shifted into position by TableGen-erated code
+\begin{itemize}
+  \item ...which is placed, masked, and shifted into position by TableGen-erated code
+\end{itemize}
 
 \end{frame}
 
