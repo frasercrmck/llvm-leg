@@ -451,13 +451,16 @@ def MLA : InstLEG<(outs GRRegs:$dst),
     \begin{itemize}
         \item In debug builds (-O0), but not only
     \end{itemize}
-    \item Adjust the stack at the beginning ('prologue') and end ('epilogue') of functions
+    \item Used to reserve space in the stack
+    \begin{itemize}
+        \item Usually by increasing or decreasing the stack pointer (\texttt{SP})
+        \item May need to align the stack pointer too
+    \end{itemize}
+    \item Generate code at the beginning ('prologue') and end ('epilogue') of functions
     \begin{itemize}
         \item LEGFrameLowering::emitPrologue()
         \item LEGFrameLowering::emitEpilogue()
     \end{itemize}
-    \item Usually by increasing or decreasing the stack pointer
-    \item May need to align the stack pointer too
 \end{itemize}
 
 \end{frame}
@@ -473,10 +476,10 @@ def MLA : InstLEG<(outs GRRegs:$dst),
 \examplebox[firstline=7,lastline=10]{ex4/ex4.ll}
 
 \begin{itemize}
-    \item Output when compiled with -O2:
+    \item Result when compiled with -O2:
 \end{itemize}
 
-\examplebox[firstline=7,lastline=11]{ex4/ex4-O2.s}
+\examplebox[firstline=8,lastline=14,gobble=1]{ex4/ex4-O2-mi.txt}
 
 \end{frame}
 
