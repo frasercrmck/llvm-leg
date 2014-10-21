@@ -103,10 +103,10 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
 \begin{itemize}
     \item A few new classes:
     \begin{itemize}
-        \item LEGAsmBackend
+        \item An MCObjectStreamer (again, stock)
         \item LEGMCCodeEmitter
         \item LEGObjectWriter
-        \item An MCObjectStreamer (again, stock)
+        \item LEGAsmBackend
     \end{itemize}
     \item You will also need your LEGAsmPrinter
 \end{itemize}
