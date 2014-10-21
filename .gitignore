@@ -49,3 +49,14 @@ tools/lld
 tools/polly
 # Sphinx build tree, if building in-source dir.
 docs/_build
+
+#==============================================================================#
+# LEG Tutorial Slides
+#==============================================================================#
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
