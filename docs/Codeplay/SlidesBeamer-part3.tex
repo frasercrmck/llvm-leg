@@ -269,7 +269,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 
 \begin{codebox}
 enum Fixups {
-  fixup_leg_pcrel = FirstTargetFixupKind,
+  fixup_leg_movt_hi16_pcrel = FirstTargetFixupKind,
+  fixup_leg_movw_lo16_pcrel,
   
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
@@ -281,7 +282,8 @@ enum Fixups {
 const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
   const static MCFixupKindInfo I[LEG::NumTargetFixupKinds] = {
     // Name          Offset Size Flags
-    { "fixup_leg_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_leg_movt_hi16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_leg_movw_lo16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
   };
   /* ... */
   return I[K - FirstTargetFixupKind];
