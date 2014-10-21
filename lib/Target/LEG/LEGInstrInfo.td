@@ -36,7 +36,7 @@ multiclass BinOp<bits<4> opcode, string opstr, SDNode opnode> {
   def ri : ALUInst<opcode, (outs GRRegs:$dst),
                    (ins GRRegs:$src1, i32imm:$imm),
                    !strconcat(opstr, " $dst, $src1, $imm"),
-                   [/*(set i32:$dst, (opnode i32:$src1, LEGimm8:$imm))*/]> {
+                   [(set i32:$dst, (opnode i32:$src1, LEGimm8:$imm))]> {
     bits<4> dst;
     bits<4> src1;
     bits<12> imm;
