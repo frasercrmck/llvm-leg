@@ -235,17 +235,17 @@ CCInfo.AnalyzeFormalArguments(Ins, \codeempha[CC_LEG]);
 
 \begin{itemize}
     \item Let's start with a simple instruction: \texttt{ADDrr}
-    \item Define it in lib/Target/LEG/LEGInstrInfo.td
+    \begin{itemize}
+        \item Adds two registers together
+    \end{itemize}
+    \item We define it in lib/Target/LEG/LEGInstrInfo.td
     \item What we need to specify:
     \begin{itemize}
         \item Operands
         \item Assembly string
         \item Instruction pattern
     \end{itemize}
-    \item Expected MI result:
 \end{itemize}
-
-\examplebox[firstline=4,lastline=4,gobble=1]{ex1/ex1-mi.txt}
 
 \end{frame}
 
@@ -271,6 +271,12 @@ def ADDrr : InstLEG<\codeempha{(outs GRRegs:$dst)},
                     [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
 \end{codebox}
 \codecaption[-10.2ex]{LEGInstrInfo.td}
+
+\vspace{5ex}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=4,lastline=4,gobble=1]{ex1/ex1-mi.txt}
 
 \end{frame}
 
@@ -300,6 +306,12 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \end{codebox}
 \codecaption[-10.2ex]{LEGInstrInfo.td}
 
+\vspace{5ex}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=4,lastline=4,gobble=1]{ex1/ex1-mi.txt}
+
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -307,26 +319,26 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \begin{frame}[fragile]{Constants}
 
 \begin{itemize}
-    \item Compiling this IR produces the following error:
+    \item Using constants in IR produces errors at this point
+    \item We need to specify how to generate ('materialize') constants
+    \item For example, with a 'move' instruction
+    \begin{itemize}
+        \item E.g. MOVW for 16-bit constants
+    \end{itemize}
 \end{itemize}
 
-\begin{codebox}
-%2 = add nsw i32 %1, 2
-\end{codebox}
-\codecaption{ex2.ll}
+\begin{itemize}
+    \item Example:
+\end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
 
+\begin{itemize}
+    \item Result:
+\end{itemize}
 \begin{codebox}
 LLVM ERROR: Cannot select: 0x29d4350: i32 = Constant<2> [ID=2]
 In function: main
 \end{codebox}
-
-\begin{itemize}
-    \item Need to specify how to generate ('materialize') constants
-    \item For example, with a 'move' instruction
-    \begin{itemize}
-        \item E.g. MOVW on ARM for 16-bit constants
-    \end{itemize}
-\end{itemize}
 
 \end{frame}
 
@@ -349,10 +361,14 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 \codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
-    \item The previous example translates to:
+    \item Example:
 \end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
 
-\examplebox[firstline=7,lastline=8,gobble=1]{ex2/ex2-ADDrr-MOVW.s}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=6,lastline=7,gobble=1]{ex2/ex2-ADDrr-MOVW-mi.txt}
 
 \end{frame}
 
@@ -360,7 +376,9 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 
 \begin{frame}[fragile]{Constants}
 
-What if instructions take immediates?
+\begin{itemize}
+    \item What if the instruction accepts an immediate operand?
+\end{itemize}
 
 \begin{codebox}[commandchars=\\¬|]
 def \codeempha¬LEGimm8| : Operand<i32>, ImmLeaf<i32, [{
@@ -375,9 +393,15 @@ def ADDri : InstLEG<(outs GRRegs:$dst),
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
 
-Output:
+\begin{itemize}
+    \item Example:
+\end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
 
-\examplebox[firstline=7,lastline=7,gobble=1]{ex2/ex2-ADDri.s}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=6,lastline=6,gobble=1]{ex2/ex2-ADDri-mi.txt}
 
 \end{frame}
 

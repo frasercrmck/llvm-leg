@@ -1,0 +1,15 @@
+# Machine code for function foo: Post SSA
+Function Live Ins: %R0 in %vreg1
+
+BB#0: derived from LLVM BB %entry
+    Live Ins: %R0
+	%R1<def> = MOVWi16 2
+	%R0<def> = ADDrr %R0<kill>, %R1<kill>
+    Successors according to CFG: BB#1
+
+BB#1: derived from LLVM BB %exit
+    Live Ins: %R0
+    Predecessors according to CFG: BB#0
+	RET %R0, %LR<imp-use>
+
+# End machine code for function foo.
