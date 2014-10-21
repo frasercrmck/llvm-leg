@@ -44,7 +44,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \codecaption{LEGInstrInfo.td}
 
 \begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} will be called on each operand.
+  \item \texttt{LEGInstPrinter::printOperand()} will be called on each operand.
 \end{itemize}
 
 \end{frame}
@@ -54,7 +54,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
 \begin{frame}[fragile]{Instruction printer}
 
 \begin{itemize}
-    \item \texttt{LEGInstPrinter::printOperand} is given the stream to print to.
+  \item \texttt{LEGInstPrinter::printOperand()} prints the assembly string of a given operand...
 \end{itemize}
 
 \begin{codebox}
@@ -75,6 +75,10 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
 }
 \end{codebox}
 \codecaption{LEGInstPrinter.cpp}
+
+\begin{itemize}
+  \item ...and is given the stream to print it to
+\end{itemize}
 
 \end{frame}
 
@@ -103,10 +107,10 @@ void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
 \begin{itemize}
     \item A few new classes:
     \begin{itemize}
-        \item LEGAsmBackend
+        \item An MCObjectStreamer (again, stock)
         \item LEGMCCodeEmitter
         \item LEGObjectWriter
-        \item An MCObjectStreamer (again, stock)
+        \item LEGAsmBackend
     \end{itemize}
     \item You will also need your LEGAsmPrinter
 \end{itemize}
@@ -209,7 +213,9 @@ def ADDrr : InstLEG<(outs GRRegs:\codeemphc[$dst]),
 
 \begin{frame}[fragile]{Instruction encoding}
 
-Returns the encoding of each operand...
+\begin{itemize}
+  \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} returns the binary encoding of a given operand...
+\end{itemize}
 
 \begin{codebox}
 unsigned LEGMCCodeEmitter::
@@ -227,7 +233,9 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 \end{codebox}
 \codecaption{LEGMCCodeEmitter.cpp}
 
-...placed, masked, and shifted into position
+\begin{itemize}
+  \item ...which is placed, masked, and shifted into position by TableGen-erated code
+\end{itemize}
 
 \end{frame}
 
@@ -236,7 +244,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 \begin{frame}[fragile]{Relocations and fixups}
 
 \begin{itemize}
-    \item For values that require fixing up, record the relocation into Fixups and return zero.
+    \item For values that need fixing up, record the relocation and return zero
+    \item LLVM will keep track of the relocation for us and help us fix it up later
 \end{itemize}
 
 \begin{codebox}
@@ -269,7 +278,8 @@ getMachineOpValue(const MCInst &MI, const MCOperand MO,
 
 \begin{codebox}
 enum Fixups {
-  fixup_leg_pcrel = FirstTargetFixupKind,
+  fixup_leg_movt_hi16_pcrel = FirstTargetFixupKind,
+  fixup_leg_movw_lo16_pcrel,
   
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
@@ -281,7 +291,8 @@ enum Fixups {
 const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
   const static MCFixupKindInfo I[LEG::NumTargetFixupKinds] = {
     // Name          Offset Size Flags
-    { "fixup_leg_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_leg_movt_hi16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_leg_movw_lo16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
   };
   /* ... */
   return I[K - FirstTargetFixupKind];
