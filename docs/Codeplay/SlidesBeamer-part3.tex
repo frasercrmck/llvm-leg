@@ -319,7 +319,7 @@ const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
 \begin{itemize}
     \item To represent target-specific operations in the DAG
     \begin{itemize}
-        \item Example: 32-bit immediate move on ARM
+        \item Example: 32-bit immediate move
     \end{itemize}
     \item How?
     \begin{itemize}
@@ -360,7 +360,7 @@ def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
     \begin{itemize}
         \item Call \texttt{setOperationAction(\emph{nodeOpcode}, type, Custom)}
         \item Create a function to handle it (e.g. \texttt{LowerOPCODE})
-        \item Add a 'switch' case in \texttt{LowerOperation} that calls \texttt{LowerOPCODE}
+        \item Update \texttt{LowerOperation} to call \texttt{LowerOPCODE}
     \end{itemize}
     \item This all hapens in \texttt{LEGTargetLowering} (\texttt{LEGISelLowering.cpp})
 \end{itemize}
