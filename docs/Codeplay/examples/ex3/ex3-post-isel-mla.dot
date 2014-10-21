@@ -2,9 +2,9 @@ digraph "scheduler input for foo:entry" {
 	rankdir="BT";
 	bgcolor="black";
 
-	Node0x3055638 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055638|{<d0>i32|<d1>ch}}", penwidth=3,color="magenta",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x3055848 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055848|{<d0>i32|<d1>ch}}", penwidth=3,color="cyan",fontname="Calibri",fontsize=16,fontcolor="white"];
-	Node0x3055a58 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055a58|{<d0>i32|<d1>ch}}", penwidth=3,color="green",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3055638 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055638|{<d0>i32|<d1>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3055848 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055848|{<d0>i32|<d1>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x3055a58 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x3055a58|{<d0>i32|<d1>ch}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3055c68 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|MLA [ORD=3]|0x3055c68|{<d0>i32}}", penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3055c68:s0 -> Node0x3055638:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
 	Node0x3055c68:s1 -> Node0x3055848:d0[penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
