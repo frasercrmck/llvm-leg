@@ -445,7 +445,6 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
             \item MOVLO: loads 16-bit 'low' part
             \item MOVHI: loads 16-bit 'high' part
         \end{itemize}
-        %\item The final value is defined by the second instruction
         
         \item The two instructions must be ordered
         \begin{itemize}
@@ -454,12 +453,6 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
             \item Make \texttt{MOVHI} read the output of \texttt{MOVLO}
         \end{itemize}
         \item Example: \texttt{0x00010002}
-        
-        %\item Different ways to implement this:
-        %\begin{itemize}
-        %    \item At the DAG level, in LEGISelDAGToDAG.cpp
-        %    \item Using a pseudo-instruction (placeholder)
-        %\end{itemize}
     \end{itemize}
 \end{minipage}
 \begin{minipage}[t]{0.41\linewidth}
@@ -492,6 +485,12 @@ def MOVHIi16 : InstLEG<(outs GRRegs:$dst),
 }
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
 
 \begin{itemize}
     \item Different ways to emit multiple instructions from one DAG node
@@ -540,11 +539,22 @@ def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
 
 \begin{codebox}
 bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
-   if (MI->getOpcode() != LEG::MOVi32) return false;
-   BuildMI(..., get(LEG::MOVLOi16), Dst).addImm(Lo);
-   BuildMI(..., get(LEG::MOVHIi16), Dst).addReg(Dst).addImm(Hi);
-   MBB.erase(MI);
-   return true;
+  if (MI->getOpcode() != LEG::MOVi32)
+    return false;
+    
+  DebugLoc DL = MI->getDebugLoc();
+  MachineBasicBlock &MBB = *MI->getParent();
+  unsigned Dst = MI->getOperand(0).getReg();
+  unsigned Imm = MI->getOperand(1).getImm();
+  unsigned Lo16 = Imm & 0xffff;
+  unsigned Hi16 = (Imm >> 16) & 0xffff;
+
+  BuildMI(MBB, MI, DL, get(LEG::MOVLOi16), Dst).addImm(Lo16);
+  BuildMI(MBB, MI, DL, get(LEG::MOVHIi16), Dst).addReg(Dst).addImm(Hi16);
+   
+  MBB.erase(MI);
+  
+  return true;
 }
 \end{codebox}
 \codecaption{LEGInstrInfo.cpp}
