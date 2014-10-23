@@ -125,8 +125,7 @@ def CC_LEG : CallingConv<[
 
 \begin{frame}[fragile]{Calling convention lowering: The big picture}
 
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.50\linewidth}
     \begin{codebox}[commandchars=\\\[\]]
 define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
     \codeemphc[%c] = add i32 \codeempha[%a], \codeemphb[%b]
@@ -140,13 +139,13 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
             \item LowerFormalArguments()
             \item LowerReturn()
     \end{itemize}
-\column{.5\textwidth}
-    % FIXME Add 'a', 'b', 'c' circles
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
     \begin{figure}
-        \vspace{-5ex}
-        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
+        \vspace{-2.2ex}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel-lower-args-1.pdf}
     \end{figure}
-\end{columns}    
+\end{minipage}   
 
 \end{frame}
 
@@ -154,8 +153,7 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
 
 \begin{frame}[fragile]{Calling convention lowering: The big picture}
 
-\begin{columns}[t]
-\column{.5\textwidth}
+\begin{minipage}[t]{0.50\linewidth}
     LowerFormalArguments()
     \begin{itemize}
         \item Lowers incoming arguments into the DAG
@@ -166,13 +164,14 @@ define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
         \item Lowers outgoing return values into the DAG
     \end{itemize}
     
-\column{.5\textwidth}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
     % FIXME Add 'a', 'b', 'c' circles and arrows from Lower*() to white circles
     \begin{figure}
-        \vspace{-5ex}
-        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel.pdf}
+        \vspace{-2.2ex}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel-lower-args-2.pdf}
     \end{figure}
-\end{columns}    
+\end{minipage}
 
 \end{frame}
 
