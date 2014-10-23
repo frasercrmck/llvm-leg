@@ -206,6 +206,10 @@ define i32 @foo(i32 %a, i32 %b) {
 
 \examplebox{ex1/ex1-mi.txt}
 
-\pipelinemap{IR → SelectionDAG → MachineDAG → \codeempha{MachineInstr} → MCInst}{15ex}
+\begin{itemize}
+    \item Kill: last use of a value stored in a register
+\end{itemize}
+
+\pipelinemap{IR → SelectionDAG → MachineDAG → \codeempha{MachineInstr} → MCInst}{10.1ex}
 
 \end{frame}
