@@ -4,7 +4,7 @@ target triple = "leg"
 
 ; Function Attrs: nounwind readonly
 define i32 @foo(i32 %a) #0 {
-    %c = add nsw i32 %a, 65538
+    %c = add i32 %a, 65538
     ret i32 %c
 }
 

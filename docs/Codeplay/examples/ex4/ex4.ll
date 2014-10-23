@@ -7,7 +7,7 @@ define i32 @foo(i32 %a) #0 {
     %p = alloca i32, align 4
     store i32 2, i32* %p
     %b = load i32* %p, align 4
-    %c = add nsw i32 %a, %b
+    %c = add i32 %a, %b
     ret i32 %c
 }
 

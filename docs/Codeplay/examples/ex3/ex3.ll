@@ -6,7 +6,7 @@ target triple = "leg"
 define i32 @foo(i32 %a, i32 %b, i32 %c) #0 {
 entry:
     %d = mul i32 %a, %b
-    %e = add nsw i32 %d, %c
+    %e = add i32 %d, %c
     br label %exit
 exit:
     ret i32 %e
