@@ -53,8 +53,8 @@ public:
       // LEGFixupKinds.h.
       //
       // Name                      Offset (bits) Size (bits)     Flags
-      { "fixup_leg_movt_hi16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
-      { "fixup_leg_movw_lo16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
+      { "fixup_leg_mov_hi16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
+      { "fixup_leg_mov_lo16_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel },
     };
 
     if (Kind < FirstTargetFixupKind) {
@@ -103,10 +103,10 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
-  case LEG::fixup_leg_movt_hi16_pcrel:
+  case LEG::fixup_leg_mov_hi16_pcrel:
     Value >>= 16;
   // Intentional fall-through
-  case LEG::fixup_leg_movw_lo16_pcrel:
+  case LEG::fixup_leg_mov_lo16_pcrel:
     unsigned Hi4  = (Value & 0xF000) >> 12;
     unsigned Lo12 = Value & 0x0FFF;
     // inst{19-16} = Hi4;

@@ -44,10 +44,10 @@ unsigned LEGELFObjectWriter::GetRelocType(const MCValue &Target,
   switch ((unsigned)Fixup.getKind()) {
   default:
     llvm_unreachable("Unimplemented");
-  case LEG::fixup_leg_movt_hi16_pcrel:
+  case LEG::fixup_leg_mov_hi16_pcrel:
     Type = ELF::R_ARM_MOVT_PREL;
     break;
-  case LEG::fixup_leg_movw_lo16_pcrel:
+  case LEG::fixup_leg_mov_lo16_pcrel:
     Type = ELF::R_ARM_MOVW_PREL_NC;
     break;
   }

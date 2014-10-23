@@ -323,7 +323,7 @@ def ADDrr : InstLEG<(outs GRRegs:$dst),
     \item We need to specify how to generate ('materialize') constants
     \item For example, with a 'move' instruction
     \begin{itemize}
-        \item E.g. MOVW for 16-bit constants
+        \item E.g. MOVLO for 16-bit constants
     \end{itemize}
 \end{itemize}
 
@@ -351,9 +351,9 @@ In function: main
 \end{itemize}
 
 \begin{codebox}
-def MOVWi16 : InstLEG<(outs GRRegs:$dst),
+def MOVLOi16 : InstLEG<(outs GRRegs:$dst),
                       (ins i32imm:$src),
-                      "movw $dst, $src",
+                      "movlo $dst, $src",
                       [(set i32:$dst, i32imm:$src)]> {
   let isMoveImm = 1;
 }
@@ -368,7 +368,7 @@ def MOVWi16 : InstLEG<(outs GRRegs:$dst),
 \begin{itemize}
     \item Result:
 \end{itemize}
-\examplebox[firstline=6,lastline=7,gobble=1]{ex2/ex2-ADDrr-MOVW-mi.txt}
+\examplebox[firstline=6,lastline=7,gobble=1]{ex2/ex2-ADDrr-MOVLO-mi.txt}
 
 \end{frame}
 

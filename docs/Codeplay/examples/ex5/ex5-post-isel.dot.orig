@@ -20,10 +20,10 @@ digraph "scheduler input for foo:" {
 	Node0x410dc80:s1 -> Node0x410db78:d0[color=blue,style=dashed];
 	Node0x410dc80:s2 -> Node0x410db78:d1[color=red,style=bold];
 	Node0x410dd88 [shape=record,shape=Mrecord,label="{TargetConstant\<2\>|0x410dd88|{<d0>i32}}"];
-	Node0x410de90 [shape=record,shape=Mrecord,label="{{<s0>0}|MOVWi16|0x410de90|{<d0>i32}}"];
+	Node0x410de90 [shape=record,shape=Mrecord,label="{{<s0>0}|MOVLOi16|0x410de90|{<d0>i32}}"];
 	Node0x410de90:s0 -> Node0x410dd88:d0;
 	Node0x410df98 [shape=record,shape=Mrecord,label="{TargetConstant\<1\>|0x410df98|{<d0>i32}}"];
-	Node0x410e0a0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|MOVTi16|0x410e0a0|{<d0>i32}}"];
+	Node0x410e0a0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|MOVHIi16|0x410e0a0|{<d0>i32}}"];
 	Node0x410e0a0:s0 -> Node0x410de90:d0;
 	Node0x410e0a0:s1 -> Node0x410df98:d0;
 	Node0x0[ plaintext=circle, label ="GraphRoot"];

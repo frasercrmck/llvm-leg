@@ -5,8 +5,8 @@
 foo:                                    # @foo
 # BB#0:
 	; Write 0x00010002 to r1.
-	movw r1, #2 ; Write 0x00000002
-	movt r1, #1 ; Write 0x0001XXXX
+	movlo r1, #2 ; Write 0x00000002
+	movhi r1, #1 ; Write 0x0001XXXX
 	add r0, r0, r1
 	bx lr
 .Ltmp0:

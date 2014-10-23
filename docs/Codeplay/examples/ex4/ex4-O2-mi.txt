@@ -7,7 +7,7 @@ BB#0: derived from LLVM BB %0
     Live Ins: %R0
 	%SP<def> = SUBri %SP, 4     ; Prologue
 	
-	%R1<def> = MOVWi16 2
+	%R1<def> = MOVLOi16 2
 	STR %R1<kill>, %SP, 0; mem:ST4[%p]
 	%R0<def> = ADDri %R0<kill>, 2
 	

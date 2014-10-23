@@ -15,8 +15,8 @@
 namespace llvm {
 namespace LEG {
 enum Fixups {
-  fixup_leg_movt_hi16_pcrel = FirstTargetFixupKind,
-  fixup_leg_movw_lo16_pcrel,
+  fixup_leg_mov_hi16_pcrel = FirstTargetFixupKind,
+  fixup_leg_mov_lo16_pcrel,
 
   // Marker
   LastTargetFixupKind,

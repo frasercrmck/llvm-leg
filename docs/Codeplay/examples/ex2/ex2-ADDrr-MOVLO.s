@@ -4,7 +4,7 @@
 	.type	foo,@function
 foo:                                    # @foo
 # BB#0:                                 # %entry
-	movw r1, #2
+	movlo r1, #2
 	add r0, r0, r1
 # BB#1:                                 # %exit
 	bx lr

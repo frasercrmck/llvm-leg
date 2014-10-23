@@ -114,11 +114,11 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
   default:
     llvm_unreachable("Unknown fixup kind!");
   case MCSymbolRefExpr::VK_LEG_LO: {
-    FixupKind = LEG::fixup_leg_movw_lo16_pcrel;
+    FixupKind = LEG::fixup_leg_mov_lo16_pcrel;
     break;
   }
   case MCSymbolRefExpr::VK_LEG_HI: {
-    FixupKind = LEG::fixup_leg_movt_hi16_pcrel;
+    FixupKind = LEG::fixup_leg_mov_hi16_pcrel;
     break;
   }
   }

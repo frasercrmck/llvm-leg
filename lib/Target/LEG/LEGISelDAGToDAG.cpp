@@ -84,12 +84,12 @@ SDNode *LEGDAGToDAGISel::SelectMoveImmediate(SDNode *N) {
   uint64_t ImmHi = (ImmVal & HiMask);
   SDValue ConstLo = CurDAG->getTargetConstant(ImmLo, MVT::i32);
   MachineSDNode *Move =
-      CurDAG->getMachineNode(LEG::MOVWi16, N, MVT::i32, ConstLo);
+      CurDAG->getMachineNode(LEG::MOVLOi16, N, MVT::i32, ConstLo);
 
   // Select the low part of the immediate move, if needed.
   if (ImmHi) {
     SDValue ConstHi = CurDAG->getTargetConstant(ImmHi >> 16, MVT::i32);
-    Move = CurDAG->getMachineNode(LEG::MOVTi16, N, MVT::i32, SDValue(Move, 0),
+    Move = CurDAG->getMachineNode(LEG::MOVHIi16, N, MVT::i32, SDValue(Move, 0),
                                   ConstHi);
   }
 

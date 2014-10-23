@@ -9,7 +9,7 @@ BB#0: derived from LLVM BB %0
 	%SP<def> = SUBri %SP, 8    ; Prologue
 	
 	%R1<def> = MOVrr %R0
-	%R2<def> = MOVWi16 2
+	%R2<def> = MOVLOi16 2
 	STR %R2<kill>, %SP, 4; mem:ST4[%p]
 	%R0<def> = ADDri %R0<kill>, 2
 	STR %R1<kill>, %SP, 0
