@@ -110,6 +110,8 @@ define i32 @foo(i32 %a, i32 %b) {
 \end{codebox}
 \codecaption{ex1b.ll}
 
+\pipelinemap{\codeempha{IR} → SelectionDAG → MachineDAG → MachineInstr → MCInst}{10ex}
+
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -140,6 +142,8 @@ define i32 @foo(i32 %a, i32 %b) {
     \end{figure}
 \end{minipage}
 
+\pipelinemap{IR → \codeempha{SelectionDAG} → MachineDAG → MachineInstr → MCInst}{7.9ex}
+
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -165,11 +169,13 @@ define i32 @foo(i32 %a, i32 %b) {
     \end{figure}
 \end{minipage}
 
+\pipelinemap{IR → SelectionDAG → \codeempha{MachineDAG} → MachineInstr → MCInst}{3ex}
+
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Before and after ISel}
+\begin{frame}{Before and after instruction selection}
 
 \begin{minipage}[t]{0.50\linewidth}
     \begin{figure}
@@ -181,6 +187,8 @@ define i32 @foo(i32 %a, i32 %b) {
         \includegraphics[width = 1.00\textwidth]{examples/ex1b/ex1b-post-isel.pdf}
     \end{figure}
 \end{minipage}
+
+\pipelinemap{IR → \codeempha{SelectionDAG} → \codeempha{MachineDAG} → MachineInstr → MCInst}{1.4ex}
 
 \end{frame}
 
@@ -197,5 +205,7 @@ define i32 @foo(i32 %a, i32 %b) {
 \end{itemize}
 
 \examplebox{ex1/ex1-mi.txt}
+
+\pipelinemap{IR → SelectionDAG → MachineDAG → \codeempha{MachineInstr} → MCInst}{15ex}
 
 \end{frame}
