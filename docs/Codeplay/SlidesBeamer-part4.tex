@@ -7,15 +7,15 @@
     \begin{itemize}
         \item \texttt{llc -print-after-all}
     \end{itemize}
-    \item Find the LLVM source file and category for this pass:
-    \begin{itemize}
-        \item \texttt{\#define DEBUG\_TYPE "codegen-dce"}
-    \end{itemize}
-    \item Dump the log:
+    \item Dump the detailed output for the pass:
     \begin{itemize}
         \item \texttt{llc foo.ll -debug-only codegen-dce 2>\&1 > foo.log}
     \end{itemize}
-    \item Compare (diff) the \texttt{-print-after-all} or \texttt{-debug-only} good and bad outputs to see where it goes wrong
+    \item Check the pass's LLVM source file for the debug type:
+    \begin{itemize}
+        \item \texttt{\#define DEBUG\_TYPE "codegen-dce"}
+    \end{itemize}
+    \item Compare the \texttt{-print-after-all} or \texttt{-debug-only} outputs with and without the 'problem' change
 \end{itemize}
 
 \end{frame}
@@ -44,12 +44,16 @@
 \begin{frame}{"Cannot select"}
 
 \begin{itemize}
-    \item When LLVM doesn't know how to map ('lower') a DAG node to an actual instruction
+    \item LLVM doesn't know how to map ('lower') a DAG node to an actual instruction
     \begin{itemize}
         \item Missing pattern in \texttt{LEGInstrInfo.td}?
-        \item Without a pattern, lowering needs to be done in \texttt{LEGISelDAGToDag::Select()}
     \end{itemize}
-    \item Check the graph!
+    \item Check the graph - verify that the following match up:
+    \begin{itemize}
+        \item Number of operands
+        \item Order of operands
+        \item Types of operands
+    \end{itemize}
 \end{itemize}
 
 \end{frame}
@@ -61,8 +65,8 @@
 \begin{itemize}
     \item Why did my code disappear?
     \begin{itemize}
-        \item Missing chain/glue in the DAG
-        \item Dead code elimination may have removed it
+        \item Dead Code Elimination may have removed it
+        \item Missing chain or glue constraints in the DAG
     \end{itemize}
     \item DCE does not touch instructions whose value is used by other instructions:
     \begin{itemize}
@@ -70,7 +74,7 @@
     \end{itemize}
     \item DCE does not touch instructions with side-effects:
     \begin{itemize}
-        \item \texttt{mayLoad}, \texttt{mayStore}, \texttt{isTerminator}, \texttt{hasSideEffects}
+        \item TableGen attributes: \texttt{mayLoad}, \texttt{mayStore}, \texttt{hasSideEffects}...
     \end{itemize}
 \end{itemize}
 
@@ -83,15 +87,16 @@
 \begin{itemize}
     \item include/llvm/Target/Target*.h
     \begin{itemize}
-        \item Shows all target-specific hooks that can be overridden, with useful comments
+        \item All target-specific hooks that can be overridden
+        \item Check the Doxygen at: \url{http://llvm.org/doxygen/}
     \end{itemize}
     \item include/llvm/Target/Target*.td
     \begin{itemize}
-        \item Shows all TableGen fields you can use in your target files
+        \item All TableGen classes \& fields that you can use in your target files
     \end{itemize}
     \item include/llvm/CodeGen/ISDOpcodes.h
     \begin{itemize}
-        \item Lists all SelectionDAG nodes and descriptions of what they mean
+        \item All target-independent SelectionDAG nodes and their semantics
     \end{itemize}
 \end{itemize}
 
@@ -102,9 +107,8 @@
 \begin{frame}{You're not alone!}
 
 \begin{itemize}
-    \item "Writing an LLVM Backend" at \url{llvm.org/docs/WritingAnLLVMBackend.html}
+    \item "Writing an LLVM Backend" at: \url{llvm.org/docs/WritingAnLLVMBackend.html}
     \item Other backends 
-    \item TableGen backend documentation
     \item LLVM-Dev mailing lists
     \item Anton Korobeynikov's 2009 and 2012 "Building a backend in 24 hours" tutorials
 \end{itemize}
