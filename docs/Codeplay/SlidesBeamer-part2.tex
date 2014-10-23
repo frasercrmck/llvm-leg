@@ -353,7 +353,7 @@ In function: main
 \begin{codebox}
 def MOVLOi16 : InstLEG<(outs GRRegs:$dst),
                       (ins i32imm:$src),
-                      "movlo $dst, $src",
+                      "movw $dst, $src",
                       [(set i32:$dst, i32imm:$src)]> {
   let isMoveImm = 1;
 }

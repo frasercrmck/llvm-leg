@@ -5,7 +5,7 @@
 foo:                                    # @foo
 # BB#0:
 	sub sp, sp, #4 ; prologue
-	movlo r1, #2
+	movw r1, #2
 	str r1, [sp]
 	add r0, r0, #2
 	add sp, sp, #4 ; epilogue

@@ -486,7 +486,7 @@ SDValue LEGTargetLowering::LowerConstant(SDValue Op,
 \begin{codebox}[commandchars=\\¬|]
 def MOVHIi16 : InstLEG<(outs GRRegs:$dst),
                       (ins \codeempha¬GRRegs:$fakesrc|, i32imm:$src),
-                      "movhi $dst, $src",
+                      "movt $dst, $src",
                       [/* No pattern */]> {
   let Constraints = "$fakesrc = $dst";
 }
