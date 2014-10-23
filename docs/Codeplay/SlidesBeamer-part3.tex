@@ -488,7 +488,7 @@ def MOVHIi16 : InstLEG<(outs GRRegs:$dst),
                       (ins \codeempha¬GRRegs:$fakesrc|, i32imm:$src),
                       "movhi $dst, $src",
                       [/* No pattern */]> {
-  let Constraints = "$src1 = $dst";
+  let Constraints = "$fakesrc = $dst";
 }
 \end{codebox}
 \codecaption{LEGInstrInfo.td}
