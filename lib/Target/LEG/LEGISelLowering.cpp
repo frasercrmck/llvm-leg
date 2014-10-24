@@ -104,11 +104,12 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVectorImpl<ISD::InputArg> &Ins = CLI.Ins;
   SDValue Chain = CLI.Chain;
   SDValue Callee = CLI.Callee;
-  bool &isTailCall = CLI.IsTailCall;
   CallingConv::ID CallConv = CLI.CallConv;
-  bool isVarArg = CLI.IsVarArg;
+  const bool isVarArg = CLI.IsVarArg;
 
-  if (isVarArg || isTailCall) {
+  CLI.IsTailCall = false;
+
+  if (isVarArg) {
     llvm_unreachable("Unimplemented");
   }
 
@@ -128,25 +129,36 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SmallVector<SDValue, 8> MemOpChains;
 
   // Walk the register/memloc assignments, inserting copies/loads.
-  for (unsigned i = 0, realArgIdx = 0, e = ArgLocs.size(); i != e;
-       ++i, ++realArgIdx) {
+  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     CCValAssign &VA = ArgLocs[i];
-    SDValue Arg = OutVals[realArgIdx];
+    SDValue Arg = OutVals[i];
 
     // We only handle fully promoted arguments.
     assert(VA.getLocInfo() == CCValAssign::Full && "Unhandled loc info");
 
-    if (!VA.isRegLoc()) {
-      llvm_unreachable("Only passing paramters via registers");
+    if (VA.isRegLoc()) {
+      RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
+      continue;
     }
 
-    RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
+    assert(VA.isMemLoc() &&
+           "Only support passing arguments through registers or via the stack");
+
+    SDValue StackPtr = DAG.getRegister(LEG::SP, MVT::i32);
+    SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset());
+    PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
+    MemOpChains.push_back(DAG.getStore(Chain, dl, Arg, PtrOff,
+                                       MachinePointerInfo(), false, false, 0));
+  }
+
+  // Emit all stores, make sure they occur before the call.
+  if (!MemOpChains.empty()) {
+    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
   }
 
   // Build a sequence of copy-to-reg nodes chained together with token chain
   // and flag operands which copy the outgoing args into the appropriate regs.
   SDValue InFlag;
-
   for (auto &Reg : RegsToPass) {
     Chain = DAG.getCopyToReg(Chain, dl, Reg.first, Reg.second, InFlag);
     InFlag = Chain.getValue(1);
@@ -245,24 +257,33 @@ SDValue LEGTargetLowering::LowerFormalArguments(
   CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 
   for (auto &VA : ArgLocs) {
-    SDValue ArgIn;
-
-    assert(VA.isRegLoc() && "Can only pass arguments as registers");
-
-    // Arguments passed in registers
-    EVT RegVT = VA.getLocVT();
-    switch (RegVT.getSimpleVT().SimpleTy) {
-    default:
-      llvm_unreachable("Unhandled type for register");
-    case MVT::i32: {
-      unsigned VReg = RegInfo.createVirtualRegister(&LEG::GRRegsRegClass);
+    if (VA.isRegLoc()) {
+      // Arguments passed in registers
+      EVT RegVT = VA.getLocVT();
+      assert(RegVT.getSimpleVT().SimpleTy == MVT::i32 &&
+             "Only support MVT::i32 register passing");
+      const unsigned VReg = RegInfo.createVirtualRegister(&LEG::GRRegsRegClass);
       RegInfo.addLiveIn(VA.getLocReg(), VReg);
-      ArgIn = DAG.getCopyFromReg(Chain, dl, VReg, RegVT);
-      break;
-    }
+      SDValue ArgIn = DAG.getCopyFromReg(Chain, dl, VReg, RegVT);
+
+      InVals.push_back(ArgIn);
+      continue;
     }
 
-    InVals.push_back(ArgIn);
+    assert(VA.isMemLoc() &&
+           "Can only pass arguments as either registers or via the stack");
+
+    const unsigned Offset = VA.getLocMemOffset();
+
+    const int FI = MF.getFrameInfo()->CreateFixedObject(4, Offset, true);
+    SDValue FIPtr = DAG.getFrameIndex(FI, getPointerTy());
+
+    assert(VA.getValVT() == MVT::i32 &&
+           "Only support passing arguments as i32");
+    SDValue Load = DAG.getLoad(VA.getValVT(), dl, Chain, FIPtr,
+                               MachinePointerInfo(), false, false, false, 0);
+
+    InVals.push_back(Load);
   }
 
   return Chain;
