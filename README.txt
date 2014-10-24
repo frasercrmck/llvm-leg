@@ -27,7 +27,7 @@ Building with in-tree clang (optional)
 --------------------------------------
 
     cd llvm-leg
-    git clone git@github.com:frasercrmck/clang-leg.git tools/clang
+    git clone git@github.com:codeplaysoftware/clang-leg.git tools/clang
 
 Building with make
 ------------------
