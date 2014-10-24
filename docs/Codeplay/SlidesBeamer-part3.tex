@@ -140,12 +140,18 @@ How can we achieve this?
 \vspace{1ex}
 
 \begin{codebox}[commandchars=\\\{\}]
-def ADDrr : InstLEG<(outs GRRegs:$dst),
-                    (ins GRRegs:$src1, GRRegs:$src2),
-                    "add $dst, $src1, $src2",
-                    [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+  \codeempha{%R0}<def> = \codeemphd{ADDrr} \codeemphb{%R0}<kill>, \codeemphc{%R1}<kill>
 \end{codebox}
-\codecaption[-10.2ex]{LEGInstrInfo.td}
+
+\vspace{1ex}
+
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+31...28 & 27...25 & 24...21 & 20 & 19...16 & 15...12 & 11...4 & 3...0\tabularnewline
+\hline
+1110 & 000 & \codeemphd{1100} & 0 & \codeemphb{0000} & \codeempha{0000} & 00000000 & \codeemphc{0001}\tabularnewline
+\hline
+\end{tabular}
 
 \end{frame}
 
