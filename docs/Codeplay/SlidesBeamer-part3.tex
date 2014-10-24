@@ -175,10 +175,10 @@ class InstLEG< ... > : Instruction {
     \item Used to define the binary encoding of each instruction in TableGen:
 \end{itemize}
 
-\begin{codebox}
-def ADDrr : InstLEG< ... > {
+\begin{codebox}[commandchars=\\\[\]]
+  def \codeemphd[ADDrr] : InstLEG< ... > {
   let Inst{31-25} = 0b110000;
-  let Inst{24-21} = 0b1100;      // Opcode
+  let Inst{24-21} = \codeemphd[0b1100];      // Opcode
   let Inst{20}    = 0b0;
   let Inst{11-4}  = 0b00000000;
 }
@@ -196,11 +196,11 @@ def ADDrr : InstLEG< ... > {
 \end{itemize}
 
 \begin{codebox}[commandchars=\\\[\]]
-def ADDrr : InstLEG<(outs GRRegs:\codeemphc[$dst]),
+  def \codeemphd[ADDrr] : InstLEG<(outs GRRegs:\codeemphc[$dst]),
                     (ins GRRegs:\codeempha[$src1], GRRegs:\codeemphb[$src2]) ... > {
   bits<4> \codeempha[src1]; bits<4> \codeemphb[src2]; bits<4> \codeemphc[dst];
   let Inst{31-25} = 0b110000;
-  let Inst{24-21} = 0b1100;      // Opcode
+  let Inst{24-21} = \codeemphd[0b1100];      // Opcode
   let Inst{20}    = 0b0;
   let Inst{19-16} = \codeempha[src1];        // Operand 1
   let Inst{15-12} = \codeemphc[dst];         // Destination
