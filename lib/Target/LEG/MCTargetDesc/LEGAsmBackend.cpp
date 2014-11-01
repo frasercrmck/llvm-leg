@@ -43,11 +43,11 @@ public:
 
   ~LEGAsmBackend() {}
 
-  unsigned getNumFixupKinds() const override {
+  unsigned getNumFixupKinds() const LLVM_OVERRIDE {
     return LEG::NumTargetFixupKinds;
   }
 
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
+  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const LLVM_OVERRIDE {
     const static MCFixupKindInfo Infos[LEG::NumTargetFixupKinds] = {
       // This table *must* be in the order that the fixup_* kinds are defined in
       // LEGFixupKinds.h.
@@ -76,17 +76,17 @@ public:
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
                   uint64_t Value) const LLVM_OVERRIDE;
 
-  bool mayNeedRelaxation(const MCInst &Inst) const override { return false; }
+  bool mayNeedRelaxation(const MCInst &Inst) const LLVM_OVERRIDE { return false; }
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const override {
+                            const MCAsmLayout &Layout) const LLVM_OVERRIDE {
     return false;
   }
 
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {}
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const LLVM_OVERRIDE {}
 
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override {
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const LLVM_OVERRIDE {
     if (Count == 0) {
       return true;
     }
@@ -157,7 +157,7 @@ public:
   ELFLEGAsmBackend(const Target &T, const StringRef TT, uint8_t _OSABI)
       : LEGAsmBackend(T, TT), OSABI(_OSABI) {}
 
-  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const LLVM_OVERRIDE {
     return createLEGELFObjectWriter(OS, OSABI);
   }
 };
