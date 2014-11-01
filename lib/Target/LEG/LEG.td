@@ -28,6 +28,16 @@ include "LEGCallingConv.td"
 def LEGInstrInfo : InstrInfo;
 
 //===----------------------------------------------------------------------===//
+// Assembly printer
+//===----------------------------------------------------------------------===//
+// LEG Uses the MC printer for asm output, so make sure the TableGen
+// AsmWriter bits get associated with the correct class.
+def LEGAsmWriter : AsmWriter {
+  string AsmWriterClassName  = "InstPrinter";
+  bit isMCAsmWriter = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // LEG processors supported.
 //===----------------------------------------------------------------------===//
 
@@ -42,4 +52,6 @@ def : Proc<"generic", []>;
 
 def LEG : Target {
   let InstructionSet = LEGInstrInfo;
+
+  let AssemblyWriters = [LEGAsmWriter];
 }
