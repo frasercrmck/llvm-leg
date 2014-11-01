@@ -70,11 +70,11 @@ public:
   /// if necessary.
   void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
                          const MCFixup &Fixup, const MCFragment *DF,
-                         const MCValue &Target, uint64_t &Value,
+                         MCValue &Target, uint64_t &Value,
                          bool &IsResolved) override;
 
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value, bool IsPCRel) const override;
+                  uint64_t Value) const override;
 
   bool mayNeedRelaxation(const MCInst &Inst) const override { return false; }
 
@@ -121,7 +121,7 @@ void LEGAsmBackend::processFixupValue(const MCAssembler &Asm,
                                       const MCAsmLayout &Layout,
                                       const MCFixup &Fixup,
                                       const MCFragment *DF,
-                                      const MCValue &Target, uint64_t &Value,
+                                      MCValue &Target, uint64_t &Value,
                                       bool &IsResolved) {
   // We always have resolved fixups for now.
   IsResolved = true;
@@ -131,8 +131,7 @@ void LEGAsmBackend::processFixupValue(const MCAssembler &Asm,
 }
 
 void LEGAsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
-                               unsigned DataSize, uint64_t Value,
-                               bool isPCRel) const {
+                               unsigned DataSize, uint64_t Value) const {
   unsigned NumBytes = 4;
   Value = adjustFixupValue(Fixup, Value);
   if (!Value) {

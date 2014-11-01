@@ -29,13 +29,15 @@ namespace {
     virtual ~LEGELFObjectWriter();
 
     unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                          bool IsPCRel) const override;
+                          bool IsPCRel, bool IsRelocWithSymbol,
+                          int64_t Addend) const override;
   };
 }
 
 unsigned LEGELFObjectWriter::GetRelocType(const MCValue &Target,
                                           const MCFixup &Fixup,
-                                          bool IsPCRel) const {
+                                          bool IsPCRel, bool IsRelocWithSymbol,
+                                          int64_t Addend) const {
   if (!IsPCRel) {
     llvm_unreachable("Only dealying with PC-relative fixups for now");
   }

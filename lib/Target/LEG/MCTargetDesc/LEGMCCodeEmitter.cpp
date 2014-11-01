@@ -46,18 +46,15 @@ public:
   // getBinaryCodeForInstr - TableGen'erated function for getting the
   // binary encoding for an instruction.
   uint64_t getBinaryCodeForInstr(const MCInst &MI,
-                                 SmallVectorImpl<MCFixup> &Fixups,
-                                 const MCSubtargetInfo &STI) const;
+                                 SmallVectorImpl<MCFixup> &Fixups) const;
 
   /// getMachineOpValue - Return binary encoding of operand. If the machine
   /// operand requires relocation, record the relocation and return zero.
   unsigned getMachineOpValue(const MCInst &MI, const MCOperand &MO,
-                             SmallVectorImpl<MCFixup> &Fixups,
-                             const MCSubtargetInfo &STI) const;
+                             SmallVectorImpl<MCFixup> &Fixups) const;
 
   unsigned getMemSrcValue(const MCInst &MI, unsigned OpIdx,
-                          SmallVectorImpl<MCFixup> &Fixups,
-                          const MCSubtargetInfo &STI) const;
+                          SmallVectorImpl<MCFixup> &Fixups) const;
 
   void EmitByte(unsigned char C, raw_ostream &OS) const { OS << (char)C; }
 
@@ -70,8 +67,7 @@ public:
   }
 
   void EncodeInstruction(const MCInst &MI, raw_ostream &OS,
-                         SmallVectorImpl<MCFixup> &Fixups,
-                         const MCSubtargetInfo &STI) const override;
+                         SmallVectorImpl<MCFixup> &Fixups) const override;
 };
 
 } // end anonymous namespace
@@ -87,8 +83,7 @@ MCCodeEmitter *llvm::createLEGMCCodeEmitter(const MCInstrInfo &MCII,
 /// operand requires relocation, record the relocation and return zero.
 unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
                                              const MCOperand &MO,
-                                             SmallVectorImpl<MCFixup> &Fixups,
-                                             const MCSubtargetInfo &STI) const {
+                                             SmallVectorImpl<MCFixup> &Fixups) const {
   if (MO.isReg()) {
     return CTX.getRegisterInfo()->getEncodingValue(MO.getReg());
   }
@@ -128,13 +123,12 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
 }
 
 unsigned LEGMCCodeEmitter::getMemSrcValue(const MCInst &MI, unsigned OpIdx,
-                                          SmallVectorImpl<MCFixup> &Fixups,
-                                          const MCSubtargetInfo &STI) const {
+                                          SmallVectorImpl<MCFixup> &Fixups) const {
   unsigned Bits = 0;
   const MCOperand &RegMO = MI.getOperand(OpIdx);
   const MCOperand &ImmMO = MI.getOperand(OpIdx + 1);
   assert(ImmMO.getImm() >= 0);
-  Bits |= (getMachineOpValue(MI, RegMO, Fixups, STI) << 12);
+  Bits |= (getMachineOpValue(MI, RegMO, Fixups) << 12);
   Bits |= (unsigned)ImmMO.getImm() & 0xfff;
   return Bits;
 }
