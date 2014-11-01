@@ -272,6 +272,8 @@ StringRef MCSymbolRefExpr::getVariantKindName(VariantKind Kind) {
   case VK_Mips_CALL_HI16: return "CALL_HI16";
   case VK_Mips_CALL_LO16: return "CALL_LO16";
   case VK_COFF_IMGREL32: return "IMGREL32";
+  case VK_LEG_LO: return "LEG_LO";
+  case VK_LEG_HI: return "LEG_HI";
   }
   llvm_unreachable("Invalid variant kind");
 }
@@ -409,6 +411,8 @@ MCSymbolRefExpr::getVariantKindForName(StringRef Name) {
     .Case("got@tlsld@h", VK_PPC_GOT_TLSLD_HI)
     .Case("GOT@TLSLD@HA", VK_PPC_GOT_TLSLD_HA)
     .Case("got@tlsld@ha", VK_PPC_GOT_TLSLD_HA)
+    .Case("LEG_LO", VK_LEG_LO)
+    .Case("LEG_HI", VK_LEG_HI)
     .Default(VK_Invalid);
 }
 

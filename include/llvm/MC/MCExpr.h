@@ -248,6 +248,9 @@ public:
     VK_Mips_CALL_HI16,
     VK_Mips_CALL_LO16,
 
+    VK_LEG_LO,
+    VK_LEG_HI,
+
     VK_COFF_IMGREL32 // symbol@imgrel (image-relative)
   };
 

@@ -45,6 +45,7 @@ const char *Triple::getArchTypeName(ArchType Kind) {
   case amdil:   return "amdil";
   case spir:    return "spir";
   case spir64:  return "spir64";
+  case leg:         return "leg";
   }
 
   llvm_unreachable("Invalid ArchType!");
@@ -89,6 +90,8 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   case amdil:   return "amdil";
   case spir:    return "spir";
   case spir64:  return "spir";
+  
+  case leg:         return "leg";
   }
 }
 
@@ -187,6 +190,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("amdil", amdil)
     .Case("spir", spir)
     .Case("spir64", spir64)
+    .Case("leg", leg)
     .Default(UnknownArch);
 }
 
@@ -250,6 +254,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("amdil", Triple::amdil)
     .Case("spir", Triple::spir)
     .Case("spir64", Triple::spir64)
+    .Case("leg", Triple::leg)
     .Default(Triple::UnknownArch);
 }
 
@@ -688,6 +693,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::x86:
   case llvm::Triple::xcore:
   case llvm::Triple::spir:
+  case llvm::Triple::leg:
     return 32;
 
   case llvm::Triple::aarch64:
@@ -743,6 +749,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::thumb:
   case Triple::x86:
   case Triple::xcore:
+  case Triple::leg:
     // Already 32-bit.
     break;
 
@@ -770,6 +777,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::tce:
   case Triple::thumb:
   case Triple::xcore:
+  case Triple::leg:
     T.setArch(UnknownArch);
     break;
 

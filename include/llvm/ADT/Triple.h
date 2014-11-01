@@ -71,7 +71,8 @@ public:
     le32,    // le32: generic little-endian 32-bit CPU (PNaCl / Emscripten)
     amdil,   // amdil: amd IL
     spir,    // SPIR: standard portable IR for OpenCL 32-bit version
-    spir64   // SPIR: standard portable IR for OpenCL 64-bit version
+    spir64,  // SPIR: standard portable IR for OpenCL 64-bit version
+    leg      // LEG: leg
   };
   enum VendorType {
     UnknownVendor,
