@@ -140,14 +140,13 @@ unsigned LEGMCCodeEmitter::getMemSrcValue(const MCInst &MI, unsigned OpIdx,
 }
 
 void LEGMCCodeEmitter::EncodeInstruction(const MCInst &MI, raw_ostream &OS,
-                                         SmallVectorImpl<MCFixup> &Fixups,
-                                         const MCSubtargetInfo &STI) const {
+                                         SmallVectorImpl<MCFixup> &Fixups) const {
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
   if (Desc.getSize() != 4) {
     llvm_unreachable("Unexpected instruction size!");
   }
 
-  const uint32_t Binary = getBinaryCodeForInstr(MI, Fixups, STI);
+  const uint32_t Binary = getBinaryCodeForInstr(MI, Fixups);
 
   EmitConstant(Binary, Desc.getSize(), OS);
   ++MCNumEmitted;
