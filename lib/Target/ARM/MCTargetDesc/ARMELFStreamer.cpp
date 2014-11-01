@@ -61,34 +61,6 @@ static const char *GetFPUName(unsigned ID) {
   return NULL;
 }
 
-namespace {
-
-class ARMELFStreamer;
-
-class ARMTargetAsmStreamer : public ARMTargetStreamer {
-  formatted_raw_ostream &OS;
-  MCInstPrinter &InstPrinter;
-
-  virtual void emitFnStart();
-  virtual void emitFnEnd();
-  virtual void emitCantUnwind();
-  virtual void emitPersonality(const MCSymbol *Personality);
-  virtual void emitHandlerData();
-  virtual void emitSetFP(unsigned FpReg, unsigned SpReg, int64_t Offset = 0);
-  virtual void emitPad(int64_t Offset);
-  virtual void emitRegSave(const SmallVectorImpl<unsigned> &RegList,
-                           bool isVector);
-
-  virtual void switchVendor(StringRef Vendor);
-  virtual void emitAttribute(unsigned Attribute, unsigned Value);
-  virtual void emitTextAttribute(unsigned Attribute, StringRef String);
-  virtual void emitFPU(unsigned FPU);
-  virtual void finishAttributeSection();
-
-public:
-  ARMTargetAsmStreamer(formatted_raw_ostream &OS, MCInstPrinter &InstPrinter);
-};
-
 ARMTargetAsmStreamer::ARMTargetAsmStreamer(formatted_raw_ostream &OS,
                                            MCInstPrinter &InstPrinter)
     : OS(OS), InstPrinter(InstPrinter) {}
@@ -148,6 +120,10 @@ void ARMTargetAsmStreamer::emitFPU(unsigned FPU) {
 }
 void ARMTargetAsmStreamer::finishAttributeSection() {
 }
+
+namespace {
+
+class ARMELFStreamer;
 
 class ARMTargetELFStreamer : public ARMTargetStreamer {
 private:

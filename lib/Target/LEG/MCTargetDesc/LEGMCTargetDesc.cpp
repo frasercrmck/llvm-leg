@@ -14,6 +14,8 @@
 #include "LEGMCTargetDesc.h"
 #include "InstPrinter/LEGInstPrinter.h"
 #include "LEGMCAsmInfo.h"
+#include "llvm/MC/MCStreamer.h"
+#include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -85,21 +87,34 @@ createLEGMCInstPrinter(const Target &T, unsigned SyntaxVariant,
 
 static MCStreamer *
 createMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
-                    bool isVerboseAsm, bool useDwarfDirectory,
+                    bool isVerboseAsm, bool useLoc, bool useCFI,
+                    bool useDwarfDirectory,
                     MCInstPrinter *InstPrint, MCCodeEmitter *CE,
                     MCAsmBackend *TAB, bool ShowInst) {
-  return createAsmStreamer(Ctx, OS, isVerboseAsm, useDwarfDirectory, InstPrint,
-                           CE, TAB, ShowInst);
+  ARMTargetAsmStreamer *S = new ARMTargetAsmStreamer(OS, *InstPrint);
+  
+  return createAsmStreamer(Ctx, S, OS, isVerboseAsm, useLoc, useCFI,
+                           useDwarfDirectory, InstPrint, CE, TAB,
+                           ShowInst);
 }
 
 static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
                                     MCContext &Ctx, MCAsmBackend &MAB,
                                     raw_ostream &OS,
                                     MCCodeEmitter *Emitter,
-                                    const MCSubtargetInfo &STI,
                                     bool RelaxAll,
                                     bool NoExecStack) {
-  return createELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
+  Triple TheTriple(TT);
+
+  if (TheTriple.isOSDarwin())
+    return createMachOStreamer(Ctx, MAB, OS, Emitter, false);
+
+  if (TheTriple.isOSWindows()) {
+    llvm_unreachable("LEG does not support Windows COFF format");
+  }
+
+  return createARMELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack,
+                              TheTriple.getArch() == Triple::thumb);
 }
 
 
