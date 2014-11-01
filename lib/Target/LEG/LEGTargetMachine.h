@@ -33,6 +33,14 @@ public:
                    const TargetOptions &Options, Reloc::Model RM,
                    CodeModel::Model CM, CodeGenOpt::Level OL);
 
+  const DataLayout *getDataLayout() const LLVM_OVERRIDE;
+  const InstrItineraryData *getInstrItineraryData() const LLVM_OVERRIDE;
+  const LEGInstrInfo *getInstrInfo() const LLVM_OVERRIDE;
+  const LEGRegisterInfo *getRegisterInfo() const LLVM_OVERRIDE;
+  const LEGTargetLowering *getTargetLowering() const LLVM_OVERRIDE;
+  const LEGFrameLowering *getFrameLowering() const LLVM_OVERRIDE;
+  const LEGSelectionDAGInfo *getSelectionDAGInfo() const LLVM_OVERRIDE;
+
   virtual const LEGSubtarget *getSubtargetImpl() const { return &Subtarget; }
 
   // Pass Pipeline Configuration

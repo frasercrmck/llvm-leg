@@ -31,6 +31,34 @@ LEGTargetMachine::LEGTargetMachine(const Target &T, StringRef TT, StringRef CPU,
   initAsmInfo();
 }
 
+const DataLayout *LEGTargetMachine::getDataLayout() const {
+  return Subtarget.getDataLayout();
+}
+
+const InstrItineraryData *LEGTargetMachine::getInstrItineraryData() const {
+  return Subtarget.getInstrItineraryData();
+}
+
+const LEGInstrInfo *LEGTargetMachine::getInstrInfo() const {
+  return Subtarget.getInstrInfo();
+}
+
+const LEGRegisterInfo *LEGTargetMachine::getRegisterInfo() const {
+  return Subtarget.getRegisterInfo();
+}
+
+const LEGTargetLowering *LEGTargetMachine::getTargetLowering() const {
+  return Subtarget.getTargetLowering();
+}
+
+const LEGFrameLowering *LEGTargetMachine::getFrameLowering() const {
+  return Subtarget.getFrameLowering();
+}
+
+const LEGSelectionDAGInfo *LEGTargetMachine::getSelectionDAGInfo() const {
+  return Subtarget.getSelectionDAGInfo();
+}
+
 namespace {
 /// LEG Code Generator Pass Configuration Options.
 class LEGPassConfig : public TargetPassConfig {
