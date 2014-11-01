@@ -41,7 +41,7 @@ public:
   /// not, return 0.  This predicate must return 0 if the instruction has
   /// any side effects other than loading from the stack slot.
   virtual unsigned isLoadFromStackSlot(const MachineInstr *MI,
-                                       int &FrameIndex) const override;
+                                       int &FrameIndex) const LLVM_OVERRIDE;
 
   /// isStoreToStackSlot - If the specified machine instruction is a direct
   /// store to a stack slot, return the virtual or physical register number of
@@ -49,36 +49,36 @@ public:
   /// not, return 0.  This predicate must return 0 if the instruction has
   /// any side effects other than storing to the stack slot.
   virtual unsigned isStoreToStackSlot(const MachineInstr *MI,
-                                      int &FrameIndex) const override;
+                                      int &FrameIndex) const LLVM_OVERRIDE;
 
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                              MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
-                             bool AllowModify) const override;
+                             bool AllowModify) const LLVM_OVERRIDE;
 
-  virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
+  virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const LLVM_OVERRIDE;
 
   virtual void copyPhysReg(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, DebugLoc DL,
                            unsigned DestReg, unsigned SrcReg,
-                           bool KillSrc) const override;
+                           bool KillSrc) const LLVM_OVERRIDE;
 
   virtual void storeRegToStackSlot(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator MI,
                                    unsigned SrcReg, bool isKill, int FrameIndex,
                                    const TargetRegisterClass *RC,
                                    const TargetRegisterInfo *TRI) const
-      override;
+      LLVM_OVERRIDE;
 
   virtual void loadRegFromStackSlot(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator MI,
                                     unsigned DestReg, int FrameIndex,
                                     const TargetRegisterClass *RC,
                                     const TargetRegisterInfo *TRI) const
-      override;
+      LLVM_OVERRIDE;
 
   virtual bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const
-     override;
+     LLVM_OVERRIDE;
 };
 }
 

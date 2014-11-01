@@ -67,7 +67,7 @@ public:
   }
 
   void EncodeInstruction(const MCInst &MI, raw_ostream &OS,
-                         SmallVectorImpl<MCFixup> &Fixups) const override;
+                         SmallVectorImpl<MCFixup> &Fixups) const LLVM_OVERRIDE;
 };
 
 } // end anonymous namespace

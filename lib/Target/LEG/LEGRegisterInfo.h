@@ -29,21 +29,21 @@ public:
 
   /// Code Generation virtual methods...
   const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const
-      override;
+      LLVM_OVERRIDE;
 
-  const uint32_t *getCallPreservedMask(CallingConv::ID) const override;
+  const uint32_t *getCallPreservedMask(CallingConv::ID) const LLVM_OVERRIDE;
 
-  BitVector getReservedRegs(const MachineFunction &MF) const override;
+  BitVector getReservedRegs(const MachineFunction &MF) const LLVM_OVERRIDE;
 
-  bool requiresRegisterScavenging(const MachineFunction &MF) const override;
+  bool requiresRegisterScavenging(const MachineFunction &MF) const LLVM_OVERRIDE;
 
-  bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override;
+  bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const LLVM_OVERRIDE;
 
-  bool useFPForScavengingIndex(const MachineFunction &MF) const override;
+  bool useFPForScavengingIndex(const MachineFunction &MF) const LLVM_OVERRIDE;
 
   void eliminateFrameIndex(MachineBasicBlock::iterator II, int SPAdj,
                            unsigned FIOperandNum, RegScavenger *RS = NULL) const
-      override;
+      LLVM_OVERRIDE;
 
   // Debug information queries.
   unsigned getFrameRegister(const MachineFunction &MF) const;

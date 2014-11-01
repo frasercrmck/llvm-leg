@@ -59,15 +59,15 @@ private:
                                bool isVarArg,
                                const SmallVectorImpl<ISD::InputArg> &Ins,
                                SDLoc dl, SelectionDAG &DAG,
-                               SmallVectorImpl<SDValue> &InVals) const override;
+                               SmallVectorImpl<SDValue> &InVals) const LLVM_OVERRIDE;
 
   SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                    SmallVectorImpl<SDValue> &InVals) const override;
+                    SmallVectorImpl<SDValue> &InVals) const LLVM_OVERRIDE;
 
   SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
                       const SmallVectorImpl<SDValue> &OutVals, SDLoc dl,
-                      SelectionDAG &DAG) const override;
+                      SelectionDAG &DAG) const LLVM_OVERRIDE;
 
   SDValue LowerCallResult(SDValue Chain, SDValue InGlue,
                           CallingConv::ID CallConv, bool isVarArg,
