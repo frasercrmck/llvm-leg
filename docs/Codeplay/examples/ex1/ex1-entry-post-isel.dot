@@ -1,0 +1,24 @@
+digraph "scheduler input for foo:entry" {
+	rankdir="BT";
+	bgcolor="transparent";
+
+	Node0x3ffdd70 [shape=record,shape=Mrecord,label="{EntryToken|0x3ffdd70|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x40239d0 [shape=record,shape=Mrecord,label="{Register %vreg1|0x40239d0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023be0 [shape=record,shape=Mrecord,label="{Register %vreg2|0x4023be0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ef8 [shape=record,shape=Mrecord,label="{Register %vreg0|0x4023ef8|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ad8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x4023ad8|{<d0>i32|<d1>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ad8:s0 -> Node0x3ffdd70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ad8:s1 -> Node0x40239d0:d0[penwidth=3,color="white"];
+	Node0x4023ce8 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|CopyFromReg [ORD=1]|0x4023ce8|{<d0>i32|<d1>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ce8:s0 -> Node0x3ffdd70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023ce8:s1 -> Node0x4023be0:d0[penwidth=3,color="white"];
+	Node0x4023df0 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1}|ADDrr [ORD=2]|0x4023df0|{<d0>i32}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4023df0:s0 -> Node0x4023ad8:d0[penwidth=3,color="white"];
+	Node0x4023df0:s1 -> Node0x4023ce8:d0[penwidth=3,color="white"];
+	Node0x4024000 [shape=record,shape=Mrecord,label="{{<s0>0|<s1>1|<s2>2}|CopyToReg [ORD=2]|0x4024000|{<d0>ch}}",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4024000:s0 -> Node0x3ffdd70:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x4024000:s1 -> Node0x4023ef8:d0[penwidth=3,color="white"];
+	Node0x4024000:s2 -> Node0x4023df0:d0[penwidth=3,color="white"];
+	Node0x0[ plaintext=circle, label ="GraphRoot",penwidth=3,color="white",fontname="Calibri",fontsize=16,fontcolor="white"];
+	Node0x0 -> Node0x4024000:d0[color=cyan,style=dashed,penwidth=3,fontname="Calibri",fontsize=16,fontcolor="white"];
+}

@@ -1,0 +1,20 @@
+# Machine code for function foo: Post SSA
+Frame Objects:
+  fi#0: size=4, align=4, at location [SP-4]
+  fi#1: size=4, align=4, at location [SP-8]
+Function Live Ins: %R0 in %vreg0
+
+BB#0: derived from LLVM BB %0
+    Live Ins: %R0
+	%SP<def> = SUBri %SP, 8    ; Prologue
+	
+	%R1<def> = MOVrr %R0
+	%R2<def> = MOVLOi16 2
+	STR %R2<kill>, %SP, 4; mem:ST4[%p]
+	%R0<def> = ADDri %R0<kill>, 2
+	STR %R1<kill>, %SP, 0
+	
+	%SP<def> = ADDri %SP, 8    ; Epilogue
+	RET %R0<kill>, %LR<imp-use>
+
+# End machine code for function foo.

@@ -1,0 +1,6 @@
+BB#0: derived from LLVM BB %entry
+    Live Ins: %R0 %R1
+
+	%R0<def> = ADDrr %R0<kill>, %R1<kill>
+
+    Successors according to CFG: BB#1

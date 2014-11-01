@@ -1,0 +1,9 @@
+# Machine code for function foo: Post SSA
+Function Live Ins: %R0 in %vreg0
+
+BB#0: derived from LLVM BB %0
+    Live Ins: %R0
+	%R1<def> = MOVLOi16 2
+	%R1<def> = MOVHIi16 %R1<kill>, 1
+	%R0<def> = ADDrr %R0<kill>, %R1<kill>
+	RET %R0, %LR<imp-use>
