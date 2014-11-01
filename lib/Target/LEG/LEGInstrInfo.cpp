@@ -150,8 +150,8 @@ bool LEGInstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const
 
     const MachineOperand &MO = MI->getOperand(1);
 
-    auto LO16 = BuildMI(MBB, MI, DL, get(LEG::MOVLOi16), DstReg);
-    auto HI16 = BuildMI(MBB, MI, DL, get(LEG::MOVHIi16))
+    MachineInstrBuilder LO16 = BuildMI(MBB, MI, DL, get(LEG::MOVLOi16), DstReg);
+    MachineInstrBuilder HI16 = BuildMI(MBB, MI, DL, get(LEG::MOVHIi16))
                     .addReg(DstReg, RegState::Define | getDeadRegState(DstIsDead))
                     .addReg(DstReg);
 

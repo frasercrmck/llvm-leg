@@ -115,8 +115,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), ArgLocs,
-                 *DAG.getContext());
+  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
+                 getTargetMachine(), ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_LEG);
 
   // Get the size of the outgoing arguments stack space requirement.
@@ -153,13 +153,15 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Emit all stores, make sure they occur before the call.
   if (!MemOpChains.empty()) {
-    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
+    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains.data(),
+                        MemOpChains.size());
   }
 
   // Build a sequence of copy-to-reg nodes chained together with token chain
   // and flag operands which copy the outgoing args into the appropriate regs.
   SDValue InFlag;
-  for (auto &Reg : RegsToPass) {
+  for (unsigned i = 0; i < RegsToPass.size(); i++) {
+    std::pair<unsigned, SDValue> &Reg = RegsToPass[i];
     Chain = DAG.getCopyToReg(Chain, dl, Reg.first, Reg.second, InFlag);
     InFlag = Chain.getValue(1);
   }
@@ -176,14 +178,15 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Add argument registers to the end of the list so that they are known live
   // into the call.
-  for (auto &Reg : RegsToPass) {
+  for (unsigned i = 0; i < RegsToPass.size(); i++) {
+    std::pair<unsigned, SDValue> &Reg = RegsToPass[i];
     Ops.push_back(DAG.getRegister(Reg.first, Reg.second.getValueType()));
   }
 
   // Add a register mask operand representing the call-preserved registers.
   const uint32_t *Mask;
   const TargetRegisterInfo *TRI =
-      getTargetMachine().getSubtargetImpl()->getRegisterInfo();
+      getTargetMachine().getSubtarget<LEGSubtarget>().getRegisterInfo();
   Mask = TRI->getCallPreservedMask(CallConv);
 
   assert(Mask && "Missing call preserved mask for calling convention");
@@ -196,7 +199,7 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
 
   // Returns a chain and a flag for retval copy to use.
-  Chain = DAG.getNode(LEGISD::CALL, dl, NodeTys, Ops);
+  Chain = DAG.getNode(LEGISD::CALL, dl, NodeTys, Ops.data(), Ops.size());
   InFlag = Chain.getValue(1);
 
   Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, true),
@@ -219,13 +222,14 @@ SDValue LEGTargetLowering::LowerCallResult(
 
   // Assign locations to each value returned by this call.
   SmallVector<CCValAssign, 16> RVLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), RVLocs,
-                 *DAG.getContext());
+  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
+                 getTargetMachine(), RVLocs, *DAG.getContext());
 
   CCInfo.AnalyzeCallResult(Ins, RetCC_LEG);
 
   // Copy all of the result registers out of their specified physreg.
-  for (auto &Loc : RVLocs) {
+  for (unsigned i = 0; i < RVLocs.size(); i++) {
+    CCValAssign Loc = RVLocs[i];
     Chain = DAG.getCopyFromReg(Chain, dl, Loc.getLocReg(), Loc.getValVT(),
                                InGlue).getValue(1);
     InGlue = Chain.getValue(2);
@@ -251,12 +255,13 @@ SDValue LEGTargetLowering::LowerFormalArguments(
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), ArgLocs,
-                 *DAG.getContext());
+  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
+                 getTargetMachine(), ArgLocs, *DAG.getContext());
 
   CCInfo.AnalyzeFormalArguments(Ins, CC_LEG);
 
-  for (auto &VA : ArgLocs) {
+  for (unsigned i = 0; i < ArgLocs.size(); i++) {
+    CCValAssign VA = ArgLocs[i];
     if (VA.isRegLoc()) {
       // Arguments passed in registers
       EVT RegVT = VA.getLocVT();
@@ -297,7 +302,7 @@ bool LEGTargetLowering::CanLowerReturn(
     CallingConv::ID CallConv, MachineFunction &MF, bool isVarArg,
     const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
   SmallVector<CCValAssign, 16> RVLocs;
-  CCState CCInfo(CallConv, isVarArg, MF, RVLocs, Context);
+  CCState CCInfo(CallConv, isVarArg, MF, getTargetMachine(), RVLocs, Context);
   if (!CCInfo.CheckReturn(Outs, RetCC_LEG)) {
     return false;
   }
@@ -322,8 +327,8 @@ LEGTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   SmallVector<CCValAssign, 16> RVLocs;
 
   // CCState - Info about the registers and stack slot.
-  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(), RVLocs,
-                 *DAG.getContext());
+  CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
+                 getTargetMachine(), RVLocs, *DAG.getContext());
 
   CCInfo.AnalyzeReturn(Outs, RetCC_LEG);
 
@@ -348,5 +353,5 @@ LEGTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(Flag);
   }
 
-  return DAG.getNode(LEGISD::RET_FLAG, dl, MVT::Other, RetOps);
+  return DAG.getNode(LEGISD::RET_FLAG, dl, MVT::Other, RetOps.data(), RetOps.size());
 }

@@ -76,7 +76,9 @@ void LEGAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   MCInst TmpInst;
   MCInstLowering.Lower(MI, TmpInst);
 
-  EmitToStreamer(OutStreamer, TmpInst);
+  // FIXME: is this enough?
+  //EmitToStreamer(OutStreamer, TmpInst);
+  OutStreamer.EmitInstruction(TmpInst);
 }
 
 // Force static initialization.

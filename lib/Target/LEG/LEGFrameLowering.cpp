@@ -14,6 +14,7 @@
 
 #include "LEGFrameLowering.h"
 #include "LEG.h"
+#include "LEGSubtarget.h"
 #include "LEGInstrInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -59,7 +60,8 @@ uint64_t LEGFrameLowering::computeStackSize(MachineFunction &MF) const {
 static unsigned materializeOffset(MachineFunction &MF, MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MBBI,
                                   unsigned Offset) {
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetInstrInfo &TII =
+      *MF.getTarget().getSubtarget<LEGSubtarget>().getInstrInfo();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   const uint64_t MaxSubImm = 0xfff;
   if (Offset <= MaxSubImm) {
@@ -86,7 +88,8 @@ static unsigned materializeOffset(MachineFunction &MF, MachineBasicBlock &MBB,
 
 void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
   // Compute the stack size, to determine if we need a prologue at all.
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetInstrInfo &TII =
+      *MF.getTarget().getSubtarget<LEGSubtarget>().getInstrInfo();
   MachineBasicBlock &MBB = MF.front();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
@@ -114,7 +117,8 @@ void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
 void LEGFrameLowering::emitEpilogue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
   // Compute the stack size, to determine if we need an epilogue at all.
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetInstrInfo &TII =
+      *MF.getTarget().getSubtarget<LEGSubtarget>().getInstrInfo();
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   DebugLoc dl = MBBI->getDebugLoc();
   uint64_t StackSize = computeStackSize(MF);

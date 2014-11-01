@@ -16,7 +16,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "leg-selectiondag-info"
 
-LEGSelectionDAGInfo::LEGSelectionDAGInfo(const DataLayout &DL)
-    : TargetSelectionDAGInfo(&DL) {}
+LEGSelectionDAGInfo::LEGSelectionDAGInfo(const TargetMachine &TM)
+    : TargetSelectionDAGInfo(TM) {}
 
 LEGSelectionDAGInfo::~LEGSelectionDAGInfo() {}

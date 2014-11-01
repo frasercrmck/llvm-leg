@@ -124,7 +124,8 @@ MCOperand LEGMCInstLower::LowerOperand(const MachineOperand &MO,
 void LEGMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   OutMI.setOpcode(MI->getOpcode());
 
-  for (auto &MO : MI->operands()) {
+  for (unsigned i = 0; i < MI->getNumOperands(); i++) {
+    const MachineOperand &MO = MI->getOperand(i);
     const MCOperand MCOp = LowerOperand(MO);
 
     if (MCOp.isValid()) {
