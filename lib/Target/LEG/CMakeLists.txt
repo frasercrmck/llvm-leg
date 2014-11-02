@@ -22,6 +22,8 @@ add_llvm_target(LEGCodeGen
   LEGMCInstLower.cpp
   )
 
+add_dependencies(LLVMLEGCodeGen LEGCommonTableGen)
+
 add_subdirectory(InstPrinter)
 add_subdirectory(TargetInfo)
 add_subdirectory(MCTargetDesc)

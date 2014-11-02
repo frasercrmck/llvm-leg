@@ -5,3 +5,5 @@ add_llvm_library(LLVMLEGDesc
   LEGAsmBackend.cpp
   LEGELFObjectWriter.cpp
   )
+
+add_dependencies(LLVMLEGDesc LEGCommonTableGen)
