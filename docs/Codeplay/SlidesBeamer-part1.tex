@@ -60,13 +60,17 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{Assembly examples}
+\begin{frame}[fragile]{LEG assembly examples}
 
 \begin{itemize}
-    \item Simple function that adds two integers
+    \item Function that adds two integers
     \begin{itemize}
-        \item Function arguments are passed in registers
-        \item lr contains the function's return address
+        \item The arguments are passed in registers: \texttt{a} in \texttt{r0}, \texttt{b} in \texttt{r1}
+        \item The return value is stored in \texttt{r0}
+    \end{itemize}
+    \item Returns to the caller using \texttt{b}
+    \begin{itemize}
+        \item \texttt{lr} contains the function's return address
     \end{itemize}
 \end{itemize}
 
@@ -89,7 +93,21 @@ int foo(int a, int b) {
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{Assembly examples}
+\begin{frame}[fragile]{LEG assembly examples}
+
+\begin{itemize}
+    \item Function that either adds or subtracts two integers
+    \item The result depends on which argument is greater
+    \begin{itemize}
+        \item \texttt{cmp} compares the arguments
+        \item \texttt{b} branches to the '\texttt{if\_else}' basic block, using:
+        \begin{itemize}
+            \item The '\texttt{le}' predicate
+            \item The implicit condition flag register set by \texttt{cmp}
+        \end{itemize}
+        \item Fall-through to '\texttt{if\_then}' if the predicate doesn't match
+    \end{itemize}
+\end{itemize}
 
 \begin{minipage}[t]{0.50\linewidth}
 \begin{codebox}
