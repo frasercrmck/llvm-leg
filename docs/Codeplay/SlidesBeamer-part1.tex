@@ -23,36 +23,6 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{Calling convention for LEG}
-
-\begin{itemize}
-    \item How values are passed to/from a function
-    \item Arguments in r0 (1st), r1 (2nd), …, r3 (4th)
-    \begin{itemize}
-        \item Further arguments passed on the stack
-    \end{itemize}
-    \item Return value in r0
-\end{itemize}
-
-\begin{codebox}
-int foo(int a, int b) {
-    int result = a + b;   // r0 + r1
-    return result;        // r0
-}
-\end{codebox}
-\codecaption{ex1.c}
-
-\begin{codebox}
-.foo:
-    add r0, r0, r1
-    b lr
-\end{codebox}
-\codecaption{ex1.s}
-
-\end{frame}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 \begin{frame}{LLVM Backend: The big picture}
 
 \begin{itemize}
