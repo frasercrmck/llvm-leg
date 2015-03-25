@@ -74,6 +74,7 @@
     \end{itemize}
 \end{itemize}
 
+\begin{minipage}[t]{0.50\linewidth}
 \begin{codebox}
 int foo(int a, int b) {
     int result = a + b;   // r0 + r1
@@ -81,13 +82,54 @@ int foo(int a, int b) {
 }
 \end{codebox}
 \codecaption{ex1.c}
-
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
 \begin{codebox}
 .foo:
     add r0, r0, r1
     b lr
+
 \end{codebox}
 \codecaption{ex1.s}
+\end{minipage}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{LEG assembly examples}
+
+\begin{itemize}
+    \item Function that loads a value, adds a constant and stores the result
+    \begin{itemize}
+        \item \texttt{ldr} loads a value from memory at the given address
+        \item \texttt{mov} stores an immediate value to the register
+        \item \texttt{str} stores a value to memory at the given address
+    \end{itemize}
+\end{itemize}
+
+\begin{minipage}[t]{0.50\linewidth}
+\begin{codebox}
+void ex7(int *src, int *dst) {
+    int x = src[0];
+    int result = x + 42;
+    dst[0] = result;
+}
+
+\end{codebox}
+\codecaption{ex7.c}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
+\begin{codebox}
+ex7:
+    ldr r0, [r0]
+    mov r2, #42
+    add r0, r0, r2
+    str r0, [r1]
+    bx lr
+\end{codebox}
+\codecaption{ex7.s}
+\end{minipage}
 
 \end{frame}
 
