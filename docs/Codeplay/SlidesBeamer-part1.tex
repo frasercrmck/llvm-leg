@@ -60,6 +60,70 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\begin{frame}[fragile]{Assembly examples}
+
+\begin{itemize}
+    \item Simple function that adds two integers
+    \begin{itemize}
+        \item Function arguments are passed in registers
+        \item lr contains the function's return address
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}
+int foo(int a, int b) {
+    int result = a + b;   // r0 + r1
+    return result;        // r0
+}
+\end{codebox}
+\codecaption{ex1.c}
+
+\begin{codebox}
+.foo:
+    add r0, r0, r1
+    b lr
+\end{codebox}
+\codecaption{ex1.s}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Assembly examples}
+
+\begin{minipage}[t]{0.50\linewidth}
+\begin{codebox}
+int ex6(int a, int b) {
+    if (a > b) {
+        return a + b;
+    } else {
+        return a - b;
+    }
+}
+
+
+\end{codebox}
+\codecaption{ex6.c}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
+\begin{codebox}
+.ex6:
+    cmp r0, r1
+    ble .if_else
+.if_then:
+    add r0, r0, r1
+    bx lr
+.if_else:
+    sub r0, r0, r1
+    bx lr
+\end{codebox}
+\codecaption{ex6.s}
+\end{minipage}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \talksection{LLVM Backend: The big picture}
 
 \begin{frame}{LLVM Backend: The big picture}
