@@ -212,18 +212,23 @@ define i32 @foo(i32 %a, i32 %b) {
 
 \begin{itemize}
     \item Untyped, uses register classes instead
+    \begin{itemize}
+        \item Virtual registers (before register allocation)
+        \item Machine registers (after RA)
+    \end{itemize}
     \item Target-specific instructions (LEG namespace)
     \begin{itemize}
         \item Few exceptions (TargetOpcode namespace)
+    \end{itemize}
+    \item Instruction operands have flags:
+    \begin{itemize}
+        \item Def for outputs, use for inputs
+        \item Kill: last use of a value stored in a register
     \end{itemize}
 \end{itemize}
 
 \examplebox{ex1/ex1-mi.txt}
 
-\begin{itemize}
-    \item Kill: last use of a value stored in a register
-\end{itemize}
-
-\pipelinemap{IR → SelectionDAG → MachineDAG → \codeempha{MachineInstr} → MCInst}{10.1ex}
+\pipelinemap{IR → SelectionDAG → MachineDAG → \codeempha{MachineInstr} → MCInst}{1.3ex}
 
 \end{frame}
