@@ -60,6 +60,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\talksection{LLVM Backend: The big picture}
+
 \begin{frame}{LLVM Backend: The big picture}
 
 \begin{itemize}
@@ -73,7 +75,7 @@
         \item Tells you roughly where you are in the pipeline
         \item Different instruction namespaces
     \end{itemize}
-    \item Check it out (IR and MI only):
+    \item Check it out (IR and MI representations only):
     \begin{itemize}
         \item \texttt{llc foo.ll -print-after-all 2>\&1 > foo.log}
     \end{itemize}
@@ -89,6 +91,10 @@
 
 \begin{itemize}
     \item Linear representation
+    \begin{itemize}
+        \item Basic blocks are lists of instructions
+        \item Control Flow Graph (CFG) of basic blocks
+    \end{itemize}
     \item High-level, target-agnostic
     \begin{itemize}
         \item Exceptions: data layout, triple, intrinsics
@@ -111,7 +117,7 @@ define i32 @foo(i32 %a, i32 %b) {
 \end{codebox}
 \codecaption{ex1b.ll}
 
-\pipelinemap{\codeempha{IR} → SelectionDAG → MachineDAG → MachineInstr → MCInst}{4.8ex}
+\pipelinemap{\codeempha{IR} → SelectionDAG → MachineDAG → MachineInstr → MCInst}{0.0ex}
 
 \end{frame}
 
