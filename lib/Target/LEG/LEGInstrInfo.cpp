@@ -92,17 +92,81 @@ LEGInstrInfo::isStoreToStackSlot(const MachineInstr *MI,
 ///
 bool
 LEGInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
-                              MachineBasicBlock *&FBB,
-                              SmallVectorImpl<MachineOperand> &Cond,
-                              bool AllowModify) const {
-  // Can't handle this.
-  return true;
+                            MachineBasicBlock *&FBB,
+                            SmallVectorImpl<MachineOperand> &Cond,
+                            bool AllowModify) const {
+  bool HasCondBranch = false;
+  TBB = nullptr;
+  FBB = nullptr;
+  for (MachineInstr &MI : MBB) {
+    if (MI.getOpcode() == LEG::B) {
+      MachineBasicBlock *TargetBB = MI.getOperand(0).getMBB();
+      if (HasCondBranch) {
+        FBB = TargetBB;
+      } else {
+        TBB = TargetBB;
+      }
+    } else if (MI.getOpcode() == LEG::Bcc) {
+      MachineBasicBlock *TargetBB = MI.getOperand(1).getMBB();
+      TBB = TargetBB;
+      Cond.push_back(MI.getOperand(0));
+      HasCondBranch = true;
+    }
+  }
+  return false;
 }
 
+/// RemoveBranch - Remove the branching code at the end of the specific MBB.
+/// This is only invoked in cases where AnalyzeBranch returns success. It
+/// returns the number of instructions that were removed.
 unsigned
 LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
-  assert(0 && "Unimplemented");
-  return 0;
+  if (MBB.empty())
+    return 0;
+  unsigned NumRemoved = 0;
+  auto I = MBB.end(), E = MBB.begin();
+  do {
+    --I;
+    unsigned Opc = I->getOpcode();
+    if ((Opc == LEG::B) || (Opc == LEG::Bcc)) {
+      auto ToDelete = I;
+      ++I;
+      MBB.erase(ToDelete);
+      NumRemoved++;
+    }
+  } while (I != E);
+  return NumRemoved;
+}
+
+/// InsertBranch - Insert branch code into the end of the specified
+/// MachineBasicBlock.  The operands to this method are the same as those
+/// returned by AnalyzeBranch.  This is only invoked in cases where
+/// AnalyzeBranch returns success. It returns the number of instructions
+/// inserted.
+///
+/// It is also invoked by tail merging to add unconditional branches in
+/// cases where AnalyzeBranch doesn't apply because there was no original
+/// branch to analyze.  At least this much must be implemented, else tail
+/// merging needs to be disabled.
+unsigned LEGInstrInfo::InsertBranch(MachineBasicBlock &MBB,
+                                    MachineBasicBlock *TBB,
+                                    MachineBasicBlock *FBB,
+                                    const SmallVectorImpl<MachineOperand> &Cond,
+                                    DebugLoc DL) const {
+  unsigned NumInserted = 0;
+  
+  // Insert any conditional branch.
+  if (Cond.size() > 0) {
+    BuildMI(MBB, MBB.end(), DL, get(LEG::Bcc)).addOperand(Cond[0]).addMBB(TBB);
+    NumInserted++;
+  }
+  
+  // Insert any unconditional branch.
+  if (Cond.empty() || FBB) {
+    BuildMI(MBB, MBB.end(), DL, get(LEG::B)).addMBB(Cond.empty() ? TBB : FBB);
+    NumInserted++;
+  }
+  return NumInserted;
 }
 
 void LEGInstrInfo::copyPhysReg(MachineBasicBlock &MBB,

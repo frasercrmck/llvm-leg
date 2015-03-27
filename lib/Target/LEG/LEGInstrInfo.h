@@ -57,6 +57,12 @@ public:
                              bool AllowModify) const override;
 
   virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
+  
+  
+  virtual unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+                                MachineBasicBlock *FBB,
+                                const SmallVectorImpl<MachineOperand> &Cond,
+                                DebugLoc DL) const override;
 
   virtual void copyPhysReg(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, DebugLoc DL,
