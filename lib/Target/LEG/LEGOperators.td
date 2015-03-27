@@ -48,6 +48,12 @@ def leg_call
 
 def bl_target : Operand<i32>;
 
+def b_target : Operand<OtherVT>;
+
+def cc_val : Operand<OtherVT> {
+  let PrintMethod = "printCondCode";
+}
+
 def memsrc : Operand<i32> {
   let MIOperandInfo = (ops GRRegs, i32imm);
   let PrintMethod = "printAddrModeMemSrc";

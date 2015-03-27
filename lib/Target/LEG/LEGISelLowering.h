@@ -34,7 +34,7 @@ enum NodeType {
   LOAD_SYM,
   // This loads a 32-bit immediate into a register.
   MOVEi32,
-  CALL,
+  CALL
 };
 }
 

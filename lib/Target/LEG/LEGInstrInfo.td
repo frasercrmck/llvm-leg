@@ -125,6 +125,24 @@ def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
   let isPseudo = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Comparison Instructions
+//===----------------------------------------------------------------------===//
+
+def CMP : InstLEG<(outs), (ins GRRegs:$lhs, GRRegs:$rhs),
+                    "cmp $lhs, $rhs", []> {
+  bits<4> lhs;
+  bits<4> rhs;
+  let Inst{27-20} = 0b00010101;
+  let Inst{19-16} = lhs;
+  let Inst{15-12}  = 0b0000;
+  let Inst{11-7}  = 0b00000; // imm5
+  let Inst{6-5} = 0b00; // type
+  let Inst{4} = 0b0;
+  let Inst{3-0} = rhs;
+  
+  let Defs = [CPSR];
+}
 
 //===----------------------------------------------------------------------===//
 // Load/Store Instructions
@@ -189,6 +207,26 @@ let isCall = 1, Defs = [LR], Uses = [SP] in {
 }
 
 def : Pattern<(i32 (load_sym tglobaladdr:$addr)),  [(MOVi32 $addr)]>;
+
+//===----------------------------------------------------------------------===//
+// Branch Instructions
+//===----------------------------------------------------------------------===//
+
+let isTerminator = 1, isBranch = 1, isBarrier = 1 in {
+  def B : InstLEG<(outs), (ins b_target:$dst),
+                  "b $dst", [(br bb:$dst)]> {
+    bits<24> dst;
+    let Inst{31-28} = 0b0000;
+    let Inst{27-24} = 0b1010;
+    let Inst{23-0} = dst;
+  }
+}
+
+let isBranch = 1, Uses = [CPSR] in {
+  def Bcc : InstLEG<(outs), (ins cc_val:$cc, b_target:$dst),
+                    "b$cc $dst",  []> {
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions

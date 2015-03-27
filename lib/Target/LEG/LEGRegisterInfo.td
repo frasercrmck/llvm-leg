@@ -31,6 +31,8 @@ def R9  : LEGReg< 9, "r9">;
 def SP  : LEGReg<13, "sp">;
 def LR  : LEGReg<14, "lr">;
 
+def CPSR  : LEGReg<16, "cpsr">;
+
 // Register classes.
 //
 def GRRegs : RegisterClass<"LEG", [i32], 32,
