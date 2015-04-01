@@ -222,7 +222,7 @@ let isTerminator = 1, isBranch = 1, isBarrier = 1 in {
   }
 }
 
-let isBranch = 1, Uses = [CPSR] in {
+let isTerminator = 1, isBranch = 1, Uses = [CPSR] in {
   def Bcc : InstLEG<(outs), (ins cc_val:$cc, b_target:$dst),
                     "b$cc $dst",  []> {
   }
