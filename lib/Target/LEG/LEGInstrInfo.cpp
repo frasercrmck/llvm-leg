@@ -124,7 +124,7 @@ LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   if (MBB.empty())
     return 0;
   unsigned NumRemoved = 0;
-  auto I = MBB.end(), E = MBB.begin();
+  auto I = MBB.end();
   do {
     --I;
     unsigned Opc = I->getOpcode();
@@ -134,7 +134,7 @@ LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
       MBB.erase(ToDelete);
       NumRemoved++;
     }
-  } while (I != E);
+  } while (I != MBB.begin());
   return NumRemoved;
 }
 
