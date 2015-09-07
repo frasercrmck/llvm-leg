@@ -225,7 +225,7 @@ EmitIntrinsicToOverloadTable(const std::vector<CodeGenIntrinsic> &Ints,
 
 // NOTE: This must be kept in synch with the copy in lib/VMCore/Function.cpp!
 enum IIT_Info {
-  // Common values should be encoded with 0-16.
+  // Common values should be encoded with 0-15.
   IIT_Done = 0,
   IIT_I1   = 1,
   IIT_I8   = 2,
@@ -240,11 +240,11 @@ enum IIT_Info {
   IIT_V8   = 11,
   IIT_V16  = 12,
   IIT_V32  = 13,
-  IIT_V64  = 14,
-  IIT_PTR  = 15,
-  IIT_ARG  = 16,
+  IIT_PTR  = 14,
+  IIT_ARG  = 15,
 
-  // Values from 17+ are only encodable with the inefficient encoding.
+  // Values from 16+ are only encodable with the inefficient encoding.
+  IIT_V64  = 16,
   IIT_MMX  = 17,
   IIT_METADATA = 18,
   IIT_EMPTYSTRUCT = 19,
@@ -257,7 +257,11 @@ enum IIT_Info {
   IIT_ANYPTR = 26,
   IIT_V1   = 27,
   IIT_VARARG = 28,
-  IIT_HALF_VEC_ARG = 29
+  IIT_HALF_VEC_ARG = 29,
+  IIT_SAME_VEC_WIDTH_ARG = 30,
+  IIT_PTR_TO_ARG = 31,
+  IIT_VEC_OF_PTRS_TO_ELT = 32,
+  IIT_I128 = 33
 };
 
 
@@ -272,6 +276,7 @@ static void EncodeFixedValueType(MVT::SimpleValueType VT,
     case 16: return Sig.push_back(IIT_I16);
     case 32: return Sig.push_back(IIT_I32);
     case 64: return Sig.push_back(IIT_I64);
+    case 128: return Sig.push_back(IIT_I128);
     }
   }
 
@@ -289,7 +294,7 @@ static void EncodeFixedValueType(MVT::SimpleValueType VT,
   }
 }
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 #pragma optimize("",off) // MSVC 2010 optimizer can't deal with this function.
 #endif
 
@@ -305,9 +310,20 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
       Sig.push_back(IIT_TRUNC_ARG);
     else if (R->isSubClassOf("LLVMHalfElementsVectorType"))
       Sig.push_back(IIT_HALF_VEC_ARG);
+    else if (R->isSubClassOf("LLVMVectorSameWidth")) {
+      Sig.push_back(IIT_SAME_VEC_WIDTH_ARG);
+      Sig.push_back((Number << 3) | ArgCodes[Number]);
+      MVT::SimpleValueType VT = getValueType(R->getValueAsDef("ElTy"));
+      EncodeFixedValueType(VT, Sig);
+      return;
+    }
+    else if (R->isSubClassOf("LLVMPointerTo"))
+      Sig.push_back(IIT_PTR_TO_ARG);
+    else if (R->isSubClassOf("LLVMVectorOfPointersToElt"))
+      Sig.push_back(IIT_VEC_OF_PTRS_TO_ELT);
     else
       Sig.push_back(IIT_ARG);
-    return Sig.push_back((Number << 2) | ArgCodes[Number]);
+    return Sig.push_back((Number << 3) | ArgCodes[Number]);
   }
 
   MVT::SimpleValueType VT = getValueType(R->getValueAsDef("VT"));
@@ -318,7 +334,8 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
   case MVT::iPTRAny: ++Tmp; // FALL THROUGH.
   case MVT::vAny: ++Tmp; // FALL THROUGH.
   case MVT::fAny: ++Tmp; // FALL THROUGH.
-  case MVT::iAny: {
+  case MVT::iAny: ++Tmp; // FALL THROUGH.
+  case MVT::Any: {
     // If this is an "any" valuetype, then the type is the type of the next
     // type in the list specified to getIntrinsic().
     Sig.push_back(IIT_ARG);
@@ -327,8 +344,8 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
     unsigned ArgNo = ArgCodes.size();
     ArgCodes.push_back(Tmp);
 
-    // Encode what sort of argument it must be in the low 2 bits of the ArgNo.
-    return Sig.push_back((ArgNo << 2) | Tmp);
+    // Encode what sort of argument it must be in the low 3 bits of the ArgNo.
+    return Sig.push_back((ArgNo << 3) | Tmp);
   }
 
   case MVT::iPTR: {
@@ -366,7 +383,7 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
   EncodeFixedValueType(VT, Sig);
 }
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 #pragma optimize("",on)
 #endif
 
@@ -520,6 +537,9 @@ struct AttributeComparator {
     if (L->isNoReturn != R->isNoReturn)
       return R->isNoReturn;
 
+    if (L->isConvergent != R->isConvergent)
+      return R->isConvergent;
+
     // Try to order by readonly/readnone attribute.
     ModRefKind LK = getModRefKind(*L);
     ModRefKind RK = getModRefKind(*R);
@@ -632,7 +652,7 @@ EmitAttributes(const std::vector<CodeGenIntrinsic> &Ints, raw_ostream &OS) {
     ModRefKind modRef = getModRefKind(intrinsic);
 
     if (!intrinsic.canThrow || modRef || intrinsic.isNoReturn ||
-        intrinsic.isNoDuplicate) {
+        intrinsic.isNoDuplicate || intrinsic.isConvergent) {
       OS << "      const Attribute::AttrKind Atts[] = {";
       bool addComma = false;
       if (!intrinsic.canThrow) {
@@ -649,6 +669,12 @@ EmitAttributes(const std::vector<CodeGenIntrinsic> &Ints, raw_ostream &OS) {
         if (addComma)
           OS << ",";
         OS << "Attribute::NoDuplicate";
+        addComma = true;
+      }
+      if (intrinsic.isConvergent) {
+        if (addComma)
+          OS << ",";
+        OS << "Attribute::Convergent";
         addComma = true;
       }
 
@@ -734,7 +760,7 @@ static void EmitTargetBuiltins(const std::map<std::string, std::string> &BIM,
        E = BIM.end(); I != E; ++I) {
     std::string ResultCode =
     "return " + TargetPrefix + "Intrinsic::" + I->second + ";";
-    Results.push_back(StringMatcher::StringPair(I->first, ResultCode));
+    Results.emplace_back(I->first, ResultCode);
   }
 
   StringMatcher("BuiltinName", Results, OS).Emit();

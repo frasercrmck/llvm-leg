@@ -53,9 +53,9 @@ private:
 
 bool LEGDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset) {
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(),
-                                       getTargetLowering()->getPointerTy());
-    Offset = CurDAG->getTargetConstant(0, MVT::i32);
+    EVT PtrVT = getTargetLowering()->getPointerTy(*TM.getDataLayout());
+    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
+    Offset = CurDAG->getTargetConstant(0, Addr, MVT::i32);
     return true;
   }
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
@@ -65,7 +65,7 @@ bool LEGDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset) {
   }
 
   Base = Addr;
-  Offset = CurDAG->getTargetConstant(0, MVT::i32);
+  Offset = CurDAG->getTargetConstant(0, Addr, MVT::i32);
   return true;
 }
 
@@ -83,13 +83,13 @@ SDNode *LEGDAGToDAGISel::SelectMoveImmediate(SDNode *N) {
   uint64_t HiMask = 0xffff0000;
   uint64_t ImmLo = (ImmVal & LoMask);
   uint64_t ImmHi = (ImmVal & HiMask);
-  SDValue ConstLo = CurDAG->getTargetConstant(ImmLo, MVT::i32);
+  SDValue ConstLo = CurDAG->getTargetConstant(ImmLo, N, MVT::i32);
   MachineSDNode *Move =
       CurDAG->getMachineNode(LEG::MOVLOi16, N, MVT::i32, ConstLo);
 
   // Select the low part of the immediate move, if needed.
   if (ImmHi) {
-    SDValue ConstHi = CurDAG->getTargetConstant(ImmHi >> 16, MVT::i32);
+    SDValue ConstHi = CurDAG->getTargetConstant(ImmHi >> 16, N, MVT::i32);
     Move = CurDAG->getMachineNode(LEG::MOVHIi16, N, MVT::i32, SDValue(Move, 0),
                                   ConstHi);
   }
@@ -112,7 +112,7 @@ SDNode *LEGDAGToDAGISel::SelectConditionalBranch(SDNode *N) {
   
   // Generate a predicated branch instruction.
   CondCodeSDNode *CC = cast<CondCodeSDNode>(Cond.getNode());
-  SDValue CCVal = CurDAG->getTargetConstant(CC->get(), MVT::i32);
+  SDValue CCVal = CurDAG->getTargetConstant(CC->get(), N, MVT::i32);
   SDValue BranchOps[] = {CCVal, Target, SDValue(Compare, 0),
                          SDValue(Compare, 1)};
   return CurDAG->getMachineNode(LEG::Bcc, N, MVT::Other, BranchOps);

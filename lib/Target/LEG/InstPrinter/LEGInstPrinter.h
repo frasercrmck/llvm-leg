@@ -31,8 +31,9 @@ public:
   void printInstruction(const MCInst *MI, raw_ostream &O);
   static const char *getRegisterName(unsigned RegNo);
 
-  virtual void printRegName(raw_ostream &OS, unsigned RegNo) const;
-  virtual void printInst(const MCInst *MI, raw_ostream &O, StringRef Annot);
+  virtual void printRegName(raw_ostream &OS, unsigned RegNo) const override;
+  virtual void printInst(const MCInst *MI, raw_ostream &OS, StringRef Annot,
+                         const MCSubtargetInfo &STI) override;
 
 private:
   void printCondCode(const MCInst *MI, unsigned OpNum, raw_ostream &O);

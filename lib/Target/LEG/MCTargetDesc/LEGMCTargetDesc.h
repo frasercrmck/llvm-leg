@@ -31,18 +31,19 @@ class MCAsmBackend;
 
 class StringRef;
 class raw_ostream;
+class raw_pwrite_stream;
+class Triple;
 
 extern Target TheLEGTarget;
 
 MCCodeEmitter *createLEGMCCodeEmitter(const MCInstrInfo &MCII,
                                       const MCRegisterInfo &MRI,
-                                      const MCSubtargetInfo &STI,
                                       MCContext &Ctx);
 
 MCAsmBackend *createLEGAsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                                  StringRef TT, StringRef CPU);
+                                  const Triple &TT, StringRef CPU);
 
-MCObjectWriter *createLEGELFObjectWriter(raw_ostream &OS, uint8_t OSABI);
+MCObjectWriter *createLEGELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 
 } // End llvm namespace
 

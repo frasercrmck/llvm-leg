@@ -76,6 +76,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
@@ -107,7 +108,6 @@ STATISTIC(NumRewrittenCopies, "Number of copies rewritten");
 
 namespace {
   class PeepholeOptimizer : public MachineFunctionPass {
-    MachineFunction *MF;
     const TargetInstrInfo *TII;
     const TargetRegisterInfo *TRI;
     MachineRegisterInfo   *MRI;
@@ -134,7 +134,8 @@ namespace {
     bool optimizeCmpInstr(MachineInstr *MI, MachineBasicBlock *MBB);
     bool optimizeExtInstr(MachineInstr *MI, MachineBasicBlock *MBB,
                           SmallPtrSetImpl<MachineInstr*> &LocalMIs);
-    bool optimizeSelect(MachineInstr *MI);
+    bool optimizeSelect(MachineInstr *MI,
+                        SmallPtrSetImpl<MachineInstr *> &LocalMIs);
     bool optimizeCondBranch(MachineInstr *MI);
     bool optimizeCopyOrBitcast(MachineInstr *MI);
     bool optimizeCoalescableCopy(MachineInstr *MI);
@@ -411,8 +412,7 @@ optimizeExtInstr(MachineInstr *MI, MachineBasicBlock *MBB,
 
   if (ExtendLife && !ExtendedUses.empty())
     // Extend the liveness of the extension result.
-    std::copy(ExtendedUses.begin(), ExtendedUses.end(),
-              std::back_inserter(Uses));
+    Uses.append(ExtendedUses.begin(), ExtendedUses.end());
 
   // Now replace all uses.
   bool Changed = false;
@@ -483,7 +483,8 @@ bool PeepholeOptimizer::optimizeCmpInstr(MachineInstr *MI,
 }
 
 /// Optimize a select instruction.
-bool PeepholeOptimizer::optimizeSelect(MachineInstr *MI) {
+bool PeepholeOptimizer::optimizeSelect(MachineInstr *MI,
+                            SmallPtrSetImpl<MachineInstr *> &LocalMIs) {
   unsigned TrueOp = 0;
   unsigned FalseOp = 0;
   bool Optimizable = false;
@@ -492,7 +493,7 @@ bool PeepholeOptimizer::optimizeSelect(MachineInstr *MI) {
     return false;
   if (!Optimizable)
     return false;
-  if (!TII->optimizeSelect(MI))
+  if (!TII->optimizeSelect(MI, LocalMIs))
     return false;
   MI->eraseFromParent();
   ++NumSelects;
@@ -915,7 +916,7 @@ bool PeepholeOptimizer::optimizeCoalescableCopy(MachineInstr *MI) {
   // => v0 = COPY v1
   // Currently we haven't seen motivating example for that and we
   // want to avoid untested code.
-  NumRewrittenCopies += Changed == true;
+  NumRewrittenCopies += Changed;
   return Changed;
 }
 
@@ -1052,28 +1053,34 @@ bool PeepholeOptimizer::foldImmediate(MachineInstr *MI, MachineBasicBlock *MBB,
   return false;
 }
 
-bool PeepholeOptimizer::runOnMachineFunction(MachineFunction &mf) {
-  if (skipOptnoneFunction(*mf.getFunction()))
+bool PeepholeOptimizer::runOnMachineFunction(MachineFunction &MF) {
+  if (skipOptnoneFunction(*MF.getFunction()))
     return false;
 
   DEBUG(dbgs() << "********** PEEPHOLE OPTIMIZER **********\n");
-  DEBUG(dbgs() << "********** Function: " << mf.getName() << '\n');
+  DEBUG(dbgs() << "********** Function: " << MF.getName() << '\n');
 
   if (DisablePeephole)
     return false;
 
-  MF = &mf;
-  TII = MF->getSubtarget().getInstrInfo();
-  TRI = MF->getSubtarget().getRegisterInfo();
-  MRI = &MF->getRegInfo();
+  TII = MF.getSubtarget().getInstrInfo();
+  TRI = MF.getSubtarget().getRegisterInfo();
+  MRI = &MF.getRegInfo();
   DT  = Aggressive ? &getAnalysis<MachineDominatorTree>() : nullptr;
 
   bool Changed = false;
 
-  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
 
     bool SeenMoveImm = false;
+
+    // During this forward scan, at some point it needs to answer the question
+    // "given a pointer to an MI in the current BB, is it located before or
+    // after the current instruction".
+    // To perform this, the following set keeps track of the MIs already seen
+    // during the scan, if a MI is not in the set, it is assumed to be located
+    // after. Newly created MIs have to be inserted in the set as well.
     SmallPtrSet<MachineInstr*, 16> LocalMIs;
     SmallSet<unsigned, 4> ImmDefRegs;
     DenseMap<unsigned, MachineInstr*> ImmDefMIs;
@@ -1104,7 +1111,7 @@ bool PeepholeOptimizer::runOnMachineFunction(MachineFunction &mf) {
       if ((isUncoalescableCopy(*MI) &&
            optimizeUncoalescableCopy(MI, LocalMIs)) ||
           (MI->isCompare() && optimizeCmpInstr(MI, MBB)) ||
-          (MI->isSelect() && optimizeSelect(MI))) {
+          (MI->isSelect() && optimizeSelect(MI, LocalMIs))) {
         // MI is deleted.
         LocalMIs.erase(MI);
         Changed = true;

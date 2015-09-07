@@ -13,7 +13,7 @@ using namespace llvm;
 
 void LEGMCAsmInfo::anchor() {}
 
-LEGMCAsmInfo::LEGMCAsmInfo(StringRef TT) {
+LEGMCAsmInfo::LEGMCAsmInfo(const Triple &TT) {
   SupportsDebugInformation = true;
   Data16bitsDirective = "\t.short\t";
   Data32bitsDirective = "\t.long\t";

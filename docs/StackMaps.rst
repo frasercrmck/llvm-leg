@@ -221,6 +221,11 @@ lowered according to the calling convention specified at the
 intrinsic's callsite. Variants of the intrinsic with non-void return
 type also return a value according to calling convention.
 
+On PowerPC, note that ``<target>`` must be the ABI function pointer for the
+intended target of the indirect call. Specifically, when compiling for the
+ELF V1 ABI, ``<target>`` is the function-descriptor address normally used as
+the C/C++ function-pointer representation.
+
 Requesting zero patch point arguments is valid. In this case, all
 variable operands are handled just like
 ``llvm.experimental.stackmap.*``. The difference is that space will

@@ -28,15 +28,17 @@ class ImportDirectoryEntryRef;
 class DelayImportDirectoryEntryRef;
 class ExportDirectoryEntryRef;
 class ImportedSymbolRef;
+class BaseRelocRef;
 typedef content_iterator<ImportDirectoryEntryRef> import_directory_iterator;
 typedef content_iterator<DelayImportDirectoryEntryRef>
     delay_import_directory_iterator;
 typedef content_iterator<ExportDirectoryEntryRef> export_directory_iterator;
 typedef content_iterator<ImportedSymbolRef> imported_symbol_iterator;
+typedef content_iterator<BaseRelocRef> base_reloc_iterator;
 
 /// The DOS compatible header at the front of all PE/COFF executables.
 struct dos_header {
-  support::ulittle16_t Magic;
+  char                 Magic[2];
   support::ulittle16_t UsedBytesInTheLastPage;
   support::ulittle16_t FileSizeInPages;
   support::ulittle16_t NumberOfRelocationItems;
@@ -110,12 +112,14 @@ struct pe32_header {
   support::ulittle32_t SizeOfHeaders;
   support::ulittle32_t CheckSum;
   support::ulittle16_t Subsystem;
+  // FIXME: This should be DllCharacteristics.
   support::ulittle16_t DLLCharacteristics;
   support::ulittle32_t SizeOfStackReserve;
   support::ulittle32_t SizeOfStackCommit;
   support::ulittle32_t SizeOfHeapReserve;
   support::ulittle32_t SizeOfHeapCommit;
   support::ulittle32_t LoaderFlags;
+  // FIXME: This should be NumberOfRvaAndSizes.
   support::ulittle32_t NumberOfRvaAndSize;
 };
 
@@ -245,6 +249,15 @@ struct coff_symbol {
 typedef coff_symbol<support::ulittle16_t> coff_symbol16;
 typedef coff_symbol<support::ulittle32_t> coff_symbol32;
 
+// Contains only common parts of coff_symbol16 and coff_symbol32.
+struct coff_symbol_generic {
+  union {
+    char ShortName[COFF::NameSize];
+    StringTableOffset Offset;
+  } Name;
+  support::ulittle32_t Value;
+};
+
 class COFFSymbolRef {
 public:
   COFFSymbolRef(const coff_symbol16 *CS) : CS16(CS), CS32(nullptr) {}
@@ -253,6 +266,12 @@ public:
 
   const void *getRawPtr() const {
     return CS16 ? static_cast<const void *>(CS16) : CS32;
+  }
+
+  const coff_symbol_generic *getGeneric() const {
+    if (CS16)
+      return reinterpret_cast<const coff_symbol_generic *>(CS16);
+    return reinterpret_cast<const coff_symbol_generic *>(CS32);
   }
 
   friend bool operator<(COFFSymbolRef A, COFFSymbolRef B) {
@@ -272,12 +291,14 @@ public:
   }
 
   const StringTableOffset &getStringTableOffset() const {
+    assert(isSet() && "COFFSymbolRef points to nothing!");
     return CS16 ? CS16->Name.Offset : CS32->Name.Offset;
   }
 
   uint32_t getValue() const { return CS16 ? CS16->Value : CS32->Value; }
 
   int32_t getSectionNumber() const {
+    assert(isSet() && "COFFSymbolRef points to nothing!");
     if (CS16) {
       // Reserved sections are returned as negative numbers.
       if (CS16->SectionNumber <= COFF::MaxNumberOfSections16)
@@ -287,23 +308,51 @@ public:
     return static_cast<int32_t>(CS32->SectionNumber);
   }
 
-  uint16_t getType() const { return CS16 ? CS16->Type : CS32->Type; }
+  uint16_t getType() const {
+    assert(isSet() && "COFFSymbolRef points to nothing!");
+    return CS16 ? CS16->Type : CS32->Type;
+  }
 
   uint8_t getStorageClass() const {
+    assert(isSet() && "COFFSymbolRef points to nothing!");
     return CS16 ? CS16->StorageClass : CS32->StorageClass;
   }
 
   uint8_t getNumberOfAuxSymbols() const {
+    assert(isSet() && "COFFSymbolRef points to nothing!");
     return CS16 ? CS16->NumberOfAuxSymbols : CS32->NumberOfAuxSymbols;
   }
 
   uint8_t getBaseType() const { return getType() & 0x0F; }
 
-  uint8_t getComplexType() const { return (getType() & 0xF0) >> 4; }
+  uint8_t getComplexType() const {
+    return (getType() & 0xF0) >> COFF::SCT_COMPLEX_TYPE_SHIFT;
+  }
+
+  bool isAbsolute() const {
+    return getSectionNumber() == -1;
+  }
+
+  bool isExternal() const {
+    return getStorageClass() == COFF::IMAGE_SYM_CLASS_EXTERNAL;
+  }
+
+  bool isCommon() const {
+    return isExternal() && getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED &&
+           getValue() != 0;
+  }
+
+  bool isUndefined() const {
+    return isExternal() && getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED &&
+           getValue() == 0;
+  }
+
+  bool isWeakExternal() const {
+    return getStorageClass() == COFF::IMAGE_SYM_CLASS_WEAK_EXTERNAL;
+  }
 
   bool isFunctionDefinition() const {
-    return getStorageClass() == COFF::IMAGE_SYM_CLASS_EXTERNAL &&
-           getBaseType() == COFF::IMAGE_SYM_TYPE_NULL &&
+    return isExternal() && getBaseType() == COFF::IMAGE_SYM_TYPE_NULL &&
            getComplexType() == COFF::IMAGE_SYM_DTYPE_FUNCTION &&
            !COFF::isReservedSectionNumber(getSectionNumber());
   }
@@ -312,14 +361,16 @@ public:
     return getStorageClass() == COFF::IMAGE_SYM_CLASS_FUNCTION;
   }
 
-  bool isWeakExternal() const {
-    return getStorageClass() == COFF::IMAGE_SYM_CLASS_WEAK_EXTERNAL ||
-           (getStorageClass() == COFF::IMAGE_SYM_CLASS_EXTERNAL &&
-            getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED && getValue() == 0);
+  bool isAnyUndefined() const {
+    return isUndefined() || isWeakExternal();
   }
 
   bool isFileRecord() const {
     return getStorageClass() == COFF::IMAGE_SYM_CLASS_FILE;
+  }
+
+  bool isSection() const {
+    return getStorageClass() == COFF::IMAGE_SYM_CLASS_SECTION;
   }
 
   bool isSectionDefinition() const {
@@ -329,6 +380,8 @@ public:
         getStorageClass() == COFF::IMAGE_SYM_CLASS_EXTERNAL &&
         getSectionNumber() == COFF::IMAGE_SYM_ABSOLUTE;
     bool isOrdinarySection = getStorageClass() == COFF::IMAGE_SYM_CLASS_STATIC;
+    if (!getNumberOfAuxSymbols())
+      return false;
     return isAppdomainGlobal || isOrdinarySection;
   }
 
@@ -337,6 +390,8 @@ public:
   }
 
 private:
+  bool isSet() const { return CS16 || CS32; }
+
   const coff_symbol16 *CS16;
   const coff_symbol32 *CS32;
 };
@@ -356,9 +411,9 @@ struct coff_section {
   // Returns true if the actual number of relocations is stored in
   // VirtualAddress field of the first relocation table entry.
   bool hasExtendedRelocations() const {
-    return Characteristics & COFF::IMAGE_SCN_LNK_NRELOC_OVFL &&
-        NumberOfRelocations == UINT16_MAX;
-  };
+    return (Characteristics & COFF::IMAGE_SCN_LNK_NRELOC_OVFL) &&
+           NumberOfRelocations == UINT16_MAX;
+  }
 };
 
 struct coff_relocation {
@@ -409,6 +464,27 @@ struct coff_aux_clr_token {
   support::ulittle32_t SymbolTableIndex;
 };
 
+struct coff_import_header {
+  support::ulittle16_t Sig1;
+  support::ulittle16_t Sig2;
+  support::ulittle16_t Version;
+  support::ulittle16_t Machine;
+  support::ulittle32_t TimeDateStamp;
+  support::ulittle32_t SizeOfData;
+  support::ulittle16_t OrdinalHint;
+  support::ulittle16_t TypeInfo;
+  int getType() const { return TypeInfo & 0x3; }
+  int getNameType() const { return (TypeInfo >> 2) & 0x7; }
+};
+
+struct coff_import_directory_table_entry {
+  support::ulittle32_t ImportLookupTableRVA;
+  support::ulittle32_t TimeDateStamp;
+  support::ulittle32_t ForwarderChain;
+  support::ulittle32_t NameRVA;
+  support::ulittle32_t ImportAddressTableRVA;
+};
+
 struct coff_load_configuration32 {
   support::ulittle32_t Characteristics;
   support::ulittle32_t TimeDateStamp;
@@ -432,10 +508,44 @@ struct coff_load_configuration32 {
   support::ulittle32_t SEHandlerCount;
 };
 
+struct coff_load_configuration64 {
+  support::ulittle32_t Characteristics;
+  support::ulittle32_t TimeDateStamp;
+  support::ulittle16_t MajorVersion;
+  support::ulittle16_t MinorVersion;
+  support::ulittle32_t GlobalFlagsClear;
+  support::ulittle32_t GlobalFlagsSet;
+  support::ulittle32_t CriticalSectionDefaultTimeout;
+  support::ulittle32_t DeCommitFreeBlockThreshold;
+  support::ulittle32_t DeCommitTotalFreeThreshold;
+  support::ulittle32_t LockPrefixTable;
+  support::ulittle32_t MaximumAllocationSize;
+  support::ulittle32_t VirtualMemoryThreshold;
+  support::ulittle32_t ProcessAffinityMask;
+  support::ulittle32_t ProcessHeapFlags;
+  support::ulittle16_t CSDVersion;
+  support::ulittle16_t Reserved;
+  support::ulittle32_t EditList;
+  support::ulittle64_t SecurityCookie;
+  support::ulittle64_t SEHandlerTable;
+  support::ulittle64_t SEHandlerCount;
+};
+
 struct coff_runtime_function_x64 {
   support::ulittle32_t BeginAddress;
   support::ulittle32_t EndAddress;
   support::ulittle32_t UnwindInformation;
+};
+
+struct coff_base_reloc_block_header {
+  support::ulittle32_t PageRVA;
+  support::ulittle32_t BlockSize;
+};
+
+struct coff_base_reloc_block_entry {
+  support::ulittle16_t Data;
+  int getType() const { return Data >> 12; }
+  int getOffset() const { return Data & ((1 << 12) - 1); }
 };
 
 class COFFObjectFile : public ObjectFile {
@@ -457,6 +567,8 @@ private:
   const delay_import_directory_table_entry *DelayImportDirectory;
   uint32_t NumberOfDelayImportDirectory;
   const export_directory_table_entry *ExportDirectory;
+  const coff_base_reloc_block_header *BaseRelocHeader;
+  const coff_base_reloc_block_header *BaseRelocEnd;
 
   std::error_code getString(uint32_t offset, StringRef &Res) const;
 
@@ -469,6 +581,7 @@ private:
   std::error_code initImportTablePtr();
   std::error_code initDelayImportTablePtr();
   std::error_code initExportTablePtr();
+  std::error_code initBaseRelocPtr();
 
 public:
   uintptr_t getSymbolTable() const {
@@ -487,7 +600,8 @@ public:
   }
   uint16_t getSizeOfOptionalHeader() const {
     if (COFFHeader)
-      return COFFHeader->SizeOfOptionalHeader;
+      return COFFHeader->isImportLibrary() ? 0
+                                           : COFFHeader->SizeOfOptionalHeader;
     // bigobj doesn't have this field.
     if (COFFBigObjHeader)
       return 0;
@@ -495,7 +609,7 @@ public:
   }
   uint16_t getCharacteristics() const {
     if (COFFHeader)
-      return COFFHeader->Characteristics;
+      return COFFHeader->isImportLibrary() ? 0 : COFFHeader->Characteristics;
     // bigobj doesn't have characteristics to speak of,
     // editbin will silently lie to you if you attempt to set any.
     if (COFFBigObjHeader)
@@ -511,35 +625,34 @@ public:
   }
   uint32_t getNumberOfSections() const {
     if (COFFHeader)
-      return COFFHeader->NumberOfSections;
+      return COFFHeader->isImportLibrary() ? 0 : COFFHeader->NumberOfSections;
     if (COFFBigObjHeader)
       return COFFBigObjHeader->NumberOfSections;
     llvm_unreachable("no COFF header!");
   }
   uint32_t getPointerToSymbolTable() const {
     if (COFFHeader)
-      return COFFHeader->PointerToSymbolTable;
+      return COFFHeader->isImportLibrary() ? 0
+                                           : COFFHeader->PointerToSymbolTable;
     if (COFFBigObjHeader)
       return COFFBigObjHeader->PointerToSymbolTable;
     llvm_unreachable("no COFF header!");
   }
   uint32_t getNumberOfSymbols() const {
     if (COFFHeader)
-      return COFFHeader->NumberOfSymbols;
+      return COFFHeader->isImportLibrary() ? 0 : COFFHeader->NumberOfSymbols;
     if (COFFBigObjHeader)
       return COFFBigObjHeader->NumberOfSymbols;
     llvm_unreachable("no COFF header!");
   }
 protected:
   void moveSymbolNext(DataRefImpl &Symb) const override;
-  std::error_code getSymbolName(DataRefImpl Symb,
-                                StringRef &Res) const override;
-  std::error_code getSymbolAddress(DataRefImpl Symb,
-                                   uint64_t &Res) const override;
-  std::error_code getSymbolSize(DataRefImpl Symb, uint64_t &Res) const override;
+  ErrorOr<StringRef> getSymbolName(DataRefImpl Symb) const override;
+  ErrorOr<uint64_t> getSymbolAddress(DataRefImpl Symb) const override;
+  uint64_t getSymbolValueImpl(DataRefImpl Symb) const override;
+  uint64_t getCommonSymbolSizeImpl(DataRefImpl Symb) const override;
   uint32_t getSymbolFlags(DataRefImpl Symb) const override;
-  std::error_code getSymbolType(DataRefImpl Symb,
-                                SymbolRef::Type &Res) const override;
+  SymbolRef::Type getSymbolType(DataRefImpl Symb) const override;
   std::error_code getSymbolSection(DataRefImpl Symb,
                                    section_iterator &Res) const override;
   void moveSectionNext(DataRefImpl &Sec) const override;
@@ -554,27 +667,15 @@ protected:
   bool isSectionData(DataRefImpl Sec) const override;
   bool isSectionBSS(DataRefImpl Sec) const override;
   bool isSectionVirtual(DataRefImpl Sec) const override;
-  bool isSectionZeroInit(DataRefImpl Sec) const override;
-  bool isSectionReadOnlyData(DataRefImpl Sec) const override;
-  bool isSectionRequiredForExecution(DataRefImpl Sec) const override;
-  bool sectionContainsSymbol(DataRefImpl Sec, DataRefImpl Symb) const override;
   relocation_iterator section_rel_begin(DataRefImpl Sec) const override;
   relocation_iterator section_rel_end(DataRefImpl Sec) const override;
 
   void moveRelocationNext(DataRefImpl &Rel) const override;
-  std::error_code getRelocationAddress(DataRefImpl Rel,
-                                       uint64_t &Res) const override;
-  std::error_code getRelocationOffset(DataRefImpl Rel,
-                                      uint64_t &Res) const override;
+  uint64_t getRelocationOffset(DataRefImpl Rel) const override;
   symbol_iterator getRelocationSymbol(DataRefImpl Rel) const override;
-  std::error_code getRelocationType(DataRefImpl Rel,
-                                    uint64_t &Res) const override;
-  std::error_code
-  getRelocationTypeName(DataRefImpl Rel,
-                        SmallVectorImpl<char> &Result) const override;
-  std::error_code
-  getRelocationValueString(DataRefImpl Rel,
-                           SmallVectorImpl<char> &Result) const override;
+  uint64_t getRelocationType(DataRefImpl Rel) const override;
+  void getRelocationTypeName(DataRefImpl Rel,
+                             SmallVectorImpl<char> &Result) const override;
 
 public:
   COFFObjectFile(MemoryBufferRef Object, std::error_code &EC);
@@ -587,6 +688,8 @@ public:
   COFFSymbolRef getCOFFSymbol(const DataRefImpl &Ref) const;
   COFFSymbolRef getCOFFSymbol(const SymbolRef &Symbol) const;
   const coff_relocation *getCOFFRelocation(const RelocationRef &Reloc) const;
+  unsigned getSectionID(SectionRef Sec) const;
+  unsigned getSymbolSectionID(SymbolRef Sym) const;
 
   uint8_t getBytesInAddress() const override;
   StringRef getFileFormatName() const override;
@@ -598,12 +701,20 @@ public:
   delay_import_directory_iterator delay_import_directory_end() const;
   export_directory_iterator export_directory_begin() const;
   export_directory_iterator export_directory_end() const;
+  base_reloc_iterator base_reloc_begin() const;
+  base_reloc_iterator base_reloc_end() const;
 
   iterator_range<import_directory_iterator> import_directories() const;
   iterator_range<delay_import_directory_iterator>
       delay_import_directories() const;
   iterator_range<export_directory_iterator> export_directories() const;
+  iterator_range<base_reloc_iterator> base_relocs() const;
 
+  const dos_header *getDOSHeader() const {
+    if (!PE32Header && !PE32PlusHeader)
+      return nullptr;
+    return reinterpret_cast<const dos_header *>(base());
+  }
   std::error_code getPE32Header(const pe32_header *&Res) const;
   std::error_code getPE32PlusHeader(const pe32plus_header *&Res) const;
   std::error_code getDataDirectory(uint32_t index,
@@ -616,7 +727,7 @@ public:
       return object_error::parse_failed;
 
     Res = reinterpret_cast<coff_symbol_type *>(getSymbolTable()) + Index;
-    return object_error::success;
+    return std::error_code();
   }
   ErrorOr<COFFSymbolRef> getSymbol(uint32_t index) const {
     if (SymbolTable16) {
@@ -631,7 +742,7 @@ public:
         return EC;
       return COFFSymbolRef(Symb);
     }
-    llvm_unreachable("no symbol table pointer!");
+    return object_error::parse_failed;
   }
   template <typename T>
   std::error_code getAuxSymbol(uint32_t index, const T *&Res) const {
@@ -639,9 +750,11 @@ public:
     if (std::error_code EC = s.getError())
       return EC;
     Res = reinterpret_cast<const T *>(s->getRawPtr());
-    return object_error::success;
+    return std::error_code();
   }
   std::error_code getSymbolName(COFFSymbolRef Symbol, StringRef &Res) const;
+  std::error_code getSymbolName(const coff_symbol_generic *Symbol,
+                                StringRef &Res) const;
 
   ArrayRef<uint8_t> getSymbolAuxData(COFFSymbolRef Symbol) const;
 
@@ -652,6 +765,9 @@ public:
       return sizeof(coff_symbol32);
     llvm_unreachable("null symbol table pointer!");
   }
+
+  iterator_range<const coff_relocation *>
+  getRelocations(const coff_section *Sec) const;
 
   std::error_code getSectionName(const coff_section *Sec, StringRef &Res) const;
   uint64_t getSectionSize(const coff_section *Sec) const;
@@ -664,6 +780,7 @@ public:
                               StringRef &Name) const;
 
   bool isRelocatableObject() const override;
+  bool is64() const { return PE32PlusHeader; }
 
   static inline bool classof(const Binary *v) { return v->isCOFF(); }
 };
@@ -716,6 +833,7 @@ public:
   std::error_code getName(StringRef &Result) const;
   std::error_code getDelayImportTable(
       const delay_import_directory_table_entry *&Result) const;
+  std::error_code getImportAddress(int AddrIndex, uint64_t &Result) const;
 
 private:
   const delay_import_directory_table_entry *Table;
@@ -768,6 +886,26 @@ private:
   uint32_t Index;
   const COFFObjectFile *OwningObject;
 };
+
+class BaseRelocRef {
+public:
+  BaseRelocRef() : OwningObject(nullptr) {}
+  BaseRelocRef(const coff_base_reloc_block_header *Header,
+               const COFFObjectFile *Owner)
+      : Header(Header), Index(0), OwningObject(Owner) {}
+
+  bool operator==(const BaseRelocRef &Other) const;
+  void moveNext();
+
+  std::error_code getType(uint8_t &Type) const;
+  std::error_code getRVA(uint32_t &Result) const;
+
+private:
+  const coff_base_reloc_block_header *Header;
+  uint32_t Index;
+  const COFFObjectFile *OwningObject;
+};
+
 } // end namespace object
 } // end namespace llvm
 

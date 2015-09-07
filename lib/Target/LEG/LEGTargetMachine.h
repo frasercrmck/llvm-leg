@@ -27,18 +27,28 @@ namespace llvm {
 
 class LEGTargetMachine : public LLVMTargetMachine {
   LEGSubtarget Subtarget;
+  std::unique_ptr<TargetLoweringObjectFile> TLOF;
 
 public:
-  LEGTargetMachine(const Target &T, StringRef TT, StringRef CPU, StringRef FS,
-                   const TargetOptions &Options, Reloc::Model RM,
+  LEGTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
+                   StringRef FS, const TargetOptions &Options, Reloc::Model RM,
                    CodeModel::Model CM, CodeGenOpt::Level OL);
-
-  virtual const LEGSubtarget *getSubtargetImpl() const { return &Subtarget; }
+  
+  const LEGSubtarget * getSubtargetImpl() const {
+    return &Subtarget;
+  }
+  
+  virtual const TargetSubtargetInfo *
+  getSubtargetImpl(const Function &) const override {
+    return &Subtarget;
+  }
 
   // Pass Pipeline Configuration
-  virtual TargetPassConfig *createPassConfig(PassManagerBase &PM);
-
-  virtual void addAnalysisPasses(PassManagerBase &PM);
+  virtual TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+  
+  TargetLoweringObjectFile *getObjFileLowering() const override {
+    return TLOF.get();
+  }
 };
 
 } // end namespace llvm

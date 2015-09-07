@@ -158,7 +158,7 @@ public:
   ELFLEGAsmBackend(const Target &T, const StringRef TT, uint8_t _OSABI)
       : LEGAsmBackend(T, TT), OSABI(_OSABI) {}
 
-  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
     return createLEGELFObjectWriter(OS, OSABI);
   }
 };
@@ -167,8 +167,7 @@ public:
 
 MCAsmBackend *llvm::createLEGAsmBackend(const Target &T,
                                         const MCRegisterInfo &MRI,
-                                        StringRef TT, StringRef CPU) {
-  Triple TheTriple(TT);
-  const uint8_t ABI = MCELFObjectTargetWriter::getOSABI(Triple(TT).getOS());
-  return new ELFLEGAsmBackend(T, TT, ABI);
+                                        const Triple &TT, StringRef CPU) {
+  const uint8_t ABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());
+  return new ELFLEGAsmBackend(T, TT.getTriple(), ABI);
 }

@@ -22,8 +22,9 @@ public:
 
   typedef uint32_t TargetPtrT;
 
-  RuntimeDyldMachOI386(RTDyldMemoryManager *MM)
-      : RuntimeDyldMachOCRTPBase(MM) {}
+  RuntimeDyldMachOI386(RuntimeDyld::MemoryManager &MM,
+                       RuntimeDyld::SymbolResolver &Resolver)
+      : RuntimeDyldMachOCRTPBase(MM, Resolver) {}
 
   unsigned getMaxStubSize() override { return 0; }
 
@@ -31,10 +32,11 @@ public:
 
   relocation_iterator
   processRelocationRef(unsigned SectionID, relocation_iterator RelI,
-                       ObjectImage &ObjImg, ObjSectionToIDMap &ObjSectionToID,
-                       const SymbolTableMap &Symbols, StubMap &Stubs) override {
+                       const ObjectFile &BaseObjT,
+                       ObjSectionToIDMap &ObjSectionToID,
+                       StubMap &Stubs) override {
     const MachOObjectFile &Obj =
-        static_cast<const MachOObjectFile &>(*ObjImg.getObjectFile());
+        static_cast<const MachOObjectFile &>(BaseObjT);
     MachO::any_relocation_info RelInfo =
         Obj.getRelocation(RelI->getRawDataRefImpl());
     uint32_t RelType = Obj.getAnyRelocationType(RelInfo);
@@ -42,18 +44,18 @@ public:
     if (Obj.isRelocationScattered(RelInfo)) {
       if (RelType == MachO::GENERIC_RELOC_SECTDIFF ||
           RelType == MachO::GENERIC_RELOC_LOCAL_SECTDIFF)
-        return processSECTDIFFRelocation(SectionID, RelI, ObjImg,
+        return processSECTDIFFRelocation(SectionID, RelI, Obj,
                                          ObjSectionToID);
       else if (RelType == MachO::GENERIC_RELOC_VANILLA)
-        return processI386ScatteredVANILLA(SectionID, RelI, ObjImg,
+        return processI386ScatteredVANILLA(SectionID, RelI, Obj,
                                            ObjSectionToID);
       llvm_unreachable("Unhandled scattered relocation.");
     }
 
-    RelocationEntry RE(getRelocationEntry(SectionID, ObjImg, RelI));
+    RelocationEntry RE(getRelocationEntry(SectionID, Obj, RelI));
     RE.Addend = memcpyAddend(RE);
     RelocationValueRef Value(
-        getRelocationValueRef(ObjImg, RelI, RE, ObjSectionToID, Symbols));
+        getRelocationValueRef(Obj, RelI, RE, ObjSectionToID));
 
     // Addends for external, PC-rel relocations on i386 point back to the zero
     // offset. Calculate the final offset from the relocation target instead.
@@ -66,7 +68,7 @@ public:
     //   Value.Addend += RelocAddr + 4;
     // }
     if (RE.IsPCRel)
-      makeValueAddendPCRel(Value, ObjImg, RelI, 1 << RE.Size);
+      makeValueAddendPCRel(Value, RelI, 1 << RE.Size);
 
     RE.Addend = Value.Offset;
 
@@ -110,47 +112,44 @@ public:
     }
   }
 
-  void finalizeSection(ObjectImage &ObjImg, unsigned SectionID,
+  void finalizeSection(const ObjectFile &Obj, unsigned SectionID,
                        const SectionRef &Section) {
     StringRef Name;
     Section.getName(Name);
 
     if (Name == "__jump_table")
-      populateJumpTable(cast<MachOObjectFile>(*ObjImg.getObjectFile()), Section,
-                        SectionID);
+      populateJumpTable(cast<MachOObjectFile>(Obj), Section, SectionID);
     else if (Name == "__pointers")
-      populateIndirectSymbolPointersSection(
-                                 cast<MachOObjectFile>(*ObjImg.getObjectFile()),
-                                 Section, SectionID);
+      populateIndirectSymbolPointersSection(cast<MachOObjectFile>(Obj),
+                                            Section, SectionID);
   }
 
 private:
   relocation_iterator
   processSECTDIFFRelocation(unsigned SectionID, relocation_iterator RelI,
-                            ObjectImage &Obj,
+                            const ObjectFile &BaseObjT,
                             ObjSectionToIDMap &ObjSectionToID) {
-    const MachOObjectFile *MachO =
-        static_cast<const MachOObjectFile *>(Obj.getObjectFile());
+    const MachOObjectFile &Obj =
+        static_cast<const MachOObjectFile&>(BaseObjT);
     MachO::any_relocation_info RE =
-        MachO->getRelocation(RelI->getRawDataRefImpl());
+        Obj.getRelocation(RelI->getRawDataRefImpl());
 
     SectionEntry &Section = Sections[SectionID];
-    uint32_t RelocType = MachO->getAnyRelocationType(RE);
-    bool IsPCRel = MachO->getAnyRelocationPCRel(RE);
-    unsigned Size = MachO->getAnyRelocationLength(RE);
-    uint64_t Offset;
-    RelI->getOffset(Offset);
+    uint32_t RelocType = Obj.getAnyRelocationType(RE);
+    bool IsPCRel = Obj.getAnyRelocationPCRel(RE);
+    unsigned Size = Obj.getAnyRelocationLength(RE);
+    uint64_t Offset = RelI->getOffset();
     uint8_t *LocalAddress = Section.Address + Offset;
     unsigned NumBytes = 1 << Size;
     uint64_t Addend = readBytesUnaligned(LocalAddress, NumBytes);
 
     ++RelI;
     MachO::any_relocation_info RE2 =
-        MachO->getRelocation(RelI->getRawDataRefImpl());
+        Obj.getRelocation(RelI->getRawDataRefImpl());
 
-    uint32_t AddrA = MachO->getScatteredRelocationValue(RE);
-    section_iterator SAI = getSectionByAddress(*MachO, AddrA);
-    assert(SAI != MachO->section_end() && "Can't find section for address A");
+    uint32_t AddrA = Obj.getScatteredRelocationValue(RE);
+    section_iterator SAI = getSectionByAddress(Obj, AddrA);
+    assert(SAI != Obj.section_end() && "Can't find section for address A");
     uint64_t SectionABase = SAI->getAddress();
     uint64_t SectionAOffset = AddrA - SectionABase;
     SectionRef SectionA = *SAI;
@@ -158,54 +157,53 @@ private:
     uint32_t SectionAID =
         findOrEmitSection(Obj, SectionA, IsCode, ObjSectionToID);
 
-    uint32_t AddrB = MachO->getScatteredRelocationValue(RE2);
-    section_iterator SBI = getSectionByAddress(*MachO, AddrB);
-    assert(SBI != MachO->section_end() && "Can't find section for address B");
+    uint32_t AddrB = Obj.getScatteredRelocationValue(RE2);
+    section_iterator SBI = getSectionByAddress(Obj, AddrB);
+    assert(SBI != Obj.section_end() && "Can't find section for address B");
     uint64_t SectionBBase = SBI->getAddress();
     uint64_t SectionBOffset = AddrB - SectionBBase;
     SectionRef SectionB = *SBI;
     uint32_t SectionBID =
         findOrEmitSection(Obj, SectionB, IsCode, ObjSectionToID);
 
-    if (Addend != AddrA - AddrB)
-      Error("Unexpected SECTDIFF relocation addend.");
+    // Compute the addend 'C' from the original expression 'A - B + C'.
+    Addend -= AddrA - AddrB;
 
     DEBUG(dbgs() << "Found SECTDIFF: AddrA: " << AddrA << ", AddrB: " << AddrB
                  << ", Addend: " << Addend << ", SectionA ID: " << SectionAID
                  << ", SectionAOffset: " << SectionAOffset
                  << ", SectionB ID: " << SectionBID
                  << ", SectionBOffset: " << SectionBOffset << "\n");
-    RelocationEntry R(SectionID, Offset, RelocType, 0, SectionAID,
-                      SectionAOffset, SectionBID, SectionBOffset, IsPCRel,
-                      Size);
+    RelocationEntry R(SectionID, Offset, RelocType, Addend, SectionAID,
+                      SectionAOffset, SectionBID, SectionBOffset,
+                      IsPCRel, Size);
 
     addRelocationForSection(R, SectionAID);
-    addRelocationForSection(R, SectionBID);
 
     return ++RelI;
   }
 
   relocation_iterator processI386ScatteredVANILLA(
-      unsigned SectionID, relocation_iterator RelI, ObjectImage &Obj,
+      unsigned SectionID, relocation_iterator RelI,
+      const ObjectFile &BaseObjT,
       RuntimeDyldMachO::ObjSectionToIDMap &ObjSectionToID) {
-    const MachOObjectFile *MachO =
-        static_cast<const MachOObjectFile *>(Obj.getObjectFile());
+    const MachOObjectFile &Obj =
+        static_cast<const MachOObjectFile&>(BaseObjT);
     MachO::any_relocation_info RE =
-        MachO->getRelocation(RelI->getRawDataRefImpl());
+        Obj.getRelocation(RelI->getRawDataRefImpl());
 
     SectionEntry &Section = Sections[SectionID];
-    uint32_t RelocType = MachO->getAnyRelocationType(RE);
-    bool IsPCRel = MachO->getAnyRelocationPCRel(RE);
-    unsigned Size = MachO->getAnyRelocationLength(RE);
-    uint64_t Offset;
-    RelI->getOffset(Offset);
+    uint32_t RelocType = Obj.getAnyRelocationType(RE);
+    bool IsPCRel = Obj.getAnyRelocationPCRel(RE);
+    unsigned Size = Obj.getAnyRelocationLength(RE);
+    uint64_t Offset = RelI->getOffset();
     uint8_t *LocalAddress = Section.Address + Offset;
     unsigned NumBytes = 1 << Size;
     int64_t Addend = readBytesUnaligned(LocalAddress, NumBytes);
 
-    unsigned SymbolBaseAddr = MachO->getScatteredRelocationValue(RE);
-    section_iterator TargetSI = getSectionByAddress(*MachO, SymbolBaseAddr);
-    assert(TargetSI != MachO->section_end() && "Can't find section for symbol");
+    unsigned SymbolBaseAddr = Obj.getScatteredRelocationValue(RE);
+    section_iterator TargetSI = getSectionByAddress(Obj, SymbolBaseAddr);
+    assert(TargetSI != Obj.section_end() && "Can't find section for symbol");
     uint64_t SectionBaseAddr = TargetSI->getAddress();
     SectionRef TargetSection = *TargetSI;
     bool IsCode = TargetSection.isText();
@@ -221,7 +219,7 @@ private:
   }
 
   // Populate stubs in __jump_table section.
-  void populateJumpTable(MachOObjectFile &Obj, const SectionRef &JTSection,
+  void populateJumpTable(const MachOObjectFile &Obj, const SectionRef &JTSection,
                          unsigned JTSectionID) {
     assert(!Obj.is64Bit() &&
            "__jump_table section not supported in 64-bit MachO.");
@@ -242,13 +240,14 @@ private:
       unsigned SymbolIndex =
           Obj.getIndirectSymbolTableEntry(DySymTabCmd, FirstIndirectSymbol + i);
       symbol_iterator SI = Obj.getSymbolByIndex(SymbolIndex);
-      StringRef IndirectSymbolName;
-      SI->getName(IndirectSymbolName);
+      ErrorOr<StringRef> IndirectSymbolName = SI->getName();
+      if (std::error_code EC = IndirectSymbolName.getError())
+        report_fatal_error(EC.message());
       uint8_t *JTEntryAddr = JTSectionAddr + JTEntryOffset;
       createStubFunction(JTEntryAddr);
       RelocationEntry RE(JTSectionID, JTEntryOffset + 1,
                          MachO::GENERIC_RELOC_VANILLA, 0, true, 2);
-      addRelocationForSymbol(RE, IndirectSymbolName);
+      addRelocationForSymbol(RE, *IndirectSymbolName);
       JTEntryOffset += JTEntrySize;
     }
   }

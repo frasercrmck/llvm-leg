@@ -30,7 +30,7 @@ void LEGInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
 }
 
 void LEGInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                               StringRef Annot) {
+                               StringRef Annot, const MCSubtargetInfo &STI) {
   printInstruction(MI, O);
   printAnnotation(O, Annot);
 }

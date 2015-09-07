@@ -84,10 +84,10 @@ static unsigned materializeOffset(MachineFunction &MF, MachineBasicBlock &MBB,
   }
 }
 
-void LEGFrameLowering::emitPrologue(MachineFunction &MF) const {
+void LEGFrameLowering::emitPrologue(MachineFunction &MF,
+                                    MachineBasicBlock &MBB) const {
   // Compute the stack size, to determine if we need a prologue at all.
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  MachineBasicBlock &MBB = MF.front();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   uint64_t StackSize = computeStackSize(MF);

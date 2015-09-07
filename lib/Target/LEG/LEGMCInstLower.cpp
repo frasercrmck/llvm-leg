@@ -78,18 +78,18 @@ MCOperand LEGMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
       Kind = MCSymbolRefExpr::VK_LEG_HI;
       break;
   }
-  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, Kind, *Ctx);
+  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Symbol, Kind, *Ctx);
 
   if (!Offset) {
-    return MCOperand::CreateExpr(MCSym);
+    return MCOperand::createExpr(MCSym);
   }
 
   // Assume offset is never negative.
   assert(Offset > 0);
 
-  const MCConstantExpr *OffsetExpr = MCConstantExpr::Create(Offset, *Ctx);
-  const MCBinaryExpr *Add = MCBinaryExpr::CreateAdd(MCSym, OffsetExpr, *Ctx);
-  return MCOperand::CreateExpr(Add);
+  const MCConstantExpr *OffsetExpr = MCConstantExpr::create(Offset, *Ctx);
+  const MCBinaryExpr *Add = MCBinaryExpr::createAdd(MCSym, OffsetExpr, *Ctx);
+  return MCOperand::createExpr(Add);
 }
 
 MCOperand LEGMCInstLower::LowerOperand(const MachineOperand &MO,
@@ -104,9 +104,9 @@ MCOperand LEGMCInstLower::LowerOperand(const MachineOperand &MO,
     if (MO.isImplicit()) {
       break;
     }
-    return MCOperand::CreateReg(MO.getReg());
+    return MCOperand::createReg(MO.getReg());
   case MachineOperand::MO_Immediate:
-    return MCOperand::CreateImm(MO.getImm() + offset);
+    return MCOperand::createImm(MO.getImm() + offset);
   case MachineOperand::MO_MachineBasicBlock:
   case MachineOperand::MO_GlobalAddress:
   case MachineOperand::MO_ExternalSymbol:

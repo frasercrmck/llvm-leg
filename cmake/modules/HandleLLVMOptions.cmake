@@ -2,6 +2,10 @@
 # options and executing the appropriate CMake commands to realize the users'
 # selections.
 
+# This is commonly needed so make sure it's defined before we include anything
+# else.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" uppercase_CMAKE_BUILD_TYPE)
+
 include(HandleLLVMStdlib)
 include(AddLLVMDefinitions)
 include(CheckCCompilerFlag)
@@ -17,11 +21,16 @@ if(NOT LLVM_FORCE_USE_OLD_TOOLCHAIN)
       message(FATAL_ERROR "Host Clang version must be at least 3.1!")
     endif()
 
-    # Also test that we aren't using too old of a version of libstdc++ with the
-    # Clang compiler. This is tricky as there is no real way to check the
-    # version of libstdc++ directly. Instead we test for a known bug in
-    # libstdc++4.6 that is fixed in libstdc++4.7.
-    if(NOT LLVM_ENABLE_LIBCXX)
+    if (CMAKE_CXX_SIMULATE_ID MATCHES "MSVC")
+      if (CMAKE_CXX_SIMULATE_VERSION VERSION_LESS 18.0)
+        message(FATAL_ERROR "Host Clang must have at least -fms-compatibility-version=18.0")
+      endif()
+      set(CLANG_CL 1)
+    elseif(NOT LLVM_ENABLE_LIBCXX)
+      # Otherwise, test that we aren't using too old of a version of libstdc++
+      # with the Clang compiler. This is tricky as there is no real way to
+      # check the version of libstdc++ directly. Instead we test for a known
+      # bug in libstdc++4.6 that is fixed in libstdc++4.7.
       set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
       set(OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
       set(CMAKE_REQUIRED_FLAGS "-std=c++0x")
@@ -37,8 +46,11 @@ int main() { return (float)x; }"
       set(CMAKE_REQUIRED_LIBRARIES ${OLD_CMAKE_REQUIRED_LIBRARIES})
     endif()
   elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17.0)
-      message(FATAL_ERROR "Host Visual Studio must be at least 2012 (MSVC 17.0)")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 18.0)
+      message(FATAL_ERROR "Host Visual Studio must be at least 2013")
+    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 18.0.31101)
+      message(WARNING "Host Visual Studio should at least be 2013 Update 4 (MSVC 18.0.31101)"
+        "  due to miscompiles from earlier versions")
     endif()
   endif()
 endif()
@@ -66,6 +78,23 @@ if( LLVM_ENABLE_ASSERTIONS )
   endif()
 endif()
 
+string(TOUPPER "${LLVM_ABI_BREAKING_CHECKS}" uppercase_LLVM_ABI_BREAKING_CHECKS)
+
+if( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "WITH_ASSERTS" )
+  if( LLVM_ENABLE_ASSERTIONS )
+    set( LLVM_ENABLE_ABI_BREAKING_CHECKS 1 )
+  endif()
+elseif( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "FORCE_ON" )
+  set( LLVM_ENABLE_ABI_BREAKING_CHECKS 1 )
+elseif( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "FORCE_OFF" )
+  # We don't need to do anything special to turn off ABI breaking checks.
+elseif( NOT DEFINED LLVM_ABI_BREAKING_CHECKS )
+  # Treat LLVM_ABI_BREAKING_CHECKS like "FORCE_OFF" when it has not been
+  # defined.
+else()
+  message(FATAL_ERROR "Unknown value for LLVM_ABI_BREAKING_CHECKS: \"${LLVM_ABI_BREAKING_CHECKS}\"!")
+endif()
+
 if(WIN32)
   set(LLVM_HAVE_LINK_VERSION_SCRIPT 0)
   if(CYGWIN)
@@ -75,8 +104,6 @@ if(WIN32)
     set(LLVM_ON_WIN32 1)
     set(LLVM_ON_UNIX 0)
   endif(CYGWIN)
-  # Maximum path length is 160 for non-unicode paths
-  set(MAXPATHLEN 160)
 else(WIN32)
   if(UNIX)
     set(LLVM_ON_WIN32 0)
@@ -86,8 +113,6 @@ else(WIN32)
     else(APPLE)
       set(LLVM_HAVE_LINK_VERSION_SCRIPT 1)
     endif(APPLE)
-    # FIXME: Maximum path length is currently set to 'safe' fixed value
-    set(MAXPATHLEN 2024)
   else(UNIX)
     MESSAGE(SEND_ERROR "Unable to determine platform")
   endif(UNIX)
@@ -103,6 +128,15 @@ if(APPLE)
   # Darwin-specific linker flags for loadable modules.
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-flat_namespace -Wl,-undefined -Wl,suppress")
 endif()
+
+# Pass -Wl,-z,defs. This makes sure all symbols are defined. Otherwise a DSO
+# build might work on ELF but fail on MachO/COFF.
+if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Darwin" OR WIN32 OR CYGWIN OR
+        ${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD") AND
+   NOT LLVM_USE_SANITIZER)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,defs")
+endif()
+
 
 function(append value)
   foreach(variable ${ARGN})
@@ -166,6 +200,10 @@ if( CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT WIN32 )
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -m32")
   endif( LLVM_BUILD_32_BITS )
 endif( CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT WIN32 )
+
+if (LLVM_BUILD_STATIC)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+endif()
 
 if( XCODE )
   # For Xcode enable several build settings that correspond to
@@ -232,7 +270,9 @@ if( MSVC )
     -D_CRT_NONSTDC_NO_WARNINGS
     -D_SCL_SECURE_NO_DEPRECATE
     -D_SCL_SECURE_NO_WARNINGS
+    )
 
+  set(msvc_warning_flags
     # Disabled warnings.
     -wd4146 # Suppress 'unary minus operator applied to unsigned type, result still unsigned'
     -wd4180 # Suppress 'qualifier applied to function type has no meaning; ignored'
@@ -243,11 +283,39 @@ if( MSVC )
     -wd4345 # Suppress 'behavior change: an object of POD type constructed with an initializer of the form () will be default-initialized'
     -wd4351 # Suppress 'new behavior: elements of array 'array' will be default initialized'
     -wd4355 # Suppress ''this' : used in base member initializer list'
+    -wd4456 # Suppress 'declaration of 'var' hides local variable'
+    -wd4457 # Suppress 'declaration of 'var' hides function parameter'
+    -wd4458 # Suppress 'declaration of 'var' hides class member'
+    -wd4459 # Suppress 'declaration of 'var' hides global declaration'
     -wd4503 # Suppress ''identifier' : decorated name length exceeded, name was truncated'
     -wd4624 # Suppress ''derived class' : destructor could not be generated because a base class destructor is inaccessible'
     -wd4722 # Suppress 'function' : destructor never returns, potential memory leak
     -wd4800 # Suppress ''type' : forcing value to bool 'true' or 'false' (performance warning)'
-    
+    -wd4100 # Suppress 'unreferenced formal parameter'
+    -wd4127 # Suppress 'conditional expression is constant'
+    -wd4512 # Suppress 'assignment operator could not be generated'
+    -wd4505 # Suppress 'unreferenced local function has been removed'
+    -wd4610 # Suppress '<class> can never be instantiated'
+    -wd4510 # Suppress 'default constructor could not be generated'
+    -wd4702 # Suppress 'unreachable code'
+    -wd4245 # Suppress 'signed/unsigned mismatch'
+    -wd4706 # Suppress 'assignment within conditional expression'
+    -wd4310 # Suppress 'cast truncates constant value'
+    -wd4701 # Suppress 'potentially uninitialized local variable'
+    -wd4703 # Suppress 'potentially uninitialized local pointer variable'
+    -wd4389 # Suppress 'signed/unsigned mismatch'
+    -wd4611 # Suppress 'interaction between '_setjmp' and C++ object destruction is non-portable'
+    -wd4805 # Suppress 'unsafe mix of type <type> and type <type> in operation'
+    -wd4204 # Suppress 'nonstandard extension used : non-constant aggregate initializer'
+
+	# Ideally, we'd like this warning to be enabled, but MSVC 2013 doesn't
+	# support the 'aligned' attribute in the way that clang sources requires (for
+	# any code that uses the LLVM_ALIGNAS macro), so this is must be disabled to
+	# avoid unwanted alignment warnings.
+	# When we switch to requiring a version of MSVC that supports the 'alignas'
+	# specifier (MSVC 2015?) this warning can be re-enabled.
+    -wd4324 # Suppress 'structure was padded due to __declspec(align())'
+	    
     # Promoted warnings.
     -w14062 # Promote 'enumerator in switch of enum is not handled' to level 1 warning.
 
@@ -257,17 +325,35 @@ if( MSVC )
 
   # Enable warnings
   if (LLVM_ENABLE_WARNINGS)
-    add_llvm_definitions( /W4 )
+    append("/W4" msvc_warning_flags)
+    # CMake appends /W3 by default, and having /W3 followed by /W4 will result in 
+    # cl : Command line warning D9025 : overriding '/W3' with '/W4'.  Since this is
+    # a command line warning and not a compiler warning, it cannot be suppressed except
+    # by fixing the command line.
+    string(REGEX REPLACE " /W[0-4]" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE " /W[0-4]" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
     if (LLVM_ENABLE_PEDANTIC)
       # No MSVC equivalent available
     endif (LLVM_ENABLE_PEDANTIC)
   endif (LLVM_ENABLE_WARNINGS)
   if (LLVM_ENABLE_WERROR)
-    add_llvm_definitions( /WX )
+    append("/WX" msvc_warning_flags)
   endif (LLVM_ENABLE_WERROR)
+
+  foreach(flag ${msvc_warning_flags})
+    append("${flag}" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  endforeach(flag)
+
+  # Disable sized deallocation if the flag is supported. MSVC fails to compile
+  # the operator new overload in User otherwise.
+  check_c_compiler_flag("/WX /Zc:sizedDealloc-" SUPPORTS_SIZED_DEALLOC)
+  append_if(SUPPORTS_SIZED_DEALLOC "/Zc:sizedDealloc-" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+
 elseif( LLVM_COMPILER_IS_GCC_COMPATIBLE )
   if (LLVM_ENABLE_WARNINGS)
     append("-Wall -W -Wno-unused-parameter -Wwrite-strings" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    append("-Wcast-qual" CMAKE_CXX_FLAGS)
 
     # Turn off missing field initializer warnings for gcc to avoid noise from
     # false positives with empty {}. Turn them on otherwise (they're off by
@@ -381,7 +467,15 @@ if(LLVM_USE_SANITIZER)
       endif()
     elseif (LLVM_USE_SANITIZER STREQUAL "Undefined")
       append_common_sanitizer_flags()
-      append("-fsanitize=undefined -fno-sanitize=vptr,function -fno-sanitize-recover"
+      append("-fsanitize=undefined -fno-sanitize=vptr,function -fno-sanitize-recover=all"
+              CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    elseif (LLVM_USE_SANITIZER STREQUAL "Thread")
+      append_common_sanitizer_flags()
+      append("-fsanitize=thread" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+    elseif (LLVM_USE_SANITIZER STREQUAL "Address;Undefined" OR
+            LLVM_USE_SANITIZER STREQUAL "Undefined;Address")
+      append_common_sanitizer_flags()
+      append("-fsanitize=address,undefined -fno-sanitize=vptr,function -fno-sanitize-recover=all"
               CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     else()
       message(WARNING "Unsupported value of LLVM_USE_SANITIZER: ${LLVM_USE_SANITIZER}")
@@ -389,11 +483,14 @@ if(LLVM_USE_SANITIZER)
   else()
     message(WARNING "LLVM_USE_SANITIZER is not supported on this platform.")
   endif()
+  if (LLVM_USE_SANITIZE_COVERAGE)
+    append("-fsanitize-coverage=edge,indirect-calls,8bit-counters,trace-cmp" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  endif()
 endif()
 
 # Turn on -gsplit-dwarf if requested
 if(LLVM_USE_SPLIT_DWARF)
-  add_llvm_definitions("-gsplit-dwarf")
+  add_definitions("-gsplit-dwarf")
 endif()
 
 add_llvm_definitions( -D__STDC_CONSTANT_MACROS )
@@ -412,7 +509,8 @@ endif()
 # But MinSizeRel seems to add that automatically, so maybe disable these
 # flags instead if LLVM_NO_DEAD_STRIP is set.
 if(NOT CYGWIN AND NOT WIN32)
-  if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin" AND
+     NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
     check_c_compiler_flag("-Werror -fno-function-sections" C_SUPPORTS_FNO_FUNCTION_SECTIONS)
     if (C_SUPPORTS_FNO_FUNCTION_SECTIONS)
       # Don't add -ffunction-section if it can be disabled with -fno-function-sections.

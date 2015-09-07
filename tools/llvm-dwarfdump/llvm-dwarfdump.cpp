@@ -14,6 +14,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Object/RelocVisitor.h"
 #include "llvm/Support/CommandLine.h"
@@ -21,7 +22,6 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/MemoryObject.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,6 +45,10 @@ DumpType("debug-dump", cl::init(DIDT_All),
         clEnumValN(DIDT_All, "all", "Dump all debug sections"),
         clEnumValN(DIDT_Abbrev, "abbrev", ".debug_abbrev"),
         clEnumValN(DIDT_AbbrevDwo, "abbrev.dwo", ".debug_abbrev.dwo"),
+        clEnumValN(DIDT_AppleNames, "apple_names", ".apple_names"),
+        clEnumValN(DIDT_AppleTypes, "apple_types", ".apple_types"),
+        clEnumValN(DIDT_AppleNamespaces, "apple_namespaces", ".apple_namespaces"),
+        clEnumValN(DIDT_AppleObjC, "apple_objc", ".apple_objc"),
         clEnumValN(DIDT_Aranges, "aranges", ".debug_aranges"),
         clEnumValN(DIDT_Info, "info", ".debug_info"),
         clEnumValN(DIDT_InfoDwo, "info.dwo", ".debug_info.dwo"),
@@ -65,25 +69,30 @@ DumpType("debug-dump", cl::init(DIDT_All),
         clEnumValN(DIDT_StrOffsetsDwo, "str_offsets.dwo", ".debug_str_offsets.dwo"),
         clEnumValEnd));
 
+static int ReturnValue = EXIT_SUCCESS;
+
+static bool error(StringRef Filename, std::error_code EC) {
+  if (!EC)
+    return false;
+  errs() << Filename << ": " << EC.message() << "\n";
+  ReturnValue = EXIT_FAILURE;
+  return true;
+}
+
 static void DumpInput(StringRef Filename) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr =
       MemoryBuffer::getFileOrSTDIN(Filename);
-
-  if (std::error_code EC = BuffOrErr.getError()) {
-    errs() << Filename << ": " << EC.message() << "\n";
+  if (error(Filename, BuffOrErr.getError()))
     return;
-  }
   std::unique_ptr<MemoryBuffer> Buff = std::move(BuffOrErr.get());
 
   ErrorOr<std::unique_ptr<ObjectFile>> ObjOrErr =
       ObjectFile::createObjectFile(Buff->getMemBufferRef());
-  if (std::error_code EC = ObjOrErr.getError()) {
-    errs() << Filename << ": " << EC.message() << '\n';
+  if (error(Filename, ObjOrErr.getError()))
     return;
-  }
   ObjectFile &Obj = *ObjOrErr.get();
 
-  std::unique_ptr<DIContext> DICtx(DIContext::getDWARFContext(Obj));
+  std::unique_ptr<DIContext> DICtx(new DWARFContextInMemory(Obj));
 
   outs() << Filename
          << ":\tfile format " << Obj.getFileFormatName() << "\n\n";
@@ -105,5 +114,5 @@ int main(int argc, char **argv) {
 
   std::for_each(InputFilenames.begin(), InputFilenames.end(), DumpInput);
 
-  return 0;
+  return ReturnValue;
 }

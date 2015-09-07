@@ -1,7 +1,7 @@
 # Instructions that are valid
 #
 # RUN: llvm-mc %s -triple=mips-unknown-linux -show-encoding -mcpu=mips32 | FileCheck %s
-
+a:
         .set noat
         abs.d     $f7,$f25             # CHECK: encoding:
         abs.s     $f9,$f16
@@ -19,13 +19,27 @@
         bc1f      $fcc0, 4             # CHECK: bc1f 4        # encoding: [0x45,0x00,0x00,0x01]
         bc1f      $fcc1, 4             # CHECK: bc1f $fcc1, 4 # encoding: [0x45,0x04,0x00,0x01]
         bc1f      4                    # CHECK: bc1f 4        # encoding: [0x45,0x00,0x00,0x01]
+        bc1fl     $fcc0,4688           # CHECK: bc1fl 4688      # encoding: [0x45,0x02,0x04,0x94]
+        bc1fl     4688                 # CHECK: bc1fl 4688      # encoding: [0x45,0x02,0x04,0x94]
+        bc1fl     $fcc7,27             # CHECK: bc1fl $fcc7, 27 # encoding: [0x45,0x1e,0x00,0x06]
         bc1t      $fcc0, 4             # CHECK: bc1t 4        # encoding: [0x45,0x01,0x00,0x01]
         bc1t      $fcc1, 4             # CHECK: bc1t $fcc1, 4 # encoding: [0x45,0x05,0x00,0x01]
         bc1t      4                    # CHECK: bc1t 4        # encoding: [0x45,0x01,0x00,0x01]
+        bc1tl     $fcc0,4688           # CHECK: bc1tl 4688      # encoding: [0x45,0x03,0x04,0x94]
+        bc1tl     4688                 # CHECK: bc1tl 4688      # encoding: [0x45,0x03,0x04,0x94]
+        bc1tl     $fcc7,27             # CHECK: bc1tl $fcc7, 27 # encoding: [0x45,0x1f,0x00,0x06]
         bal       21100                # CHECK: bal 21100     # encoding: [0x04,0x11,0x14,0x9b]
         bgezal    $0, 21100            # CHECK: bal 21100     # encoding: [0x04,0x11,0x14,0x9b]
         bgezal    $6, 21100            # CHECK: bgezal $6, 21100 # encoding: [0x04,0xd1,0x14,0x9b]
         bltzal    $6, 21100            # CHECK: bltzal $6, 21100 # encoding: [0x04,0xd0,0x14,0x9b]
+        beql      $14,$s3,12544        # CHECK: beql $14, $19, 12544 # encoding: [0x51,0xd3,0x0c,0x40]
+        bgezall   $12,7293             # CHECK: bgezall $12, 7293    # encoding: [0x05,0x93,0x07,0x1f]
+        bgezl     $4,-6858             # CHECK: bgezl $4, -6858      # encoding: [0x04,0x83,0xf9,0x4d]
+        bgtzl     $10,-3738            # CHECK: bgtzl $10, -3738     # encoding: [0x5d,0x40,0xfc,0x59]
+        blezl     $6,2974              # CHECK: blezl $6, 2974       # encoding: [0x58,0xc0,0x02,0xe7]
+        bltzall   $6,488               # CHECK: bltzall $6, 488      # encoding: [0x04,0xd2,0x00,0x7a]
+        bltzl     $s1,-9964            # CHECK: bltzl $17, -9964     # encoding: [0x06,0x22,0xf6,0x45]
+        bnel      $gp,$s4,5107         # CHECK: bnel $gp, $20, 5107  # encoding: [0x57,0x94,0x04,0xfc]
         cache     1, 8($5)             # CHECK: cache 1, 8($5)   # encoding: [0xbc,0xa1,0x00,0x08]
         c.ngl.d   $f29,$f29
         c.ngle.d  $f0,$f16
@@ -52,6 +66,11 @@
         eret
         floor.w.d $f14,$f11
         floor.w.s $f8,$f9
+        j         1f                   # CHECK: j $tmp0 # encoding: [0b000010AA,A,A,A]
+                                       # CHECK:         #   fixup A - offset: 0, value: ($tmp0), kind: fixup_Mips_26
+        j         a                    # CHECK: j a     # encoding: [0b000010AA,A,A,A]
+                                       # CHECK:         #   fixup A - offset: 0, value: a, kind: fixup_Mips_26
+        j         1328                 # CHECK: j 1328  # encoding: [0x08,0x00,0x01,0x4c]
         lb        $24,-14515($10)
         lbu       $8,30195($v1)
         ldc1      $f11,16391($s0)
@@ -70,7 +89,7 @@
         madd      $zero,$9
         maddu     $s3,$gp
         maddu     $24,$s2
-        mfc0      $a2,$14,1
+        mfc0      $8,$15,1             # CHECK: mfc0 $8, $15, 1        # encoding: [0x40,0x08,0x78,0x01]
         mfc1      $a3,$f27
         mfhi      $s3
         mfhi      $sp
@@ -93,7 +112,7 @@
         movz.s    $f25,$f7,$v1
         msub      $s7,$k1
         msubu     $15,$a1
-        mtc0      $9,$29,3
+        mtc0      $9,$15,1             # CHECK: mtc0 $9, $15, 1        # encoding: [0x40,0x89,0x78,0x01]
         mtc1      $s8,$f9
         mthi      $s1
         mtlo      $sp
@@ -181,3 +200,6 @@
         trunc.w.d $f22,$f15
         trunc.w.s $f28,$f30
         xor       $s2,$a0,$s8
+        xor       $2, 4                # CHECK: xori $2, $2, 4         # encoding: [0x38,0x42,0x00,0x04]
+
+1:

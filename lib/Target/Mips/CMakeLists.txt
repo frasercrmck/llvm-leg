@@ -23,6 +23,7 @@ add_llvm_target(MipsCodeGen
   Mips16RegisterInfo.cpp
   MipsAnalyzeImmediate.cpp
   MipsAsmPrinter.cpp
+  MipsCCState.cpp
   MipsConstantIslandPass.cpp
   MipsDelaySlotFiller.cpp
   MipsFastISel.cpp
@@ -45,7 +46,6 @@ add_llvm_target(MipsCodeGen
   MipsSubtarget.cpp
   MipsTargetMachine.cpp
   MipsTargetObjectFile.cpp
-  MipsSelectionDAGInfo.cpp
   )
 
 add_subdirectory(InstPrinter)

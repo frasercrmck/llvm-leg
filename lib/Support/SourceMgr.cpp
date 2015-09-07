@@ -14,13 +14,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Locale.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
-#include <system_error>
 using namespace llvm;
 
 static const size_t TabStop = 8;
@@ -49,14 +47,14 @@ unsigned SourceMgr::AddIncludeFile(const std::string &Filename,
                                    std::string &IncludedFile) {
   IncludedFile = Filename;
   ErrorOr<std::unique_ptr<MemoryBuffer>> NewBufOrErr =
-      MemoryBuffer::getFile(IncludedFile.c_str());
+    MemoryBuffer::getFile(IncludedFile);
 
   // If the file didn't exist directly, see if it's in an include path.
   for (unsigned i = 0, e = IncludeDirectories.size(); i != e && !NewBufOrErr;
        ++i) {
     IncludedFile =
         IncludeDirectories[i] + sys::path::get_separator().data() + Filename;
-    NewBufOrErr = MemoryBuffer::getFile(IncludedFile.c_str());
+    NewBufOrErr = MemoryBuffer::getFile(IncludedFile);
   }
 
   if (!NewBufOrErr)
@@ -334,8 +332,8 @@ static bool isNonASCII(char c) {
   return c & 0x80;
 }
 
-void SMDiagnostic::print(const char *ProgName, raw_ostream &S,
-                         bool ShowColors) const {
+void SMDiagnostic::print(const char *ProgName, raw_ostream &S, bool ShowColors,
+                         bool ShowKindLabel) const {
   // Display colors only if OS supports colors.
   ShowColors &= S.has_colors();
 
@@ -359,27 +357,29 @@ void SMDiagnostic::print(const char *ProgName, raw_ostream &S,
     S << ": ";
   }
 
-  switch (Kind) {
-  case SourceMgr::DK_Error:
-    if (ShowColors)
-      S.changeColor(raw_ostream::RED, true);
-    S << "error: ";
-    break;
-  case SourceMgr::DK_Warning:
-    if (ShowColors)
-      S.changeColor(raw_ostream::MAGENTA, true);
-    S << "warning: ";
-    break;
-  case SourceMgr::DK_Note:
-    if (ShowColors)
-      S.changeColor(raw_ostream::BLACK, true);
-    S << "note: ";
-    break;
-  }
+  if (ShowKindLabel) {
+    switch (Kind) {
+    case SourceMgr::DK_Error:
+      if (ShowColors)
+        S.changeColor(raw_ostream::RED, true);
+      S << "error: ";
+      break;
+    case SourceMgr::DK_Warning:
+      if (ShowColors)
+        S.changeColor(raw_ostream::MAGENTA, true);
+      S << "warning: ";
+      break;
+    case SourceMgr::DK_Note:
+      if (ShowColors)
+        S.changeColor(raw_ostream::BLACK, true);
+      S << "note: ";
+      break;
+    }
 
-  if (ShowColors) {
-    S.resetColor();
-    S.changeColor(raw_ostream::SAVEDCOLOR, true);
+    if (ShowColors) {
+      S.resetColor();
+      S.changeColor(raw_ostream::SAVEDCOLOR, true);
+    }
   }
 
   S << Message << '\n';

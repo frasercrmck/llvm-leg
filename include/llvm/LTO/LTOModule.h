@@ -16,6 +16,7 @@
 
 #include "llvm-c/lto.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCObjectFileInfo.h"
@@ -37,8 +38,6 @@ namespace llvm {
 ///
 struct LTOModule {
 private:
-  typedef StringMap<uint8_t> StringSet;
-
   struct NameAndAttributes {
     const char        *name;
     uint32_t           attributes;
@@ -46,21 +45,26 @@ private:
     const GlobalValue *symbol;
   };
 
+  std::unique_ptr<LLVMContext> OwnedContext;
+
+  std::string LinkerOpts;
+
   std::unique_ptr<object::IRObjectFile> IRFile;
   std::unique_ptr<TargetMachine> _target;
-  StringSet                               _linkeropt_strings;
-  std::vector<const char *>               _deplibs;
-  std::vector<const char *>               _linkeropts;
-  std::vector<NameAndAttributes>          _symbols;
+  std::vector<NameAndAttributes> _symbols;
 
   // _defines and _undefines only needed to disambiguate tentative definitions
-  StringSet                               _defines;
+  StringSet<>                             _defines;
   StringMap<NameAndAttributes> _undefines;
   std::vector<const char*>                _asm_undefines;
 
   LTOModule(std::unique_ptr<object::IRObjectFile> Obj, TargetMachine *TM);
+  LTOModule(std::unique_ptr<object::IRObjectFile> Obj, TargetMachine *TM,
+            std::unique_ptr<LLVMContext> Context);
 
 public:
+  ~LTOModule();
+
   /// Returns 'true' if the file or memory contents is LLVM bitcode.
   static bool isBitcodeFile(const void *mem, size_t length);
   static bool isBitcodeFile(const char *path);
@@ -94,6 +98,13 @@ public:
   static LTOModule *createFromBuffer(const void *mem, size_t length,
                                      TargetOptions options, std::string &errMsg,
                                      StringRef path = "");
+
+  static LTOModule *createInLocalContext(const void *mem, size_t length,
+                                         TargetOptions options,
+                                         std::string &errMsg, StringRef path);
+  static LTOModule *createInContext(const void *mem, size_t length,
+                                    TargetOptions options, std::string &errMsg,
+                                    StringRef path, LLVMContext *Context);
 
   const Module &getModule() const {
     return const_cast<LTOModule*>(this)->getModule();
@@ -131,28 +142,14 @@ public:
     return nullptr;
   }
 
-  /// Get the number of dependent libraries
-  uint32_t getDependentLibraryCount() {
-    return _deplibs.size();
-  }
-
-  /// Get the dependent library at the specified index.
-  const char *getDependentLibrary(uint32_t index) {
-    if (index < _deplibs.size())
-      return _deplibs[index];
+  const GlobalValue *getSymbolGV(uint32_t index) {
+    if (index < _symbols.size())
+      return _symbols[index].symbol;
     return nullptr;
   }
 
-  /// Get the number of linker options
-  uint32_t getLinkerOptCount() {
-    return _linkeropts.size();
-  }
-
-  /// Get the linker option at the specified index.
-  const char *getLinkerOpt(uint32_t index) {
-    if (index < _linkeropts.size())
-      return _linkeropts[index];
-    return nullptr;
+  const char *getLinkerOpts() {
+    return LinkerOpts.c_str();
   }
 
   const std::vector<const char*> &getAsmUndefinedRefs() {
@@ -204,7 +201,7 @@ private:
 
   /// Create an LTOModule (private version).
   static LTOModule *makeLTOModule(MemoryBufferRef Buffer, TargetOptions options,
-                                  std::string &errMsg);
+                                  std::string &errMsg, LLVMContext *Context);
 };
 }
 #endif

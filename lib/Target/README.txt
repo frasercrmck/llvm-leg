@@ -106,7 +106,7 @@ for 1,2,4,8 bytes.
 //===---------------------------------------------------------------------===//
 
 It would be nice to revert this patch:
-http://lists.cs.uiuc.edu/pipermail/llvm-commits/Week-of-Mon-20060213/031986.html
+http://lists.llvm.org/pipermail/llvm-commits/Week-of-Mon-20060213/031986.html
 
 And teach the dag combiner enough to simplify the code expanded before 
 legalize.  It seems plausible that this knowledge would let it simplify other
@@ -733,7 +733,7 @@ f (unsigned long a, unsigned long b, unsigned long c)
   return ((a & (c - 1)) != 0) | ((b & (c - 1)) != 0);
 }
 Both should combine to ((a|b) & (c-1)) != 0.  Currently not optimized with
-"clang -emit-llvm-bc | opt -std-compile-opts".
+"clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
@@ -746,7 +746,7 @@ void clear_pmd_range(unsigned long start, unsigned long end)
 }
 The expression should optimize to something like
 "!((start|end)&~PMD_MASK). Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
@@ -765,7 +765,7 @@ int f(int x, int y)
  return (abs(x)) >= 0;
 }
 This should optimize to x == INT_MIN. (With -fwrapv.)  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
@@ -803,117 +803,117 @@ rshift_gt (unsigned int a)
 
 All should simplify to a single comparison.  All of these are
 currently not optimized with "clang -emit-llvm-bc | opt
--std-compile-opts".
+-O3".
 
 //===---------------------------------------------------------------------===//
 
 From GCC Bug 32605:
 int c(int* x) {return (char*)x+2 == (char*)x;}
 Should combine to 0.  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts" (although llc can optimize it).
+-emit-llvm-bc | opt -O3" (although llc can optimize it).
 
 //===---------------------------------------------------------------------===//
 
 int a(unsigned b) {return ((b << 31) | (b << 30)) >> 31;}
 Should be combined to  "((b >> 1) | b) & 1".  Currently not optimized
-with "clang -emit-llvm-bc | opt -std-compile-opts".
+with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 unsigned a(unsigned x, unsigned y) { return x | (y & 1) | (y & 2);}
 Should combine to "x | (y & 3)".  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int a, int b, int c) {return (~a & c) | ((c|a) & b);}
 Should fold to "(~a & c) | (a & b)".  Currently not optimized with
-"clang -emit-llvm-bc | opt -std-compile-opts".
+"clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int a,int b) {return (~(a|b))|a;}
 Should fold to "a|~b".  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int a, int b) {return (a&&b) || (a&&!b);}
 Should fold to "a".  Currently not optimized with "clang -emit-llvm-bc
-| opt -std-compile-opts".
+| opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int a, int b, int c) {return (a&&b) || (!a&&c);}
 Should fold to "a ? b : c", or at least something sane.  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int a, int b, int c) {return (a&&b) || (a&&c) || (a&&b&&c);}
 Should fold to a && (b || c).  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int x) {return x | ((x & 8) ^ 8);}
 Should combine to x | 8.  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int x) {return x ^ ((x & 8) ^ 8);}
 Should also combine to x | 8.  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int a(int x) {return ((x | -9) ^ 8) & x;}
 Should combine to x & -9.  Currently not optimized with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 unsigned a(unsigned a) {return a * 0x11111111 >> 28 & 1;}
 Should combine to "a * 0x88888888 >> 31".  Currently not optimized
-with "clang -emit-llvm-bc | opt -std-compile-opts".
+with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 unsigned a(char* x) {if ((*x & 32) == 0) return b();}
 There's an unnecessary zext in the generated code with "clang
--emit-llvm-bc | opt -std-compile-opts".
+-emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 unsigned a(unsigned long long x) {return 40 * (x >> 1);}
 Should combine to "20 * (((unsigned)x) & -2)".  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int g(int x) { return (x - 10) < 0; }
 Should combine to "x <= 9" (the sub has nsw).  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int g(int x) { return (x + 10) < 0; }
 Should combine to "x < -10" (the add has nsw).  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 int f(int i, int j) { return i < j + 1; }
 int g(int i, int j) { return j > i - 1; }
 Should combine to "i <= j" (the add/sub has nsw).  Currently not
-optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
 unsigned f(unsigned x) { return ((x & 7) + 1) & 15; }
 The & 15 part should be optimized away, it doesn't change the result. Currently
-not optimized with "clang -emit-llvm-bc | opt -std-compile-opts".
+not optimized with "clang -emit-llvm-bc | opt -O3".
 
 //===---------------------------------------------------------------------===//
 
@@ -1268,7 +1268,8 @@ int foo (void) {
 ..
   else if (strchr ("<>", *intel_parser.op_string)
 
-Those should be turned into a switch.
+Those should be turned into a switch.  SimplifyLibCalls only gets the second
+case.
 
 //===---------------------------------------------------------------------===//
 
@@ -1841,44 +1842,6 @@ we remove checking in code like
   char *p = malloc(strlen(s)+1);
   __strcpy_chk(p, s, __builtin_objectsize(p, 0));
 
-//===---------------------------------------------------------------------===//
-
-This code (from Benchmarks/Dhrystone/dry.c):
-
-define i32 @Func1(i32, i32) nounwind readnone optsize ssp {
-entry:
-  %sext = shl i32 %0, 24
-  %conv = ashr i32 %sext, 24
-  %sext6 = shl i32 %1, 24
-  %conv4 = ashr i32 %sext6, 24
-  %cmp = icmp eq i32 %conv, %conv4
-  %. = select i1 %cmp, i32 10000, i32 0
-  ret i32 %.
-}
-
-Should be simplified into something like:
-
-define i32 @Func1(i32, i32) nounwind readnone optsize ssp {
-entry:
-  %sext = shl i32 %0, 24
-  %conv = and i32 %sext, 0xFF000000
-  %sext6 = shl i32 %1, 24
-  %conv4 = and i32 %sext6, 0xFF000000
-  %cmp = icmp eq i32 %conv, %conv4
-  %. = select i1 %cmp, i32 10000, i32 0
-  ret i32 %.
-}
-
-and then to:
-
-define i32 @Func1(i32, i32) nounwind readnone optsize ssp {
-entry:
-  %conv = and i32 %0, 0xFF
-  %conv4 = and i32 %1, 0xFF
-  %cmp = icmp eq i32 %conv, %conv4
-  %. = select i1 %cmp, i32 10000, i32 0
-  ret i32 %.
-}
 //===---------------------------------------------------------------------===//
 
 clang -O3 currently compiles this code

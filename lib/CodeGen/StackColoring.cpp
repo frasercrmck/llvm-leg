@@ -48,7 +48,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -364,7 +363,7 @@ void StackColoring::calculateLocalLiveness() {
       }
     }
 
-    BBSet = NextBBSet;
+    BBSet = std::move(NextBBSet);
   }// while changed.
 }
 
@@ -463,7 +462,8 @@ void StackColoring::remapInstructions(DenseMap<int, int> &SlotRemap) {
     if (!VI.Var)
       continue;
     if (SlotRemap.count(VI.Slot)) {
-      DEBUG(dbgs()<<"Remapping debug info for ["<<VI.Var->getName()<<"].\n");
+      DEBUG(dbgs() << "Remapping debug info for ["
+                   << cast<DILocalVariable>(VI.Var)->getName() << "].\n");
       VI.Slot = SlotRemap[VI.Slot];
       FixedDbg++;
     }

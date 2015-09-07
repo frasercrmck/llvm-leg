@@ -60,7 +60,7 @@ LEGELFObjectWriter::LEGELFObjectWriter(uint8_t OSABI)
 
 LEGELFObjectWriter::~LEGELFObjectWriter() {}
 
-MCObjectWriter *llvm::createLEGELFObjectWriter(raw_ostream &OS, uint8_t OSABI) {
+MCObjectWriter *llvm::createLEGELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI) {
   MCELFObjectTargetWriter *MOTW = new LEGELFObjectWriter(OSABI);
   return createELFObjectWriter(MOTW, OS, /*IsLittleEndian=*/true);
 }

@@ -110,7 +110,24 @@ enum {
   /// to prevent the stack guard value or address from being spilled to the
   /// stack should override TargetLowering::emitLoadStackGuardNode and
   /// additionally expand this pseudo after register allocation.
-  LOAD_STACK_GUARD = 19
+  LOAD_STACK_GUARD = 19,
+
+  /// Call instruction with associated vm state for deoptimization and list
+  /// of live pointers for relocation by the garbage collector.  It is
+  /// intended to support garbage collection with fully precise relocating
+  /// collectors and deoptimizations in either the callee or caller.
+  STATEPOINT = 20,
+
+  /// Instruction that records the offset of a local stack allocation passed to
+  /// llvm.localescape. It has two arguments: the symbol for the label and the
+  /// frame index of the local stack allocation.
+  LOCAL_ESCAPE = 21,
+
+  /// Loading instruction that may page fault, bundled with associated
+  /// information on how to handle such a page fault.  It is intended to support
+  /// "zero cost" null checks in managed languages by allowing LLVM to fold
+  /// comparisions into existing memory operations.
+  FAULTING_LOAD_OP = 22,
 };
 } // end namespace TargetOpcode
 } // end namespace llvm

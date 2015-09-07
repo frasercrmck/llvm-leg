@@ -18,6 +18,7 @@
 #include "llvm-c/Core.h"
 #include "llvm/Support/CBindingWrapping.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Options.h"
 
 namespace llvm {
 
@@ -54,7 +55,12 @@ public:
     MD_tbaa_struct = 5, // "tbaa.struct"
     MD_invariant_load = 6, // "invariant.load"
     MD_alias_scope = 7, // "alias.scope"
-    MD_noalias = 8 // "noalias"
+    MD_noalias = 8, // "noalias",
+    MD_nontemporal = 9, // "nontemporal"
+    MD_mem_parallel_loop_access = 10, // "llvm.mem.parallel_loop_access"
+    MD_nonnull = 11, // "nonnull"
+    MD_dereferenceable = 12, // "dereferenceable"
+    MD_dereferenceable_or_null = 13 // "dereferenceable_or_null"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.
@@ -163,9 +169,17 @@ public:
   void emitError(const Instruction *I, const Twine &ErrorStr);
   void emitError(const Twine &ErrorStr);
 
+  /// \brief Query for a debug option's value.
+  ///
+  /// This function returns typed data populated from command line parsing.
+  template <typename ValT, typename Base, ValT(Base::*Mem)>
+  ValT getOption() const {
+    return OptionRegistry::instance().template get<ValT, Base, Mem>();
+  }
+
 private:
-  LLVMContext(LLVMContext&) LLVM_DELETED_FUNCTION;
-  void operator=(LLVMContext&) LLVM_DELETED_FUNCTION;
+  LLVMContext(LLVMContext&) = delete;
+  void operator=(LLVMContext&) = delete;
 
   /// addModule - Register a module as being instantiated in this context.  If
   /// the context is deleted, the module will be deleted as well.

@@ -40,25 +40,24 @@ static MCInstrInfo *createLEGMCInstrInfo() {
   return X;
 }
 
-static MCRegisterInfo *createLEGMCRegisterInfo(StringRef TT) {
+static MCRegisterInfo *createLEGMCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
   InitLEGMCRegisterInfo(X, LEG::LR);
   return X;
 }
 
-static MCSubtargetInfo *createLEGMCSubtargetInfo(StringRef TT, StringRef CPU,
+static MCSubtargetInfo *createLEGMCSubtargetInfo(const Triple &TT,
+                                                 StringRef CPU,
                                                  StringRef FS) {
-  MCSubtargetInfo *X = new MCSubtargetInfo();
-  InitLEGMCSubtargetInfo(X, TT, CPU, FS);
-  return X;
+  return createLEGMCSubtargetInfoImpl(TT, CPU, FS);
 }
 
-static MCAsmInfo *createLEGMCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) {
-  MCAsmInfo *MAI = new LEGMCAsmInfo(TT);
-  return MAI;
+static MCAsmInfo *createLEGMCAsmInfo(const MCRegisterInfo &MRI,
+                                     const Triple &TT) {
+  return new LEGMCAsmInfo(TT);
 }
 
-static MCCodeGenInfo *createLEGMCCodeGenInfo(StringRef TT, Reloc::Model RM,
+static MCCodeGenInfo *createLEGMCCodeGenInfo(const Triple &TT, Reloc::Model RM,
                                              CodeModel::Model CM,
                                              CodeGenOpt::Level OL) {
   MCCodeGenInfo *X = new MCCodeGenInfo();
@@ -72,36 +71,16 @@ static MCCodeGenInfo *createLEGMCCodeGenInfo(StringRef TT, Reloc::Model RM,
     report_fatal_error("Target only supports CodeModel Small or Large");
   }
 
-  X->InitMCCodeGenInfo(RM, CM, OL);
+  X->initMCCodeGenInfo(RM, CM, OL);
   return X;
 }
 
 static MCInstPrinter *
-createLEGMCInstPrinter(const Target &T, unsigned SyntaxVariant,
+createLEGMCInstPrinter(const Triple &TT, unsigned SyntaxVariant,
                        const MCAsmInfo &MAI, const MCInstrInfo &MII,
-                       const MCRegisterInfo &MRI, const MCSubtargetInfo &STI) {
+                       const MCRegisterInfo &MRI) {
   return new LEGInstPrinter(MAI, MII, MRI);
 }
-
-static MCStreamer *
-createMCAsmStreamer(MCContext &Ctx, formatted_raw_ostream &OS,
-                    bool isVerboseAsm, bool useDwarfDirectory,
-                    MCInstPrinter *InstPrint, MCCodeEmitter *CE,
-                    MCAsmBackend *TAB, bool ShowInst) {
-  return createAsmStreamer(Ctx, OS, isVerboseAsm, useDwarfDirectory, InstPrint,
-                           CE, TAB, ShowInst);
-}
-
-static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
-                                    MCContext &Ctx, MCAsmBackend &MAB,
-                                    raw_ostream &OS,
-                                    MCCodeEmitter *Emitter,
-                                    const MCSubtargetInfo &STI,
-                                    bool RelaxAll,
-                                    bool NoExecStack) {
-  return createELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
-}
-
 
 // Force static initialization.
 extern "C" void LLVMInitializeLEGTargetMC() {
@@ -126,12 +105,6 @@ extern "C" void LLVMInitializeLEGTargetMC() {
 
   // Register the ASM Backend.
   TargetRegistry::RegisterMCAsmBackend(TheLEGTarget, createLEGAsmBackend);
-
-  // Register the assembly streamer.
-  TargetRegistry::RegisterAsmStreamer(TheLEGTarget, createMCAsmStreamer);
-
-  // Register the object streamer.
-  TargetRegistry::RegisterMCObjectStreamer(TheLEGTarget, createMCStreamer);
 
   // Register the MCCodeEmitter
   TargetRegistry::RegisterMCCodeEmitter(TheLEGTarget, createLEGMCCodeEmitter);

@@ -69,9 +69,7 @@ Module *llvm::CloneModule(const Module *M, ValueToValueMapTy &VMap) {
   for (Module::const_alias_iterator I = M->alias_begin(), E = M->alias_end();
        I != E; ++I) {
     auto *PTy = cast<PointerType>(I->getType());
-    auto *GA =
-        GlobalAlias::create(PTy->getElementType(), PTy->getAddressSpace(),
-                            I->getLinkage(), I->getName(), New);
+    auto *GA = GlobalAlias::create(PTy, I->getLinkage(), I->getName(), New);
     GA->copyAttributesFrom(I);
     VMap[I] = GA;
   }
@@ -101,7 +99,11 @@ Module *llvm::CloneModule(const Module *M, ValueToValueMapTy &VMap) {
 
       SmallVector<ReturnInst*, 8> Returns;  // Ignore returns cloned.
       CloneFunctionInto(F, I, VMap, /*ModuleLevelChanges=*/true, Returns);
+
     }
+
+    if (I->hasPersonalityFn())
+      F->setPersonalityFn(MapValue(I->getPersonalityFn(), VMap));
   }
 
   // And aliases
@@ -109,7 +111,7 @@ Module *llvm::CloneModule(const Module *M, ValueToValueMapTy &VMap) {
        I != E; ++I) {
     GlobalAlias *GA = cast<GlobalAlias>(VMap[I]);
     if (const Constant *C = I->getAliasee())
-      GA->setAliasee(cast<GlobalObject>(MapValue(C, VMap)));
+      GA->setAliasee(MapValue(C, VMap));
   }
 
   // And named metadata....
@@ -118,7 +120,7 @@ Module *llvm::CloneModule(const Module *M, ValueToValueMapTy &VMap) {
     const NamedMDNode &NMD = *I;
     NamedMDNode *NewNMD = New->getOrInsertNamedMetadata(NMD.getName());
     for (unsigned i = 0, e = NMD.getNumOperands(); i != e; ++i)
-      NewNMD->addOperand(MapValue(NMD.getOperand(i), VMap));
+      NewNMD->addOperand(MapMetadata(NMD.getOperand(i), VMap));
   }
 
   return New;

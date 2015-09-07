@@ -12,7 +12,7 @@
 #
 # RUN: llvm-mc %s -triple=mips-unknown-linux -show-encoding -mcpu=mips32r6 2> %t0 | FileCheck %s
 # RUN: FileCheck %s -check-prefix=WARNING < %t0
-
+a:
         .set noat
         # FIXME: Add the instructions carried forward from older ISA's
         and     $2,4             # CHECK: andi $2, $2, 4      # encoding: [0x30,0x42,0x00,0x04]
@@ -97,15 +97,21 @@
         cmp.sle.d  $f2,$f3,$f4      # CHECK: cmp.sle.d $f2, $f3, $f4  # encoding: [0x46,0xa4,0x18,0x8e]
         cmp.sule.s $f2,$f3,$f4      # CHECK: cmp.sule.s $f2, $f3, $f4 # encoding: [0x46,0x84,0x18,0x8f]
         cmp.sule.d $f2,$f3,$f4      # CHECK: cmp.sule.d $f2, $f3, $f4 # encoding: [0x46,0xa4,0x18,0x8f]
+        di      $s8              # CHECK: di  $fp          # encoding: [0x41,0x7e,0x60,0x00]
+        di                       # CHECK: di               # encoding: [0x41,0x60,0x60,0x00]
         div     $2,$3,$4         # CHECK: div $2, $3, $4   # encoding: [0x00,0x64,0x10,0x9a]
         divu    $2,$3,$4         # CHECK: divu $2, $3, $4  # encoding: [0x00,0x64,0x10,0x9b]
+        ei      $14              # CHECK: ei  $14          # encoding: [0x41,0x6e,0x60,0x20]
+        ei                       # CHECK: ei               # encoding: [0x41,0x60,0x60,0x20]
         jialc   $5, 256          # CHECK: jialc $5, 256    # encoding: [0xf8,0x05,0x01,0x00]
         jic     $5, 256          # CHECK: jic $5, 256      # encoding: [0xd8,0x05,0x01,0x00]
         lsa     $2, $3, $4, 3    # CHECK: lsa  $2, $3, $4, 3 # encoding: [0x00,0x64,0x10,0xc5]
         lwpc    $2,268           # CHECK: lwpc $2, 268     # encoding: [0xec,0x48,0x00,0x43]
         lwupc   $2,268           # CHECK: lwupc $2, 268    # encoding: [0xec,0x50,0x00,0x43]
+        mfc0    $8,$15,1         # CHECK: mfc0 $8, $15, 1  # encoding: [0x40,0x08,0x78,0x01]
         mod     $2,$3,$4         # CHECK: mod $2, $3, $4   # encoding: [0x00,0x64,0x10,0xda]
         modu    $2,$3,$4         # CHECK: modu $2, $3, $4  # encoding: [0x00,0x64,0x10,0xdb]
+        mtc0    $9,$15,1         # CHECK: mtc0 $9, $15, 1  # encoding: [0x40,0x89,0x78,0x01]
         mul     $2,$3,$4         # CHECK: mul $2, $3, $4   # encoding: [0x00,0x64,0x10,0x98]
         muh     $2,$3,$4         # CHECK: muh $2, $3, $4   # encoding: [0x00,0x64,0x10,0xd8]
         mulu    $2,$3,$4         # CHECK: mulu $2, $3, $4  # encoding: [0x00,0x64,0x10,0x99]
@@ -115,6 +121,12 @@
         msubf.s $f2,$f3,$f4      # CHECK: msubf.s $f2, $f3, $f4  # encoding: [0x46,0x04,0x18,0x99]
         msubf.d $f2,$f3,$f4      # CHECK: msubf.d $f2, $f3, $f4  # encoding: [0x46,0x24,0x18,0x99]
         pref    1, 8($5)         # CHECK: pref 1, 8($5)          # encoding: [0x7c,0xa1,0x04,0x35]
+        # FIXME: Use the code generator in order to print the .set directives
+        #        instead of the instruction printer.
+        rdhwr   $sp,$11          # CHECK:      .set  push
+                                 # CHECK-NEXT: .set  mips32r2
+                                 # CHECK-NEXT: rdhwr $sp, $11
+                                 # CHECK-NEXT: .set  pop      # encoding: [0x7c,0x1d,0x58,0x3b]
         sel.d   $f0,$f1,$f2      # CHECK: sel.d $f0, $f1, $f2 # encoding: [0x46,0x22,0x08,0x10]
         sel.s   $f0,$f1,$f2      # CHECK: sel.s $f0, $f1, $f2 # encoding: [0x46,0x02,0x08,0x10]
         seleqz  $2,$3,$4         # CHECK: seleqz $2, $3, $4 # encoding: [0x00,0x64,0x10,0x35]
@@ -136,6 +148,11 @@
         rint.d $f2, $f4          # CHECK: rint.d $f2, $f4        # encoding: [0x46,0x20,0x20,0x9a]
         class.s $f2, $f4         # CHECK: class.s $f2, $f4       # encoding: [0x46,0x00,0x20,0x9b]
         class.d $f2, $f4         # CHECK: class.d $f2, $f4       # encoding: [0x46,0x20,0x20,0x9b]
+        j       1f               # CHECK: j $tmp0                # encoding: [0b000010AA,A,A,A]
+                                 # CHECK:                        #   fixup A - offset: 0, value: ($tmp0), kind: fixup_Mips_26
+        j       a                # CHECK: j a                    # encoding: [0b000010AA,A,A,A]
+                                 # CHECK:                        #   fixup A - offset: 0, value: a, kind: fixup_Mips_26
+        j       1328             # CHECK: j 1328                 # encoding: [0x08,0x00,0x01,0x4c]
         jr.hb   $4               # CHECK: jr.hb $4               # encoding: [0x00,0x80,0x04,0x09]
         jalr.hb $4               # CHECK: jalr.hb $4             # encoding: [0x00,0x80,0xfc,0x09]
         jalr.hb $4, $5           # CHECK: jalr.hb $4, $5         # encoding: [0x00,0xa0,0x24,0x09]
@@ -165,3 +182,6 @@
         tltu    $16,$29,1016     # CHECK: tltu $16, $sp, 1016    # encoding: [0x02,0x1d,0xfe,0x33]
         tne     $6,$17           # CHECK: tne $6, $17            # encoding: [0x00,0xd1,0x00,0x36]
         tne     $7,$8,885        # CHECK: tne $7, $8, 885        # encoding: [0x00,0xe8,0xdd,0x76]
+        xor     $2, 4            # CHECK: xori $2, $2, 4         # encoding: [0x38,0x42,0x00,0x04]
+
+1:

@@ -586,8 +586,8 @@ fdiv ST(1)
 fdivr ST(1)
 
 
-// CHECK: fxsaveq (%rax)
-// CHECK: fxrstorq (%rax)
+// CHECK: fxsave64 (%rax)
+// CHECK: fxrstor64 (%rax)
 fxsave64 opaque ptr [rax]
 fxrstor64 opaque ptr [rax]
 
@@ -662,3 +662,20 @@ frstor dword ptr [eax]
 // CHECK: fnsave (%eax)
 // CHECK: fxrstor (%eax)
 // CHECK: frstor (%eax)
+
+// CHECK: cmpnless %xmm1, %xmm0
+cmpnless xmm0, xmm1
+
+insb
+insw
+insd
+// CHECK: insb %dx, %es:(%rdi)
+// CHECK: insw %dx, %es:(%rdi)
+// CHECK: insl %dx, %es:(%rdi)
+
+outsb
+outsw
+outsd
+// CHECK: outsb (%rsi), %dx
+// CHECK: outsw (%rsi), %dx
+// CHECK: outsl (%rsi), %dx

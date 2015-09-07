@@ -15,7 +15,6 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/LeakDetector.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/Type.h"
@@ -24,26 +23,18 @@ using namespace llvm;
 Instruction::Instruction(Type *ty, unsigned it, Use *Ops, unsigned NumOps,
                          Instruction *InsertBefore)
   : User(ty, Value::InstructionVal + it, Ops, NumOps), Parent(nullptr) {
-  // Make sure that we get added to a basicblock
-  LeakDetector::addGarbageObject(this);
 
   // If requested, insert this instruction into a basic block...
   if (InsertBefore) {
-    assert(InsertBefore->getParent() &&
-           "Instruction to insert before is not in a basic block!");
-    InsertBefore->getParent()->getInstList().insert(InsertBefore, this);
+    BasicBlock *BB = InsertBefore->getParent();
+    assert(BB && "Instruction to insert before is not in a basic block!");
+    BB->getInstList().insert(InsertBefore, this);
   }
-}
-
-const DataLayout *Instruction::getDataLayout() const {
-  return getParent()->getDataLayout();
 }
 
 Instruction::Instruction(Type *ty, unsigned it, Use *Ops, unsigned NumOps,
                          BasicBlock *InsertAtEnd)
   : User(ty, Value::InstructionVal + it, Ops, NumOps), Parent(nullptr) {
-  // Make sure that we get added to a basicblock
-  LeakDetector::addGarbageObject(this);
 
   // append this instruction into the basic block
   assert(InsertAtEnd && "Basic block to append to may not be NULL!");
@@ -60,21 +51,24 @@ Instruction::~Instruction() {
 
 
 void Instruction::setParent(BasicBlock *P) {
-  if (getParent()) {
-    if (!P) LeakDetector::addGarbageObject(this);
-  } else {
-    if (P) LeakDetector::removeGarbageObject(this);
-  }
-
   Parent = P;
 }
+
+const Module *Instruction::getModule() const {
+  return getParent()->getModule();
+}
+
+Module *Instruction::getModule() {
+  return getParent()->getModule();
+}
+
 
 void Instruction::removeFromParent() {
   getParent()->getInstList().remove(this);
 }
 
-void Instruction::eraseFromParent() {
-  getParent()->getInstList().erase(this);
+iplist<Instruction>::iterator Instruction::eraseFromParent() {
+  return getParent()->getInstList().erase(this);
 }
 
 /// insertBefore - Insert an unlinked instructions into a basic block
@@ -540,15 +534,30 @@ bool Instruction::isNilpotent(unsigned Opcode) {
   return Opcode == Xor;
 }
 
+Instruction *Instruction::cloneImpl() const {
+  llvm_unreachable("Subclass of Instruction failed to implement cloneImpl");
+}
+
 Instruction *Instruction::clone() const {
-  Instruction *New = clone_impl();
+  Instruction *New = nullptr;
+  switch (getOpcode()) {
+  default:
+    llvm_unreachable("Unhandled Opcode.");
+#define HANDLE_INST(num, opc, clas)                                            \
+  case Instruction::opc:                                                       \
+    New = cast<clas>(this)->cloneImpl();                                       \
+    break;
+#include "llvm/IR/Instruction.def"
+#undef HANDLE_INST
+  }
+
   New->SubclassOptionalData = SubclassOptionalData;
   if (!hasMetadata())
     return New;
 
   // Otherwise, enumerate and copy over metadata from the old instruction to the
   // new one.
-  SmallVector<std::pair<unsigned, MDNode*>, 4> TheMDs;
+  SmallVector<std::pair<unsigned, MDNode *>, 4> TheMDs;
   getAllMetadataOtherThanDebugLoc(TheMDs);
   for (const auto &MD : TheMDs)
     New->setMetadata(MD.first, MD.second);

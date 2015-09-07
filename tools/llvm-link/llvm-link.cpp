@@ -13,7 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Linker/Linker.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/IR/AutoUpgrade.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
@@ -33,6 +37,11 @@ using namespace llvm;
 static cl::list<std::string>
 InputFilenames(cl::Positional, cl::OneOrMore,
                cl::desc("<input bitcode files>"));
+
+static cl::list<std::string> OverridingInputs(
+    "override", cl::ZeroOrMore, cl::value_desc("filename"),
+    cl::desc(
+        "input bitcode file which can override previously defined symbol(s)"));
 
 static cl::opt<std::string>
 OutputFilename("o", cl::desc("Override output filename"), cl::init("-"),
@@ -55,6 +64,16 @@ static cl::opt<bool>
 SuppressWarnings("suppress-warnings", cl::desc("Suppress all linking warnings"),
                  cl::init(false));
 
+static cl::opt<bool> PreserveBitcodeUseListOrder(
+    "preserve-bc-uselistorder",
+    cl::desc("Preserve use-list order when writing LLVM bitcode."),
+    cl::init(true), cl::Hidden);
+
+static cl::opt<bool> PreserveAssemblyUseListOrder(
+    "preserve-ll-uselistorder",
+    cl::desc("Preserve use-list order when writing LLVM assembly."),
+    cl::init(false), cl::Hidden);
+
 // Read the specified bitcode file in and return it. This routine searches the
 // link path for the specified file to try to find it...
 //
@@ -62,11 +81,60 @@ static std::unique_ptr<Module>
 loadFile(const char *argv0, const std::string &FN, LLVMContext &Context) {
   SMDiagnostic Err;
   if (Verbose) errs() << "Loading '" << FN << "'\n";
-  std::unique_ptr<Module> Result = parseIRFile(FN, Err, Context);
+  std::unique_ptr<Module> Result = getLazyIRFileModule(FN, Err, Context);
   if (!Result)
     Err.print(argv0, errs());
 
+  Result->materializeMetadata();
+  UpgradeDebugInfo(*Result);
+
   return Result;
+}
+
+static void diagnosticHandler(const DiagnosticInfo &DI) {
+  unsigned Severity = DI.getSeverity();
+  switch (Severity) {
+  case DS_Error:
+    errs() << "ERROR: ";
+    break;
+  case DS_Warning:
+    if (SuppressWarnings)
+      return;
+    errs() << "WARNING: ";
+    break;
+  case DS_Remark:
+  case DS_Note:
+    llvm_unreachable("Only expecting warnings and errors");
+  }
+
+  DiagnosticPrinterRawOStream DP(errs());
+  DI.print(DP);
+  errs() << '\n';
+}
+
+static bool linkFiles(const char *argv0, LLVMContext &Context, Linker &L,
+                      const cl::list<std::string> &Files,
+                      bool OverrideDuplicateSymbols) {
+  for (const auto &File : Files) {
+    std::unique_ptr<Module> M = loadFile(argv0, File, Context);
+    if (!M.get()) {
+      errs() << argv0 << ": error loading file '" << File << "'\n";
+      return false;
+    }
+
+    if (verifyModule(*M, &errs())) {
+      errs() << argv0 << ": " << File << ": error: input module is broken!\n";
+      return false;
+    }
+
+    if (Verbose)
+      errs() << "Linking in '" << File << "'\n";
+
+    if (L.linkInModule(M.get(), OverrideDuplicateSymbols))
+      return false;
+  }
+
+  return true;
 }
 
 int main(int argc, char **argv) {
@@ -78,33 +146,16 @@ int main(int argc, char **argv) {
   llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
   cl::ParseCommandLineOptions(argc, argv, "llvm linker\n");
 
-  unsigned BaseArg = 0;
-  std::string ErrorMessage;
+  auto Composite = make_unique<Module>("llvm-link", Context);
+  Linker L(Composite.get(), diagnosticHandler);
 
-  std::unique_ptr<Module> Composite =
-      loadFile(argv[0], InputFilenames[BaseArg], Context);
-  if (!Composite.get()) {
-    errs() << argv[0] << ": error loading file '"
-           << InputFilenames[BaseArg] << "'\n";
+  // First add all the regular input files
+  if (!linkFiles(argv[0], Context, L, InputFilenames, false))
     return 1;
-  }
 
-  Linker L(Composite.get(), SuppressWarnings);
-  for (unsigned i = BaseArg+1; i < InputFilenames.size(); ++i) {
-    std::unique_ptr<Module> M = loadFile(argv[0], InputFilenames[i], Context);
-    if (!M.get()) {
-      errs() << argv[0] << ": error loading file '" <<InputFilenames[i]<< "'\n";
-      return 1;
-    }
-
-    if (Verbose) errs() << "Linking in '" << InputFilenames[i] << "'\n";
-
-    if (L.linkInModule(M.get(), &ErrorMessage)) {
-      errs() << argv[0] << ": link error in '" << InputFilenames[i]
-             << "': " << ErrorMessage << "\n";
-      return 1;
-    }
-  }
+  // Next the -override ones.
+  if (!linkFiles(argv[0], Context, L, OverridingInputs, true))
+    return 1;
 
   if (DumpAsm) errs() << "Here's the assembly:\n" << *Composite;
 
@@ -115,16 +166,16 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (verifyModule(*Composite)) {
-    errs() << argv[0] << ": linked module is broken!\n";
+  if (verifyModule(*Composite, &errs())) {
+    errs() << argv[0] << ": error: linked module is broken!\n";
     return 1;
   }
 
   if (Verbose) errs() << "Writing bitcode...\n";
   if (OutputAssembly) {
-    Out.os() << *Composite;
+    Composite->print(Out.os(), nullptr, PreserveAssemblyUseListOrder);
   } else if (Force || !CheckBitcodeOutputToConsole(Out.os(), true))
-    WriteBitcodeToFile(Composite.get(), Out.os());
+    WriteBitcodeToFile(Composite.get(), Out.os(), PreserveBitcodeUseListOrder);
 
   // Declare success.
   Out.keep();

@@ -151,7 +151,7 @@ LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
 unsigned LEGInstrInfo::InsertBranch(MachineBasicBlock &MBB,
                                     MachineBasicBlock *TBB,
                                     MachineBasicBlock *FBB,
-                                    const SmallVectorImpl<MachineOperand> &Cond,
+                                    ArrayRef<MachineOperand> Cond,
                                     DebugLoc DL) const {
   unsigned NumInserted = 0;
   

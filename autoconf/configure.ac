@@ -32,16 +32,17 @@ dnl===-----------------------------------------------------------------------===
 dnl Initialize autoconf and define the package name, version number and
 dnl address for reporting bugs.
 
-AC_INIT([LLVM],[3.6.0svn],[http://llvm.org/bugs/])
+AC_INIT([LLVM],[3.7.0],[http://llvm.org/bugs/])
 
 LLVM_VERSION_MAJOR=3
-LLVM_VERSION_MINOR=6
+LLVM_VERSION_MINOR=7
 LLVM_VERSION_PATCH=0
-LLVM_VERSION_SUFFIX=svn
+LLVM_VERSION_SUFFIX=
 
 AC_DEFINE_UNQUOTED([LLVM_VERSION_MAJOR], $LLVM_VERSION_MAJOR, [Major version of the LLVM API])
 AC_DEFINE_UNQUOTED([LLVM_VERSION_MINOR], $LLVM_VERSION_MINOR, [Minor version of the LLVM API])
 AC_DEFINE_UNQUOTED([LLVM_VERSION_PATCH], $LLVM_VERSION_PATCH, [Patch version of the LLVM API])
+AC_DEFINE_UNQUOTED([LLVM_VERSION_STRING], "$PACKAGE_VERSION", [LLVM version string])
 
 AC_SUBST([LLVM_VERSION_MAJOR])
 AC_SUBST([LLVM_VERSION_MINOR])
@@ -50,8 +51,8 @@ AC_SUBST([LLVM_VERSION_SUFFIX])
 
 dnl Provide a copyright substitution and ensure the copyright notice is included
 dnl in the output of --version option of the generated configure script.
-AC_SUBST(LLVM_COPYRIGHT,["Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign."])
-AC_COPYRIGHT([Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.])
+AC_SUBST(LLVM_COPYRIGHT,["Copyright (c) 2003-2015 University of Illinois at Urbana-Champaign."])
+AC_COPYRIGHT([Copyright (c) 2003-2015 University of Illinois at Urbana-Champaign.])
 
 dnl Indicate that we require autoconf 2.60 or later.
 AC_PREREQ(2.60)
@@ -70,6 +71,11 @@ if test ${srcdir} != "." ; then
   if test -f ${srcdir}/include/llvm/Config/config.h ; then
     AC_MSG_ERROR([Already configured in ${srcdir}])
   fi
+fi
+
+dnl Quit if it is an in-source build
+if test ${srcdir} == "." ; then
+  AC_MSG_ERROR([In-source builds are not allowed. Please configure from a separate build directory!])
 fi
 
 dnl Default to empty (i.e. assigning the null string to) CFLAGS and CXXFLAGS,
@@ -104,7 +110,7 @@ if test "$CXX" = "clang++" ; then
 ],
 [
   AC_MSG_RESULT([no])
-  AC_MSG_ERROR([Selected compiler could not find or parse C++ standard library headers.  Rerun with CC=c-compiler CXX=c++-compiler ./configure ...])
+  AC_MSG_ERROR([Selected compiler could not find or parse C++ standard library headers.  Rerun with CC=c-compiler CXX=c++-compiler LLVM_SRC_DIR/configure ...])
 ])
   AC_LANG_POP([C++])
 fi
@@ -266,6 +272,11 @@ AC_CACHE_CHECK([type of operating system we're going to host on],
     llvm_cv_no_link_all_option="-Wl,--no-whole-archive"
     llvm_cv_os_type="DragonFly"
     llvm_cv_platform_type="Unix" ;;
+  *-*-bitrig*)
+    llvm_cv_link_all_option="-Wl,--whole-archive"
+    llvm_cv_no_link_all_option="-Wl,--no-whole-archive"
+    llvm_cv_os_type="Bitrig"
+    llvm_cv_platform_type="Unix" ;;
   *-*-hpux*)
     llvm_cv_link_all_option="-Wl,--whole-archive"
     llvm_cv_no_link_all_option="-Wl,--no-whole-archive"
@@ -346,6 +357,8 @@ AC_CACHE_CHECK([type of operating system we're going to target],
     llvm_cv_target_os_type="NetBSD" ;;
   *-*-dragonfly*)
     llvm_cv_target_os_type="DragonFly" ;;
+  *-*-bitrig*)
+    llvm_cv_target_os_type="Bitrig" ;;
   *-*-hpux*)
     llvm_cv_target_os_type="HP-UX" ;;
   *-*-interix*)
@@ -368,6 +381,8 @@ AC_CACHE_CHECK([type of operating system we're going to target],
     llvm_cv_target_os_type="NativeClient" ;;
   *-unknown-eabi*)
     llvm_cv_target_os_type="Freestanding" ;;
+  *-*-ps4)
+    llvm_cv_target_os_type="PS4" ;;
   *)
     llvm_cv_target_os_type="Unknown" ;;
 esac])
@@ -422,6 +437,7 @@ AC_CACHE_CHECK([target architecture],[llvm_cv_target_arch],
   hexagon-*)              llvm_cv_target_arch="Hexagon" ;;
   nvptx-*)                llvm_cv_target_arch="NVPTX" ;;
   s390x-*)                llvm_cv_target_arch="SystemZ" ;;
+  wasm*-*)                llvm_cv_target_arch="WebAssembly" ;;
   *)                      llvm_cv_target_arch="Unknown" ;;
 esac])
 
@@ -457,6 +473,7 @@ case $host in
   msp430-*)               host_arch="MSP430" ;;
   hexagon-*)              host_arch="Hexagon" ;;
   s390x-*)                host_arch="SystemZ" ;;
+  wasm*-*)                host_arch="WebAssembly" ;;
   *)                      host_arch="Unknown" ;;
 esac
 
@@ -658,11 +675,11 @@ AC_ARG_ENABLE(clang-static-analyzer,
                              enableval="yes")
 case "$enableval" in
   yes) AC_SUBST(ENABLE_CLANG_STATIC_ANALYZER,[1]) ;;
-  no)  
+  no)
     if test ${clang_arcmt} != "no" ; then
       AC_MSG_ERROR([Cannot enable clang ARC Migration Tool while disabling static analyzer.])
     fi
-    AC_SUBST(ENABLE_CLANG_STATIC_ANALYZER,[0]) 
+    AC_SUBST(ENABLE_CLANG_STATIC_ANALYZER,[0])
     ;;
   default) AC_SUBST(ENABLE_CLANG_STATIC_ANALYZER,[1]);;
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-static-analyzer. Use "yes" or "no"]) ;;
@@ -691,8 +708,10 @@ AC_ARG_ENABLE(assertions,AS_HELP_STRING(
   --enable-assertions,[Compile with assertion checks enabled (default is YES)]),, enableval="yes")
 if test ${enableval} = "yes" ; then
   AC_SUBST(DISABLE_ASSERTIONS,[[]])
+  assertions_enabled="yes"
 else
   AC_SUBST(DISABLE_ASSERTIONS,[[DISABLE_ASSERTIONS=1]])
+  assertions_enabled="no"
 fi
 
 dnl --enable-werror : check whether we want Werror on by default
@@ -715,6 +734,28 @@ else
   AC_SUBST(ENABLE_EXPENSIVE_CHECKS,[[]])
   AC_SUBST(EXPENSIVE_CHECKS,[[no]])
 fi
+
+dnl --enable-abi-breaking-checks : decide whether we should compile in asserts and
+dnl checks that make the build ABI incompatible with an llvm built without these
+dnl checks enabled.
+AC_ARG_ENABLE(abi-breaking-checks,AS_HELP_STRING(
+  --enable-abi-breaking-checks,[Compile with abi-breaking asserts support (default is with-asserts)]),, enableval="with-asserts")
+case "$enableval" in
+  with-asserts)  if test ${assertions_enabled} = "yes" ; then
+                   AC_DEFINE([LLVM_ENABLE_ABI_BREAKING_CHECKS],[1],[Define to enable checks that alter the LLVM C++ ABI])
+                   AC_SUBST(ENABLE_ABI_BREAKING_CHECKS,[1])
+                 else
+                   AC_SUBST(ENABLE_ABI_BREAKING_CHECKS,[0])
+		 fi ;;
+  yes)
+                 AC_DEFINE([LLVM_ENABLE_ABI_BREAKING_CHECKS],[1],[Define to enable checks that alter the LLVM C++ ABI])
+                 AC_SUBST(ENABLE_ABI_BREAKING_CHECKS,[1])
+                 ;;
+  no)
+                 AC_SUBST(ENABLE_ABI_BREAKING_CHECKS,[0])
+                 ;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-abi-breaking-checks.  Use "with-asserts", "yes" or "no"])
+esac
 
 dnl --enable-debug-runtime : should runtime libraries have debug symbols?
 AC_ARG_ENABLE(debug-runtime,
@@ -765,6 +806,7 @@ else
     Hexagon)     AC_SUBST(TARGET_HAS_JIT,0) ;;
     NVPTX)       AC_SUBST(TARGET_HAS_JIT,0) ;;
     SystemZ)     AC_SUBST(TARGET_HAS_JIT,1) ;;
+    WebAssembly) AC_SUBST(TARGET_HAS_JIT,0) ;;
     *)           AC_SUBST(TARGET_HAS_JIT,0) ;;
   esac
 fi
@@ -791,9 +833,137 @@ AC_ARG_ENABLE(doxygen,
                              enableval=default)
 case "$enableval" in
   yes) AC_SUBST(ENABLE_DOXYGEN,[1]) ;;
-  no)  AC_SUBST(ENABLE_DOXYGEN,[0]) ;;
-  default) AC_SUBST(ENABLE_DOXYGEN,[0]) ;;
+  no|default) AC_SUBST(ENABLE_DOXYGEN,[0]) ;;
   *) AC_MSG_ERROR([Invalid setting for --enable-doxygen. Use "yes" or "no"]) ;;
+esac
+
+dnl Allow enablement of doxygen search engine
+AC_ARG_ENABLE(doxygen-search,
+              AS_HELP_STRING([--enable-doxygen-search],
+                             [Enable doxygen search support (default is NO)]),,
+                             enableval=default)
+ENABLE_DOXYGEN_SEARCH="$enableval"
+
+case "$enableval" in
+  yes|no|default) ;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-doxygen-search. Use "yes" or "no"]) ;;
+esac
+
+AC_ARG_ENABLE(doxygen-external-search,
+              AS_HELP_STRING([--enable-doxygen-external-search],
+                             [Enable doxygen exteranl search (default is NO)]),,
+                             enableval=default)
+ENABLE_DOXYGEN_EXTERNAL_SEARCH="$enableval"
+
+case "$enableval" in
+  yes)
+    dnl To match with the CMake behavior, enable doxygen when
+    dnl --enable-doxygen-external-search is enabled.
+    case "$ENABLE_DOXYGEN_SEARCH" in
+      yes|default) ENABLE_DOXYGEN_SEARCH="yes" ;;
+      no) AC_MSG_ERROR([The option --enable-doxygen-external-search requires --enable-doxygen-search]) ;;
+    esac
+    ;;
+  no|default) ;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-doxygen-external-search. Use "yes" or "no"]) ;;
+esac
+
+AC_ARG_WITH(doxygen-search-engine-url,
+            AS_HELP_STRING([--with-doxygen-search-engine-url],
+                           [Specify the external search engine for doxygen]),,)
+WITH_DOXYGEN_SEARCH_ENGINE_URL="$withval"
+
+AC_ARG_WITH(doxygen-search-mappings,
+            AS_HELP_STRING([--with-doxygen-search-mappings],
+                           [Specify the extra search mapping for doxygen]),,)
+WITH_DOXYGEN_SEARCH_MAPPINGS="$withval"
+
+case "$ENABLE_DOXYGEN_SEARCH" in
+  yes)
+    if test "$ENABLE_DOXYGEN" = "0" ; then
+      AC_MSG_ERROR([The option --enable-doxygen-search requires --enable-doxygen.])
+    fi
+
+    AC_SUBST(enable_searchengine,[YES])
+
+    case "$ENABLE_DOXYGEN_EXTERNAL_SEARCH" in
+      yes)
+        AC_SUBST(enable_external_search,[YES])
+        AC_SUBST(enable_server_based_search,[YES])
+        AC_SUBST(searchengine_url,["$WITH_DOXYGEN_SEARCH_ENGINE_URL"])
+        AC_SUBST(extra_search_mappings,["$WITH_DOXYGEN_SEARCH_MAPPINGS"])
+        ;;
+
+      no|default)
+        AC_SUBST(enable_external_search,[NO])
+        AC_SUBST(enable_server_based_search,[NO])
+        AC_SUBST(searchengine_url,[])
+        AC_SUBST(extra_search_mappings,[])
+        ;;
+    esac
+    ;;
+
+  no|default)
+    AC_SUBST(enable_searchengine,[NO])
+    AC_SUBST(searchengine_url,[])
+    AC_SUBST(enable_server_based_search,[NO])
+    AC_SUBST(enable_external_search,[NO])
+    AC_SUBST(extra_search_mappings,[])
+    ;;
+
+  *)
+    AC_MSG_ERROR([Invalid setting for --enable-doxygen-search. Use "yes" or "no"])
+    ;;
+esac
+
+dnl Allow enablement of doxygen generated Qt help files
+AC_ARG_ENABLE(doxygen-qt-help,
+	      AS_HELP_STRING([--enable-doxygen-qt-help],
+			     [Build Qt help files (default is NO)]),,
+			     enableval=default)
+case "$enableval" in
+  yes)
+    if test "$ENABLE_DOXYGEN" = "0" ; then
+      AC_MSG_ERROR([The option --enable-doxygen-qt-help requires --enable-doxygen.])
+    fi
+
+    AC_PATH_PROG(QHELPGENERATOR, [qhelpgenerator], [qhelpgenerator])
+
+    dnl Qt help file for llvm doxygen documentation
+    AC_SUBST(llvm_doxygen_generate_qhp,[YES])
+    AC_SUBST(llvm_doxygen_qch_filename,[org.llvm.qch])
+    AC_SUBST(llvm_doxygen_qhp_namespace,[org.llvm])
+    AC_SUBST(llvm_doxygen_qhelpgenerator_path,["$QHELPGENERATOR"])
+    AC_SUBST(llvm_doxygen_qhp_cust_filter_name,["$PACKAGE_STRING"])
+    AC_SUBST(llvm_doxygen_qhp_cust_filter_attrs,["$PACKAGE_NAME,$PACKAGE_VERSION"])
+
+    dnl Qt help file for clang doxygen documentation
+    AC_SUBST(clang_doxygen_generate_qhp,[YES])
+    AC_SUBST(clang_doxygen_qch_filename,[org.llvm.clang.qch])
+    AC_SUBST(clang_doxygen_qhp_namespace,[org.llvm.clang])
+    AC_SUBST(clang_doxygen_qhelpgenerator_path,["$QHELPGENERATOR"])
+    AC_SUBST(clang_doxygen_qhp_cust_filter_name,["Clang $PACKAGE_VERSION"])
+    AC_SUBST(clang_doxygen_qhp_cust_filter_attrs,["Clang,$PACKAGE_VERSION"])
+    ;;
+
+  no|default)
+    AC_SUBST(llvm_doxygen_generate_qhp,[NO])
+    AC_SUBST(llvm_doxygen_qch_filename,[])
+    AC_SUBST(llvm_doxygen_qhp_namespace,[])
+    AC_SUBST(llvm_doxygen_qhelpgenerator_path,[])
+    AC_SUBST(llvm_doxygen_qhp_cust_filter_name,[])
+    AC_SUBST(llvm_doxygen_qhp_cust_filter_attrs,[])
+
+    AC_SUBST(clang_doxygen_generate_qhp,[NO])
+    AC_SUBST(clang_doxygen_qch_filename,[])
+    AC_SUBST(clang_doxygen_qhp_namespace,[])
+    AC_SUBST(clang_doxygen_qhelpgenerator_path,[])
+    AC_SUBST(clang_doxygen_qhp_cust_filter_name,["Clang $PACKAGE_VERSION"])
+    AC_SUBST(clang_doxygen_qhp_cust_filter_attrs,["Clang,$PACKAGE_VERSION"])
+    ;;
+
+  *)
+    AC_MSG_ERROR([Invalid setting for --enable-doxygen-qt-help. Use "yes" or "no"]) ;;
 esac
 
 dnl Allow disablement of threads
@@ -922,7 +1092,7 @@ if test "$llvm_cv_enable_crash_overrides" = "yes" ; then
 fi
 
 dnl List all possible targets
-ALL_TARGETS="X86 Sparc PowerPC ARM AArch64 Mips XCore MSP430 CppBackend NVPTX Hexagon SystemZ R600"
+ALL_TARGETS="X86 Sparc PowerPC ARM AArch64 Mips XCore MSP430 CppBackend NVPTX Hexagon SystemZ AMDGPU BPF"
 AC_SUBST(ALL_TARGETS,$ALL_TARGETS)
 
 dnl Allow specific targets to be specified for building (or not)
@@ -930,7 +1100,7 @@ TARGETS_TO_BUILD=""
 AC_ARG_ENABLE([targets],AS_HELP_STRING([--enable-targets],
     [Build specific host targets: all or target1,target2,... Valid targets are:
      host, x86, x86_64, sparc, powerpc, arm64, arm, aarch64, mips, hexagon,
-     xcore, msp430, nvptx, systemz, r600, and cpp (default=all)]),,
+     xcore, msp430, nvptx, systemz, r600, bpf, wasm, and cpp (default=all)]),,
     enableval=all)
 if test "$enableval" = host-only ; then
   enableval=host
@@ -946,6 +1116,7 @@ case "$enableval" in
         aarch64)  TARGETS_TO_BUILD="AArch64 $TARGETS_TO_BUILD" ;;
         arm64)    TARGETS_TO_BUILD="AArch64 $TARGETS_TO_BUILD" ;;
         arm)      TARGETS_TO_BUILD="ARM $TARGETS_TO_BUILD" ;;
+        bpf)      TARGETS_TO_BUILD="BPF $TARGETS_TO_BUILD" ;;
         mips)     TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         mipsel)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
         mips64)   TARGETS_TO_BUILD="Mips $TARGETS_TO_BUILD" ;;
@@ -956,7 +1127,9 @@ case "$enableval" in
         hexagon)  TARGETS_TO_BUILD="Hexagon $TARGETS_TO_BUILD" ;;
         nvptx)    TARGETS_TO_BUILD="NVPTX $TARGETS_TO_BUILD" ;;
         systemz)  TARGETS_TO_BUILD="SystemZ $TARGETS_TO_BUILD" ;;
-        r600)     TARGETS_TO_BUILD="R600 $TARGETS_TO_BUILD" ;;
+        amdgpu)   TARGETS_TO_BUILD="AMDGPU $TARGETS_TO_BUILD" ;;
+        r600)     TARGETS_TO_BUILD="AMDGPU $TARGETS_TO_BUILD" ;;
+        wasm)     TARGETS_TO_BUILD="WebAssembly $TARGETS_TO_BUILD" ;;
         host) case "$llvm_cv_target_arch" in
             x86)         TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;
             x86_64)      TARGETS_TO_BUILD="X86 $TARGETS_TO_BUILD" ;;
@@ -970,6 +1143,7 @@ case "$enableval" in
             Hexagon)     TARGETS_TO_BUILD="Hexagon $TARGETS_TO_BUILD" ;;
             NVPTX)       TARGETS_TO_BUILD="NVPTX $TARGETS_TO_BUILD" ;;
             SystemZ)     TARGETS_TO_BUILD="SystemZ $TARGETS_TO_BUILD" ;;
+            WebAssembly) TARGETS_TO_BUILD="WebAssembly $TARGETS_TO_BUILD" ;;
             *)       AC_MSG_ERROR([Can not set target to build]) ;;
           esac ;;
         *) AC_MSG_ERROR([Unrecognized target $a_target]) ;;
@@ -1162,6 +1336,13 @@ AC_ARG_WITH(default-sysroot,
 AC_DEFINE_UNQUOTED(DEFAULT_SYSROOT,"$withval",
                    [Default <path> to all compiler invocations for --sysroot=<path>.])
 
+AC_ARG_WITH(clang-default-openmp-runtime,
+  AS_HELP_STRING([--with-clang-default-openmp-runtime],
+    [The default OpenMP runtime for Clang.]),,
+    withval="libgomp")
+AC_DEFINE_UNQUOTED(CLANG_DEFAULT_OPENMP_RUNTIME,"$withval",
+                   [Default OpenMP runtime used by -fopenmp.])
+
 dnl Allow linking of LLVM with GPLv3 binutils code.
 AC_ARG_WITH(binutils-include,
   AS_HELP_STRING([--with-binutils-include],
@@ -1287,10 +1468,8 @@ AC_PATH_PROG(GROFF, [groff])
 AC_PATH_PROG(GZIPBIN, [gzip])
 AC_PATH_PROG(PDFROFF, [pdfroff])
 AC_PATH_PROG(ZIP, [zip])
-AC_PATH_PROGS(OCAMLC, [ocamlc])
-AC_PATH_PROGS(OCAMLOPT, [ocamlopt])
-AC_PATH_PROGS(OCAMLDEP, [ocamldep])
-AC_PATH_PROGS(OCAMLDOC, [ocamldoc])
+AC_PATH_PROG(GO, [go])
+AC_PATH_PROGS(OCAMLFIND, [ocamlfind])
 AC_PATH_PROGS(GAS, [gas as])
 
 dnl Get the version of the linker in use.
@@ -1388,7 +1567,27 @@ then
     CXX_FLAG_CHECK(NO_UNINITIALIZED, [-Wno-uninitialized])
   fi
 fi
-AC_MSG_RESULT([$NO_VARIADIC_MACROS $NO_MISSING_FIELD_INITIALIZERS $COVERED_SWITCH_DEFAULT $NO_UNINITIALIZED $NO_MAYBE_UNINITIALIZED])
+
+dnl Check for misbehaving -Wcomment (gcc-4.7 has this) and maybe add
+dnl -Wno-comment to the flags.
+no_comment=
+llvm_cv_old_cxxflags="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -Wcomment -Werror"
+AC_COMPILE_IFELSE(
+[
+  AC_LANG_SOURCE([[// Comment \o\
+// Another comment
+int main() { return 0; }
+  ]])
+],
+[
+  no_comment=-Wno-comment
+],
+[])
+AC_SUBST(NO_COMMENT, [$no_comment])
+CXXFLAGS="$llvm_cv_old_cxxflags"
+
+AC_MSG_RESULT([$NO_VARIADIC_MACROS $NO_MISSING_FIELD_INITIALIZERS $COVERED_SWITCH_DEFAULT $NO_UNINITIALIZED $NO_MAYBE_UNINITIALIZED $NO_COMMENT])
 
 AC_ARG_WITH([python],
             [AS_HELP_STRING([--with-python], [path to python])],
@@ -1402,23 +1601,23 @@ else
     AC_MSG_WARN([specified python ($PYTHON) is not usable, searching path])
   fi
 
-  AC_PATH_PROG([PYTHON], [python python2 python26],
+  AC_PATH_PROG([PYTHON], [python python2 python27],
                [AC_MSG_RESULT([not found])
-                AC_MSG_ERROR([could not find python 2.5 or higher])])
+                AC_MSG_ERROR([could not find python 2.7 or higher])])
 fi
 
-AC_MSG_CHECKING([for python >= 2.5])
+AC_MSG_CHECKING([for python >= 2.7])
 ac_python_version=`$PYTHON -V 2>&1 | cut -d' ' -f2`
 ac_python_version_major=`echo $ac_python_version | cut -d'.' -f1`
 ac_python_version_minor=`echo $ac_python_version | cut -d'.' -f2`
 ac_python_version_patch=`echo $ac_python_version | cut -d'.' -f3`
 if test "$ac_python_version_major" -gt "2" || \
    (test "$ac_python_version_major" -eq "2" && \
-    test "$ac_python_version_minor" -ge "5") ; then
+    test "$ac_python_version_minor" -ge "7") ; then
   AC_MSG_RESULT([$PYTHON ($ac_python_version)])
 else
   AC_MSG_RESULT([not found])
-  AC_MSG_FAILURE([found python $ac_python_version ($PYTHON); required >= 2.5])
+  AC_MSG_FAILURE([found python $ac_python_version ($PYTHON); required >= 2.7])
 fi
 
 dnl===-----------------------------------------------------------------------===
@@ -1429,7 +1628,7 @@ dnl===-----------------------------------------------------------------------===
 
 AC_CHECK_LIB(m,sin)
 if test "$llvm_cv_os_type" = "MingW" ; then
-  AC_CHECK_LIB(imagehlp, main)
+  AC_CHECK_LIB(ole32, main)
   AC_CHECK_LIB(psapi, main)
   AC_CHECK_LIB(shell32, main)
 fi
@@ -1514,16 +1713,16 @@ AC_ARG_WITH(oprofile,
             AC_SEARCH_LIBS(bfd_init, bfd, [], [])
             AC_SEARCH_LIBS(op_open_agent, opagent, [], [
               echo "Error! You need to have libopagent around."
-              exit -1
+              exit 1
             ])
             AC_CHECK_HEADER([opagent.h], [], [
               echo "Error! You need to have opagent.h around."
-              exit -1
+              exit 1
               ])
           fi ;;
         *)
           AC_MSG_ERROR([OProfile support is available on Linux only.]) ;;
-      esac 
+      esac
     ],
     [
       AC_SUBST(USE_OPROFILE, [0])
@@ -1591,8 +1790,12 @@ AC_HEADER_SYS_WAIT
 AC_HEADER_TIME
 
 AC_LANG_PUSH([C++])
-AC_CHECK_HEADERS([cxxabi.h])
+dnl size_t must be defined before including cxxabi.h on FreeBSD 10.0.
+AC_CHECK_HEADERS([cxxabi.h], [], [],
+[#include <stddef.h>
+])
 AC_LANG_POP([C++])
+
 AC_CHECK_HEADERS([dlfcn.h execinfo.h fcntl.h inttypes.h link.h])
 AC_CHECK_HEADERS([malloc.h setjmp.h signal.h stdint.h termios.h unistd.h])
 AC_CHECK_HEADERS([utime.h])
@@ -1667,9 +1870,7 @@ dnl=== SECTION 8: Check for specific functions needed
 dnl===
 dnl===-----------------------------------------------------------------------===
 
-AC_CHECK_FUNCS([backtrace ceilf floorf roundf rintf nearbyintf getcwd ])
-AC_CHECK_FUNCS([powf fmodf strtof round ])
-AC_CHECK_FUNCS([log log2 log10 exp exp2])
+AC_CHECK_FUNCS([backtrace getcwd ])
 AC_CHECK_FUNCS([getpagesize getrusage getrlimit setrlimit gettimeofday ])
 AC_CHECK_FUNCS([isatty mkdtemp mkstemp ])
 AC_CHECK_FUNCS([mktemp posix_spawn pread realpath sbrk setrlimit ])
@@ -1691,7 +1892,9 @@ if test "$llvm_cv_os_type" = "MingW" ; then
   AC_CHECK_LIB(gcc,_alloca,AC_DEFINE([HAVE__ALLOCA],[1],[Have host's _alloca]))
   AC_CHECK_LIB(gcc,__alloca,AC_DEFINE([HAVE___ALLOCA],[1],[Have host's __alloca]))
   AC_CHECK_LIB(gcc,__chkstk,AC_DEFINE([HAVE___CHKSTK],[1],[Have host's __chkstk]))
+  AC_CHECK_LIB(gcc,__chkstk_ms,AC_DEFINE([HAVE___CHKSTK_MS],[1],[Have host's __chkstk_ms]))
   AC_CHECK_LIB(gcc,___chkstk,AC_DEFINE([HAVE____CHKSTK],[1],[Have host's ___chkstk]))
+  AC_CHECK_LIB(gcc,___chkstk_ms,AC_DEFINE([HAVE____CHKSTK_MS],[1],[Have host's ___chkstk_ms]))
 
   AC_CHECK_LIB(gcc,__ashldi3,AC_DEFINE([HAVE___ASHLDI3],[1],[Have host's __ashldi3]))
   AC_CHECK_LIB(gcc,__ashrdi3,AC_DEFINE([HAVE___ASHRDI3],[1],[Have host's __ashrdi3]))
@@ -1730,11 +1933,6 @@ if test "$llvm_cv_os_type" = "MingW" ; then
 ])
   AC_DEFINE_UNQUOTED([WIN32_ELMCB_PCSTR],$llvm_cv_win32_elmcb_pcstr,[Type of 1st arg on ELM Callback])
 fi
-
-dnl Check for variations in the Standard C++ library and STL. These macros are
-dnl provided by LLVM in the autoconf/m4 directory.
-AC_FUNC_ISNAN
-AC_FUNC_ISINF
 
 dnl Check for mmap support.We also need to know if /dev/zero is required to
 dnl be opened for allocating RWX memory.
@@ -1864,8 +2062,13 @@ AC_DEFINE_UNQUOTED(LLVM_DEFAULT_TARGET_TRIPLE, "$target",
 dnl Determine which bindings to build.
 if test "$BINDINGS_TO_BUILD" = auto ; then
   BINDINGS_TO_BUILD=""
-  if test "x$OCAMLC" != x -a "x$OCAMLDEP" != x ; then
+  if test "x$OCAMLFIND" != x ; then
     BINDINGS_TO_BUILD="ocaml $BINDINGS_TO_BUILD"
+  fi
+  if test "x$GO" != x ; then
+    if $GO run ${srcdir}/bindings/go/conftest.go ; then
+      BINDINGS_TO_BUILD="go $BINDINGS_TO_BUILD"
+    fi
   fi
 fi
 AC_SUBST(BINDINGS_TO_BUILD,$BINDINGS_TO_BUILD)
@@ -1875,22 +2078,36 @@ binding_prereqs_failed=0
 for a_binding in $BINDINGS_TO_BUILD ; do
   case "$a_binding" in
   ocaml)
-    if test "x$OCAMLC" = x ; then
-      AC_MSG_WARN([--enable-bindings=ocaml specified, but ocamlc not found. Try configure OCAMLC=/path/to/ocamlc])
+    if test "x$OCAMLFIND" = x ; then
+      AC_MSG_WARN([--enable-bindings=ocaml specified, but ocamlfind not found. Try configure OCAMLFIND=/path/to/ocamlfind])
       binding_prereqs_failed=1
     fi
-    if test "x$OCAMLDEP" = x ; then
-      AC_MSG_WARN([--enable-bindings=ocaml specified, but ocamldep not found. Try configure OCAMLDEP=/path/to/ocamldep])
+
+    if $OCAMLFIND opt -version >/dev/null 2>/dev/null ; then
+      HAVE_OCAMLOPT=1
+    else
+      HAVE_OCAMLOPT=0
+    fi
+    AC_SUBST(HAVE_OCAMLOPT)
+
+    if ! $OCAMLFIND query ctypes >/dev/null 2>/dev/null; then
+      AC_MSG_WARN([--enable-bindings=ocaml specified, but ctypes is not installed])
       binding_prereqs_failed=1
     fi
-    if test "x$OCAMLOPT" = x ; then
-      AC_MSG_WARN([--enable-bindings=ocaml specified, but ocamlopt not found. Try configure OCAMLOPT=/path/to/ocamlopt])
-      dnl ocamlopt is optional!
+
+    if $OCAMLFIND query oUnit >/dev/null 2>/dev/null; then
+      HAVE_OCAML_OUNIT=1
+    else
+      HAVE_OCAML_OUNIT=0
+      AC_MSG_WARN([--enable-bindings=ocaml specified, but OUnit 2 is not installed. Tests will not run])
+      dnl oUnit is optional!
     fi
+    AC_SUBST(HAVE_OCAML_OUNIT)
+
     if test "x$with_ocaml_libdir" != xauto ; then
       AC_SUBST(OCAML_LIBDIR,$with_ocaml_libdir)
     else
-      ocaml_stdlib="`"$OCAMLC" -where`"
+      ocaml_stdlib="`"$OCAMLFIND" ocamlc -where`"
       if test "$LLVM_PREFIX" '<' "$ocaml_stdlib" -a "$ocaml_stdlib" '<' "$LLVM_PREFIX~"
       then
         # ocaml stdlib is beneath our prefix; use stdlib
@@ -1898,6 +2115,19 @@ for a_binding in $BINDINGS_TO_BUILD ; do
       else
         # ocaml stdlib is outside our prefix; use libdir/ocaml
         AC_SUBST(OCAML_LIBDIR,${prefix}/lib/ocaml)
+      fi
+    fi
+    ;;
+  go)
+    if test "x$GO" = x ; then
+      AC_MSG_WARN([--enable-bindings=go specified, but go not found. Try configure GO=/path/to/go])
+      binding_prereqs_failed=1
+    else
+      if $GO run ${srcdir}/bindings/go/conftest.go ; then
+        :
+      else
+        AC_MSG_WARN([--enable-bindings=go specified, but need at least Go 1.2. Try configure GO=/path/to/go])
+        binding_prereqs_failed=1
       fi
     fi
     ;;
@@ -1939,7 +2169,10 @@ dnl contains the same list of files as AC_CONFIG_HEADERS below. This ensures the
 dnl files can be updated automatically when their *.in sources change.
 AC_CONFIG_HEADERS([include/llvm/Config/config.h include/llvm/Config/llvm-config.h])
 AH_TOP([#ifndef CONFIG_H
-#define CONFIG_H])
+#define CONFIG_H
+
+/* Exported configuration */
+#include "llvm/Config/llvm-config.h"])
 AH_BOTTOM([#endif])
 
 AC_CONFIG_FILES([include/llvm/Config/Targets.def])
@@ -1962,6 +2195,11 @@ if test "${clang_src_root}" = ""; then
   clang_src_root="$srcdir/tools/clang"
 fi
 if test -f ${clang_src_root}/README.txt; then
+  dnl Clang supports build systems which use the multilib libdir suffix.
+  dnl The autoconf system doesn't support this so stub out that variable.
+  AC_DEFINE_UNQUOTED(CLANG_LIBDIR_SUFFIX,"",
+                     [Multilib suffix for libdir.])
+
   dnl Use variables to stay under 80 columns.
   configh="include/clang/Config/config.h"
   doxy="docs/doxygen.cfg"

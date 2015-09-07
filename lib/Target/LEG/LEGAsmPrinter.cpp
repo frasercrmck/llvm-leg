@@ -48,13 +48,12 @@ using namespace llvm;
 
 namespace {
 class LEGAsmPrinter : public AsmPrinter {
-  const LEGSubtarget &Subtarget;
   LEGMCInstLower MCInstLowering;
 
 public:
-  explicit LEGAsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
-      : AsmPrinter(TM, Streamer), Subtarget(TM.getSubtarget<LEGSubtarget>()),
-        MCInstLowering(*this) {}
+  explicit LEGAsmPrinter(TargetMachine &TM,
+                         std::unique_ptr<MCStreamer> Streamer)
+      : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {}
 
   virtual const char *getPassName() const { return "LEG Assembly Printer"; }
 
@@ -69,14 +68,14 @@ void LEGAsmPrinter::EmitFunctionBodyStart() {
 }
 
 void LEGAsmPrinter::EmitFunctionEntryLabel() {
-  OutStreamer.EmitLabel(CurrentFnSym);
+  OutStreamer->EmitLabel(CurrentFnSym);
 }
 
 void LEGAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   MCInst TmpInst;
   MCInstLowering.Lower(MI, TmpInst);
 
-  EmitToStreamer(OutStreamer, TmpInst);
+  EmitToStreamer(*OutStreamer, TmpInst);
 }
 
 // Force static initialization.

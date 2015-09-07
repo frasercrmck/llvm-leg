@@ -34,17 +34,18 @@ namespace llvm {
 #ifndef NDEBUG
   FunctionPass *createPPCCTRLoopsVerify();
 #endif
+  FunctionPass *createPPCLoopDataPrefetchPass();
+  FunctionPass *createPPCLoopPreIncPrepPass(PPCTargetMachine &TM);
+  FunctionPass *createPPCTOCRegDepsPass();
   FunctionPass *createPPCEarlyReturnPass();
   FunctionPass *createPPCVSXCopyPass();
-  FunctionPass *createPPCVSXCopyCleanupPass();
   FunctionPass *createPPCVSXFMAMutatePass();
+  FunctionPass *createPPCVSXSwapRemovalPass();
   FunctionPass *createPPCBranchSelectionPass();
   FunctionPass *createPPCISelDag(PPCTargetMachine &TM);
+  FunctionPass *createPPCTLSDynamicCallPass();
   void LowerPPCMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                     AsmPrinter &AP, bool isDarwin);
-
-  /// \brief Creates an PPC-specific Target Transformation Info pass.
-  ImmutablePass *createPPCTargetTransformInfoPass(const PPCTargetMachine *TM);
 
   void initializePPCVSXFMAMutatePass(PassRegistry&);
   extern char &PPCVSXFMAMutateID;

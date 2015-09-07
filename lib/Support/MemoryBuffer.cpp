@@ -23,7 +23,6 @@
 #include "llvm/Support/Program.h"
 #include <cassert>
 #include <cerrno>
-#include <cstdio>
 #include <cstring>
 #include <new>
 #include <sys/types.h>
@@ -58,7 +57,8 @@ void MemoryBuffer::init(const char *BufStart, const char *BufEnd,
 /// CopyStringRef - Copies contents of a StringRef into a block of memory and
 /// null-terminates it.
 static void CopyStringRef(char *Memory, StringRef Data) {
-  memcpy(Memory, Data.data(), Data.size());
+  if (!Data.empty())
+    memcpy(Memory, Data.data(), Data.size());
   Memory[Data.size()] = 0; // Null terminate string.
 }
 
@@ -203,8 +203,8 @@ class MemoryBufferMMapFile : public MemoryBuffer {
 
 public:
   MemoryBufferMMapFile(bool RequiresNullTerminator, int FD, uint64_t Len,
-                       uint64_t Offset, std::error_code EC)
-      : MFR(FD, false, sys::fs::mapped_file_region::readonly,
+                       uint64_t Offset, std::error_code &EC)
+      : MFR(FD, sys::fs::mapped_file_region::readonly,
             getLegalMapSize(Len, Offset), getLegalMapOffset(Offset), EC) {
     if (!EC) {
       const char *Start = getStart(Len, Offset);
@@ -330,7 +330,7 @@ static ErrorOr<std::unique_ptr<MemoryBuffer>>
 getOpenFileImpl(int FD, const Twine &Filename, uint64_t FileSize,
                 uint64_t MapSize, int64_t Offset, bool RequiresNullTerminator,
                 bool IsVolatileSize) {
-  static int PageSize = sys::process::get_self()->page_size();
+  static int PageSize = sys::Process::getPageSize();
 
   // Default is to map the full file.
   if (MapSize == uint64_t(-1)) {

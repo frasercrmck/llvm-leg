@@ -135,7 +135,7 @@ private:
   // Dead defs generated during spilling.
   SmallVector<MachineInstr*, 8> DeadDefs;
 
-  ~InlineSpiller() {}
+  ~InlineSpiller() override {}
 
 public:
   InlineSpiller(MachineFunctionPass &pass, MachineFunction &mf, VirtRegMap &vrm)
@@ -184,11 +184,16 @@ private:
 }
 
 namespace llvm {
+
+Spiller::~Spiller() { }
+void Spiller::anchor() { }
+
 Spiller *createInlineSpiller(MachineFunctionPass &pass,
                              MachineFunction &mf,
                              VirtRegMap &vrm) {
   return new InlineSpiller(pass, mf, vrm);
 }
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -503,6 +508,7 @@ MachineInstr *InlineSpiller::traceSiblingValue(unsigned UseReg, VNInfo *UseVNI,
   SmallVector<std::pair<unsigned, VNInfo*>, 8> WorkList;
   WorkList.push_back(std::make_pair(UseReg, UseVNI));
 
+  LiveInterval &OrigLI = LIS.getInterval(Original);
   do {
     unsigned Reg;
     VNInfo *VNI;
@@ -516,8 +522,11 @@ MachineInstr *InlineSpiller::traceSiblingValue(unsigned UseReg, VNInfo *UseVNI,
 
     // Trace through PHI-defs created by live range splitting.
     if (VNI->isPHIDef()) {
-      // Stop at original PHIs.  We don't know the value at the predecessors.
-      if (VNI->def == OrigVNI->def) {
+      // Stop at original PHIs.  We don't know the value at the
+      // predecessors. Look up the VNInfo for the current definition
+      // in OrigLI, to properly determine whether or not this phi was
+      // added by splitting.
+      if (VNI->def == OrigLI.getVNInfoAt(VNI->def)->def) {
         DEBUG(dbgs() << "orig phi value\n");
         SVI->second.DefByOrigPHI = true;
         SVI->second.AllDefsAreReloads = false;
@@ -537,7 +546,6 @@ MachineInstr *InlineSpiller::traceSiblingValue(unsigned UseReg, VNInfo *UseVNI,
       // Separate all values dominated by OrigVNI into PHIs and non-PHIs.
       SmallVector<VNInfo*, 8> PHIs, NonPHIs;
       LiveInterval &LI = LIS.getInterval(Reg);
-      LiveInterval &OrigLI = LIS.getInterval(Original);
 
       for (LiveInterval::vni_iterator VI = LI.vni_begin(), VE = LI.vni_end();
            VI != VE; ++VI) {
@@ -568,8 +576,8 @@ MachineInstr *InlineSpiller::traceSiblingValue(unsigned UseReg, VNInfo *UseVNI,
         std::tie(SVI, Inserted) =
           SibValues.insert(std::make_pair(NonPHI, SibValueInfo(Reg, NonPHI)));
         // Add all the PHIs as dependents of NonPHI.
-        for (unsigned pi = 0, pe = PHIs.size(); pi != pe; ++pi)
-          SVI->second.Deps.push_back(PHIs[pi]);
+        SVI->second.Deps.insert(SVI->second.Deps.end(), PHIs.begin(),
+                                PHIs.end());
         // This is the first time we see NonPHI, add it to the worklist.
         if (Inserted)
           WorkList.push_back(std::make_pair(Reg, NonPHI));
@@ -818,7 +826,7 @@ void InlineSpiller::markValueUsed(LiveInterval *LI, VNInfo *VNI) {
   WorkList.push_back(std::make_pair(LI, VNI));
   do {
     std::tie(LI, VNI) = WorkList.pop_back_val();
-    if (!UsedValues.insert(VNI))
+    if (!UsedValues.insert(VNI).second)
       continue;
 
     if (VNI->isPHIDef()) {
@@ -913,7 +921,7 @@ bool InlineSpiller::reMaterializeFor(LiveInterval &VirtReg,
 
   // Replace operands
   for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
-    MachineOperand &MO = MI->getOperand(Ops[i].second);
+    MachineOperand &MO = Ops[i].first->getOperand(Ops[i].second);
     if (MO.isReg() && MO.isUse() && MO.getReg() == VirtReg.reg) {
       MO.setReg(NewVReg);
       MO.setIsKill();
@@ -1083,7 +1091,8 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
   bool WasCopy = MI->isCopy();
   unsigned ImpReg = 0;
 
-  bool SpillSubRegs = (MI->getOpcode() == TargetOpcode::PATCHPOINT ||
+  bool SpillSubRegs = (MI->getOpcode() == TargetOpcode::STATEPOINT ||
+                       MI->getOpcode() == TargetOpcode::PATCHPOINT ||
                        MI->getOpcode() == TargetOpcode::STACKMAP);
 
   // TargetInstrInfo::foldMemoryOperand only expects explicit, non-tied
@@ -1091,6 +1100,7 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
   SmallVector<unsigned, 8> FoldOps;
   for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
     unsigned Idx = Ops[i].second;
+    assert(MI == Ops[i].first && "Instruction conflict during operand folding");
     MachineOperand &MO = MI->getOperand(Idx);
     if (MO.isImplicit()) {
       ImpReg = MO.getReg();
@@ -1133,13 +1143,8 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr*, unsigned> > Ops,
       continue;
     // FoldMI does not define this physreg. Remove the LI segment.
     assert(MO->isDead() && "Cannot fold physreg def");
-    for (MCRegUnitIterator Units(Reg, &TRI); Units.isValid(); ++Units) {
-      if (LiveRange *LR = LIS.getCachedRegUnit(*Units)) {
-        SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
-        if (VNInfo *VNI = LR->getVNInfoAt(Idx))
-          LR->removeValNo(VNI);
-      }
-    }
+    SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
+    LIS.removePhysRegDefAt(Reg, Idx);
   }
 
   LIS.ReplaceMachineInstrInMaps(MI, FoldMI);
@@ -1228,6 +1233,8 @@ void InlineSpiller::spillAroundUses(unsigned Reg) {
       DebugLoc DL = MI->getDebugLoc();
       DEBUG(dbgs() << "Modifying debug info due to spill:" << "\t" << *MI);
       MachineBasicBlock *MBB = MI->getParent();
+      assert(cast<DILocalVariable>(Var)->isValidLocationForIntrinsic(DL) &&
+             "Expected inlined-at fields to agree");
       BuildMI(*MBB, MBB->erase(MI), DL, TII.get(TargetOpcode::DBG_VALUE))
           .addFrameIndex(StackSlot)
           .addImm(Offset)
@@ -1372,7 +1379,7 @@ void InlineSpiller::spill(LiveRangeEdit &edit) {
   StackInt = nullptr;
 
   DEBUG(dbgs() << "Inline spilling "
-               << MRI.getRegClass(edit.getReg())->getName()
+               << TRI.getRegClassName(MRI.getRegClass(edit.getReg()))
                << ':' << edit.getParent()
                << "\nFrom original " << PrintReg(Original) << '\n');
   assert(edit.getParent().isSpillable() &&

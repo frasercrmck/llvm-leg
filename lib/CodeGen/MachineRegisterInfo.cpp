@@ -13,6 +13,7 @@
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
@@ -24,7 +25,8 @@ using namespace llvm;
 void MachineRegisterInfo::Delegate::anchor() {}
 
 MachineRegisterInfo::MachineRegisterInfo(const MachineFunction *MF)
-  : MF(MF), TheDelegate(nullptr), IsSSA(true), TracksLiveness(true) {
+  : MF(MF), TheDelegate(nullptr), IsSSA(true), TracksLiveness(true),
+    TracksSubRegLiveness(false) {
   VRegInfo.reserve(256);
   RegAllocHints.reserve(256);
   UsedRegUnits.resize(getTargetRegisterInfo()->getNumRegUnits());
@@ -60,11 +62,11 @@ MachineRegisterInfo::constrainRegClass(unsigned Reg,
 }
 
 bool
-MachineRegisterInfo::recomputeRegClass(unsigned Reg, const TargetMachine &TM) {
-  const TargetInstrInfo *TII = TM.getSubtargetImpl()->getInstrInfo();
+MachineRegisterInfo::recomputeRegClass(unsigned Reg) {
+  const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
   const TargetRegisterClass *OldRC = getRegClass(Reg);
   const TargetRegisterClass *NewRC =
-    getTargetRegisterInfo()->getLargestLegalSuperClass(OldRC);
+      getTargetRegisterInfo()->getLargestLegalSuperClass(OldRC, *MF);
 
   // Stop early if there is no room to grow.
   if (NewRC == OldRC)
@@ -128,6 +130,7 @@ void MachineRegisterInfo::verifyUseList(unsigned Reg) const {
              << " use list MachineOperand " << MO
              << " has no parent instruction.\n";
       Valid = false;
+      continue;
     }
     MachineOperand *MO0 = &MI->getOperand(0);
     unsigned NumOps = MI->getNumOperands();
@@ -391,6 +394,14 @@ MachineRegisterInfo::EmitLiveInCopies(MachineBasicBlock *EntryMBB,
     }
 }
 
+unsigned MachineRegisterInfo::getMaxLaneMaskForVReg(unsigned Reg) const
+{
+  // Lane masks are only defined for vregs.
+  assert(TargetRegisterInfo::isVirtualRegister(Reg));
+  const TargetRegisterClass &TRC = *getRegClass(Reg);
+  return TRC.getLaneMask();
+}
+
 #ifndef NDEBUG
 void MachineRegisterInfo::dumpUses(unsigned Reg) const {
   for (MachineInstr &I : use_instructions(Reg))
@@ -430,4 +441,50 @@ void MachineRegisterInfo::markUsesInDebugValueAsUndef(unsigned Reg) const {
     if (UseMI->isDebugValue())
       UseMI->getOperand(0).setReg(0U);
   }
+}
+
+static const Function *getCalledFunction(const MachineInstr &MI) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isGlobal())
+      continue;
+    const Function *Func = dyn_cast<Function>(MO.getGlobal());
+    if (Func != nullptr)
+      return Func;
+  }
+  return nullptr;
+}
+
+static bool isNoReturnDef(const MachineOperand &MO) {
+  // Anything which is not a noreturn function is a real def.
+  const MachineInstr &MI = *MO.getParent();
+  if (!MI.isCall())
+    return false;
+  const MachineBasicBlock &MBB = *MI.getParent();
+  if (!MBB.succ_empty())
+    return false;
+  const MachineFunction &MF = *MBB.getParent();
+  // We need to keep correct unwind information even if the function will
+  // not return, since the runtime may need it.
+  if (MF.getFunction()->hasFnAttribute(Attribute::UWTable))
+    return false;
+  const Function *Called = getCalledFunction(MI);
+  if (Called == nullptr || !Called->hasFnAttribute(Attribute::NoReturn)
+      || !Called->hasFnAttribute(Attribute::NoUnwind))
+    return false;
+
+  return true;
+}
+
+bool MachineRegisterInfo::isPhysRegModified(unsigned PhysReg) const {
+  if (UsedPhysRegMask.test(PhysReg))
+    return true;
+  const TargetRegisterInfo *TRI = getTargetRegisterInfo();
+  for (MCRegAliasIterator AI(PhysReg, TRI, true); AI.isValid(); ++AI) {
+    for (const MachineOperand &MO : make_range(def_begin(*AI), def_end())) {
+      if (isNoReturnDef(MO))
+        continue;
+      return true;
+    }
+  }
+  return false;
 }

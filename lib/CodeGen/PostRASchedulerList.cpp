@@ -97,7 +97,7 @@ namespace {
     }
 
     bool runOnMachineFunction(MachineFunction &Fn) override;
-    
+
     bool enablePostRAScheduler(
         const TargetSubtargetInfo &ST, CodeGenOpt::Level OptLevel,
         TargetSubtargetInfo::AntiDepBreakMode &Mode,
@@ -141,7 +141,7 @@ namespace {
         TargetSubtargetInfo::AntiDepBreakMode AntiDepMode,
         SmallVectorImpl<const TargetRegisterClass *> &CriticalPathRCs);
 
-    ~SchedulePostRATDList();
+    ~SchedulePostRATDList() override;
 
     /// startBlock - Initialize register live-range state for scheduling in
     /// this block.
@@ -257,7 +257,7 @@ bool PostRAScheduler::enablePostRAScheduler(
     TargetSubtargetInfo::RegClassVector &CriticalPathRCs) const {
   Mode = ST.getAntiDepBreakMode();
   ST.getCriticalPathRCs(CriticalPathRCs);
-  return ST.enablePostMachineScheduler() &&
+  return ST.enablePostRAScheduler() &&
          OptLevel >= ST.getOptLevelToEnablePostRAScheduler();
 }
 
@@ -282,9 +282,7 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
   } else {
     // Check that post-RA scheduling is enabled for this target.
     // This may upgrade the AntiDepMode.
-    const TargetSubtargetInfo &ST =
-        Fn.getTarget().getSubtarget<TargetSubtargetInfo>();
-    if (!enablePostRAScheduler(ST, PassConfig->getOptLevel(),
+    if (!enablePostRAScheduler(Fn.getSubtarget(), PassConfig->getOptLevel(),
                                AntiDepMode, CriticalPathRCs))
       return false;
   }
@@ -559,10 +557,10 @@ void SchedulePostRATDList::ListScheduleTopDown() {
       if (HT == ScheduleHazardRecognizer::NoHazard) {
         if (HazardRec->ShouldPreferAnother(CurSUnit)) {
           if (!NotPreferredSUnit) {
-	    // If this is the first non-preferred node for this cycle, then
-	    // record it and continue searching for a preferred node. If this
-	    // is not the first non-preferred node, then treat it as though
-	    // there had been a hazard.
+            // If this is the first non-preferred node for this cycle, then
+            // record it and continue searching for a preferred node. If this
+            // is not the first non-preferred node, then treat it as though
+            // there had been a hazard.
             NotPreferredSUnit = CurSUnit;
             continue;
           }

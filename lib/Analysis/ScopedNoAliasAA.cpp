@@ -33,8 +33,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
@@ -80,7 +80,7 @@ public:
     initializeScopedNoAliasAAPass(*PassRegistry::getPassRegistry());
   }
 
-  void initializePass() override { InitializeAliasAnalysis(this); }
+  bool doInitialization(Module &M) override;
 
   /// getAdjustedAnalysisPointer - This method is used when a pass implements
   /// an analysis interface through multiple inheritance.  If needed, it
@@ -99,12 +99,13 @@ protected:
 
 private:
   void getAnalysisUsage(AnalysisUsage &AU) const override;
-  AliasResult alias(const Location &LocA, const Location &LocB) override;
-  bool pointsToConstantMemory(const Location &Loc, bool OrLocal) override;
+  AliasResult alias(const MemoryLocation &LocA,
+                    const MemoryLocation &LocB) override;
+  bool pointsToConstantMemory(const MemoryLocation &Loc, bool OrLocal) override;
   ModRefBehavior getModRefBehavior(ImmutableCallSite CS) override;
   ModRefBehavior getModRefBehavior(const Function *F) override;
   ModRefResult getModRefInfo(ImmutableCallSite CS,
-                             const Location &Loc) override;
+                             const MemoryLocation &Loc) override;
   ModRefResult getModRefInfo(ImmutableCallSite CS1,
                              ImmutableCallSite CS2) override;
 };
@@ -117,6 +118,11 @@ INITIALIZE_AG_PASS(ScopedNoAliasAA, AliasAnalysis, "scoped-noalias",
 
 ImmutablePass *llvm::createScopedNoAliasAAPass() {
   return new ScopedNoAliasAA();
+}
+
+bool ScopedNoAliasAA::doInitialization(Module &M) {
+  InitializeAliasAnalysis(this, &M.getDataLayout());
+  return true;
 }
 
 void
@@ -171,8 +177,8 @@ ScopedNoAliasAA::mayAliasInScopes(const MDNode *Scopes,
   return true;
 }
 
-AliasAnalysis::AliasResult
-ScopedNoAliasAA::alias(const Location &LocA, const Location &LocB) {
+AliasResult ScopedNoAliasAA::alias(const MemoryLocation &LocA,
+                                   const MemoryLocation &LocB) {
   if (!EnableScopedNoAlias)
     return AliasAnalysis::alias(LocA, LocB);
 
@@ -193,7 +199,7 @@ ScopedNoAliasAA::alias(const Location &LocA, const Location &LocB) {
   return AliasAnalysis::alias(LocA, LocB);
 }
 
-bool ScopedNoAliasAA::pointsToConstantMemory(const Location &Loc,
+bool ScopedNoAliasAA::pointsToConstantMemory(const MemoryLocation &Loc,
                                              bool OrLocal) {
   return AliasAnalysis::pointsToConstantMemory(Loc, OrLocal);
 }
@@ -209,17 +215,18 @@ ScopedNoAliasAA::getModRefBehavior(const Function *F) {
 }
 
 AliasAnalysis::ModRefResult
-ScopedNoAliasAA::getModRefInfo(ImmutableCallSite CS, const Location &Loc) {
+ScopedNoAliasAA::getModRefInfo(ImmutableCallSite CS,
+                               const MemoryLocation &Loc) {
   if (!EnableScopedNoAlias)
     return AliasAnalysis::getModRefInfo(CS, Loc);
 
-  if (!mayAliasInScopes(Loc.AATags.Scope,
-        CS.getInstruction()->getMetadata(LLVMContext::MD_noalias)))
+  if (!mayAliasInScopes(Loc.AATags.Scope, CS.getInstruction()->getMetadata(
+                                              LLVMContext::MD_noalias)))
     return NoModRef;
 
   if (!mayAliasInScopes(
-        CS.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
-        Loc.AATags.NoAlias))
+          CS.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
+          Loc.AATags.NoAlias))
     return NoModRef;
 
   return AliasAnalysis::getModRefInfo(CS, Loc);
@@ -231,13 +238,13 @@ ScopedNoAliasAA::getModRefInfo(ImmutableCallSite CS1, ImmutableCallSite CS2) {
     return AliasAnalysis::getModRefInfo(CS1, CS2);
 
   if (!mayAliasInScopes(
-        CS1.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
-        CS2.getInstruction()->getMetadata(LLVMContext::MD_noalias)))
+          CS1.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
+          CS2.getInstruction()->getMetadata(LLVMContext::MD_noalias)))
     return NoModRef;
 
   if (!mayAliasInScopes(
-        CS2.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
-        CS1.getInstruction()->getMetadata(LLVMContext::MD_noalias)))
+          CS2.getInstruction()->getMetadata(LLVMContext::MD_alias_scope),
+          CS1.getInstruction()->getMetadata(LLVMContext::MD_noalias)))
     return NoModRef;
 
   return AliasAnalysis::getModRefInfo(CS1, CS2);

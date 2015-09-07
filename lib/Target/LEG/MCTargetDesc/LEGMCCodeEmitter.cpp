@@ -32,8 +32,8 @@ STATISTIC(MCNumEmitted, "Number of MC instructions emitted.");
 
 namespace {
 class LEGMCCodeEmitter : public MCCodeEmitter {
-  LEGMCCodeEmitter(const LEGMCCodeEmitter &) LLVM_DELETED_FUNCTION;
-  void operator=(const LEGMCCodeEmitter &) LLVM_DELETED_FUNCTION;
+  LEGMCCodeEmitter(const LEGMCCodeEmitter &) = delete;
+  void operator=(const LEGMCCodeEmitter &) = delete;
   const MCInstrInfo &MCII;
   const MCContext &CTX;
 
@@ -68,8 +68,8 @@ public:
       Val >>= 8;
     }
   }
-
-  void EncodeInstruction(const MCInst &MI, raw_ostream &OS,
+  
+  void encodeInstruction(const MCInst &MI, raw_ostream &OS,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
 };
@@ -78,7 +78,6 @@ public:
 
 MCCodeEmitter *llvm::createLEGMCCodeEmitter(const MCInstrInfo &MCII,
                                             const MCRegisterInfo &MRI,
-                                            const MCSubtargetInfo &STI,
                                             MCContext &Ctx) {
   return new LEGMCCodeEmitter(MCII, Ctx);
 }
@@ -123,7 +122,7 @@ unsigned LEGMCCodeEmitter::getMachineOpValue(const MCInst &MI,
   }
   }
 
-  Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
+  Fixups.push_back(MCFixup::create(0, MO.getExpr(), MCFixupKind(FixupKind)));
   return 0;
 }
 
@@ -139,7 +138,7 @@ unsigned LEGMCCodeEmitter::getMemSrcValue(const MCInst &MI, unsigned OpIdx,
   return Bits;
 }
 
-void LEGMCCodeEmitter::EncodeInstruction(const MCInst &MI, raw_ostream &OS,
+void LEGMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                                          SmallVectorImpl<MCFixup> &Fixups,
                                          const MCSubtargetInfo &STI) const {
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());

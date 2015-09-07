@@ -58,6 +58,10 @@ public:
   MachineInstr *operator->() const { return MI; }
   operator MachineBasicBlock::iterator() const { return MI; }
 
+  /// If conversion operators fail, use this method to get the MachineInstr
+  /// explicitly.
+  MachineInstr *getInstr() const { return MI; }
+
   /// addReg - Add a new virtual register operand...
   ///
   const
@@ -170,8 +174,9 @@ public:
 
   const MachineInstrBuilder &addMetadata(const MDNode *MD) const {
     MI->addOperand(*MF, MachineOperand::CreateMetadata(MD));
-    assert((MI->isDebugValue() ? MI->getDebugVariable().Verify() : true) &&
-           "first MDNode argument of a DBG_VALUE not a DIVariable");
+    assert((MI->isDebugValue() ? static_cast<bool>(MI->getDebugVariable())
+                               : true) &&
+           "first MDNode argument of a DBG_VALUE not a variable");
     return *this;
   }
 
@@ -180,8 +185,9 @@ public:
     return *this;
   }
 
-  const MachineInstrBuilder &addSym(MCSymbol *Sym) const {
-    MI->addOperand(*MF, MachineOperand::CreateMCSymbol(Sym));
+  const MachineInstrBuilder &addSym(MCSymbol *Sym,
+                                    unsigned char TargetFlags = 0) const {
+    MI->addOperand(*MF, MachineOperand::CreateMCSymbol(Sym, TargetFlags));
     return *this;
   }
 
@@ -351,8 +357,10 @@ inline MachineInstrBuilder BuildMI(MachineFunction &MF, DebugLoc DL,
                                    const MCInstrDesc &MCID, bool IsIndirect,
                                    unsigned Reg, unsigned Offset,
                                    const MDNode *Variable, const MDNode *Expr) {
-  assert(DIVariable(Variable).Verify() && "not a DIVariable");
-  assert(DIExpression(Expr).Verify() && "not a DIExpression");
+  assert(isa<DILocalVariable>(Variable) && "not a variable");
+  assert(cast<DIExpression>(Expr)->isValid() && "not an expression");
+  assert(cast<DILocalVariable>(Variable)->isValidLocationForIntrinsic(DL) &&
+         "Expected inlined-at fields to agree");
   if (IsIndirect)
     return BuildMI(MF, DL, MCID)
         .addReg(Reg, RegState::Debug)
@@ -378,8 +386,8 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
                                    const MCInstrDesc &MCID, bool IsIndirect,
                                    unsigned Reg, unsigned Offset,
                                    const MDNode *Variable, const MDNode *Expr) {
-  assert(DIVariable(Variable).Verify() && "not a DIVariable");
-  assert(DIExpression(Expr).Verify() && "not a DIExpression");
+  assert(isa<DILocalVariable>(Variable) && "not a variable");
+  assert(cast<DIExpression>(Expr)->isValid() && "not an expression");
   MachineFunction &MF = *BB.getParent();
   MachineInstr *MI =
       BuildMI(MF, DL, MCID, IsIndirect, Reg, Offset, Variable, Expr);

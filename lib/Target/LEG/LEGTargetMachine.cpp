@@ -17,17 +17,29 @@
 #include "LEGISelLowering.h"
 #include "LEGSelectionDAGInfo.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/IR/Module.h"
 #include "llvm/PassManager.h"
 #include "llvm/Support/TargetRegistry.h"
+
 using namespace llvm;
 
-LEGTargetMachine::LEGTargetMachine(const Target &T, StringRef TT, StringRef CPU,
-                                   StringRef FS, const TargetOptions &Options,
+static std::string computeDataLayout(const Triple &TT, StringRef CPU,
+                                     const TargetOptions &Options) {
+  // XXX Build the triple from the arguments.
+  // This is hard-coded for now for this example target.
+  return "e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i64:32-f64:32-a:0:32-n32";
+}
+
+LEGTargetMachine::LEGTargetMachine(const Target &T, const Triple &TT,
+                                   StringRef CPU, StringRef FS,
+                                   const TargetOptions &Options,
                                    Reloc::Model RM, CodeModel::Model CM,
                                    CodeGenOpt::Level OL)
-    : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-      Subtarget(TT, CPU, FS, *this) {
+    : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
+                        Options, RM, CM, OL),
+      Subtarget(TT, CPU, FS, *this),
+      TLOF(make_unique<TargetLoweringObjectFileELF>()) {
   initAsmInfo();
 }
 
@@ -42,9 +54,9 @@ public:
     return getTM<LEGTargetMachine>();
   }
 
-  virtual bool addPreISel();
-  virtual bool addInstSelector();
-  virtual bool addPreEmitPass();
+  virtual bool addPreISel() override;
+  virtual bool addInstSelector() override;
+  virtual void addPreEmitPass() override;
 };
 } // namespace
 
@@ -59,11 +71,9 @@ bool LEGPassConfig::addInstSelector() {
   return false;
 }
 
-bool LEGPassConfig::addPreEmitPass() { return false; }
+void LEGPassConfig::addPreEmitPass() {}
 
 // Force static initialization.
 extern "C" void LLVMInitializeLEGTarget() {
   RegisterTargetMachine<LEGTargetMachine> X(TheLEGTarget);
 }
-
-void LEGTargetMachine::addAnalysisPasses(PassManagerBase &PM) {}

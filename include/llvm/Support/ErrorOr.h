@@ -68,9 +68,9 @@ public:
 /// \endcode
 ///
 ///
-/// An implicit conversion to bool provides a way to check if there was an
-/// error. The unary * and -> operators provide pointer like access to the
-/// value. Accessing the value when there is an error has undefined behavior.
+/// Implicit conversion to bool returns true if there is a usable value. The
+/// unary * and -> operators provide pointer like access to the value. Accessing
+/// the value when there is an error has undefined behavior.
 ///
 /// When T is a reference type the behaivor is slightly different. The reference
 /// is held in a std::reference_wrapper<std::remove_reference<T>::type>, and
@@ -168,12 +168,12 @@ public:
   }
 
   /// \brief Return false if there is an error.
-  LLVM_EXPLICIT operator bool() const {
+  explicit operator bool() const {
     return !HasError;
   }
 
   reference get() { return *getStorage(); }
-  const_reference get() const { return const_cast<ErrorOr<T> >(this)->get(); }
+  const_reference get() const { return const_cast<ErrorOr<T> *>(this)->get(); }
 
   std::error_code getError() const {
     return HasError ? *getErrorStorage() : std::error_code();
@@ -281,8 +281,8 @@ template <class T, class E>
 typename std::enable_if<std::is_error_code_enum<E>::value ||
                             std::is_error_condition_enum<E>::value,
                         bool>::type
-operator==(ErrorOr<T> &Err, E Code) {
-  return std::error_code(Err) == Code;
+operator==(const ErrorOr<T> &Err, E Code) {
+  return Err.getError() == Code;
 }
 } // end namespace llvm
 

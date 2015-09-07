@@ -50,13 +50,12 @@ const char *LEGTargetLowering::getTargetNodeName(unsigned Opcode) const {
 }
 
 LEGTargetLowering::LEGTargetLowering(LEGTargetMachine &LEGTM)
-    : TargetLowering(LEGTM, new TargetLoweringObjectFileELF()),
-      Subtarget(*LEGTM.getSubtargetImpl()) {
+    : TargetLowering(LEGTM), Subtarget(*LEGTM.getSubtargetImpl()) {
   // Set up the register classes.
   addRegisterClass(MVT::i32, &LEG::GRRegsRegClass);
 
   // Compute derived properties from the register classes
-  computeRegisterProperties();
+  computeRegisterProperties(Subtarget.getRegisterInfo());
 
   setStackPointerRegisterToSaveRestore(LEG::SP);
 
@@ -98,7 +97,7 @@ SDValue LEGTargetLowering::LowerGlobalAddress(SDValue Op, SelectionDAG& DAG) con
 SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                      SmallVectorImpl<SDValue> &InVals) const {
   SelectionDAG &DAG = CLI.DAG;
-  SDLoc &dl = CLI.DL;
+  SDLoc &Loc = CLI.DL;
   SmallVectorImpl<ISD::OutputArg> &Outs = CLI.Outs;
   SmallVectorImpl<SDValue> &OutVals = CLI.OutVals;
   SmallVectorImpl<ISD::InputArg> &Ins = CLI.Ins;
@@ -123,7 +122,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   const unsigned NumBytes = CCInfo.getNextStackOffset();
 
   Chain =
-      DAG.getCALLSEQ_START(Chain, DAG.getIntPtrConstant(NumBytes, true), dl);
+      DAG.getCALLSEQ_START(Chain, DAG.getIntPtrConstant(NumBytes, Loc, true),
+                           Loc);
 
   SmallVector<std::pair<unsigned, SDValue>, 8> RegsToPass;
   SmallVector<SDValue, 8> MemOpChains;
@@ -145,22 +145,22 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
            "Only support passing arguments through registers or via the stack");
 
     SDValue StackPtr = DAG.getRegister(LEG::SP, MVT::i32);
-    SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset());
-    PtrOff = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, PtrOff);
-    MemOpChains.push_back(DAG.getStore(Chain, dl, Arg, PtrOff,
+    SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset(), Loc);
+    PtrOff = DAG.getNode(ISD::ADD, Loc, MVT::i32, StackPtr, PtrOff);
+    MemOpChains.push_back(DAG.getStore(Chain, Loc, Arg, PtrOff,
                                        MachinePointerInfo(), false, false, 0));
   }
 
   // Emit all stores, make sure they occur before the call.
   if (!MemOpChains.empty()) {
-    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
+    Chain = DAG.getNode(ISD::TokenFactor, Loc, MVT::Other, MemOpChains);
   }
 
   // Build a sequence of copy-to-reg nodes chained together with token chain
   // and flag operands which copy the outgoing args into the appropriate regs.
   SDValue InFlag;
   for (auto &Reg : RegsToPass) {
-    Chain = DAG.getCopyToReg(Chain, dl, Reg.first, Reg.second, InFlag);
+    Chain = DAG.getCopyToReg(Chain, Loc, Reg.first, Reg.second, InFlag);
     InFlag = Chain.getValue(1);
   }
 
@@ -168,7 +168,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
   assert(G && "We only support the calling of global addresses");
 
-  Callee = DAG.getGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0);
+  EVT PtrVT = getPointerTy(DAG.getDataLayout());
+  Callee = DAG.getGlobalAddress(G->getGlobal(), Loc, PtrVT, 0);
 
   std::vector<SDValue> Ops;
   Ops.push_back(Chain);
@@ -182,9 +183,8 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Add a register mask operand representing the call-preserved registers.
   const uint32_t *Mask;
-  const TargetRegisterInfo *TRI =
-      getTargetMachine().getSubtargetImpl()->getRegisterInfo();
-  Mask = TRI->getCallPreservedMask(CallConv);
+  const TargetRegisterInfo *TRI = DAG.getSubtarget().getRegisterInfo();
+  Mask = TRI->getCallPreservedMask(DAG.getMachineFunction(), CallConv);
 
   assert(Mask && "Missing call preserved mask for calling convention");
   Ops.push_back(DAG.getRegisterMask(Mask));
@@ -196,18 +196,18 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
 
   // Returns a chain and a flag for retval copy to use.
-  Chain = DAG.getNode(LEGISD::CALL, dl, NodeTys, Ops);
+  Chain = DAG.getNode(LEGISD::CALL, Loc, NodeTys, Ops);
   InFlag = Chain.getValue(1);
 
-  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, true),
-                             DAG.getIntPtrConstant(0, true), InFlag, dl);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, Loc, true),
+                             DAG.getIntPtrConstant(0, Loc, true), InFlag, Loc);
   if (!Ins.empty()) {
     InFlag = Chain.getValue(1);
   }
 
   // Handle result values, copying them out of physregs into vregs that we
   // return.
-  return LowerCallResult(Chain, InFlag, CallConv, isVarArg, Ins, dl, DAG,
+  return LowerCallResult(Chain, InFlag, CallConv, isVarArg, Ins, Loc, DAG,
                          InVals);
 }
 
@@ -276,7 +276,8 @@ SDValue LEGTargetLowering::LowerFormalArguments(
     const unsigned Offset = VA.getLocMemOffset();
 
     const int FI = MF.getFrameInfo()->CreateFixedObject(4, Offset, true);
-    SDValue FIPtr = DAG.getFrameIndex(FI, getPointerTy());
+    EVT PtrTy = getPointerTy(DAG.getDataLayout());
+    SDValue FIPtr = DAG.getFrameIndex(FI, PtrTy);
 
     assert(VA.getValVT() == MVT::i32 &&
            "Only support passing arguments as i32");

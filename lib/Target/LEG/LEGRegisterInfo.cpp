@@ -13,6 +13,7 @@
 
 #include "LEGRegisterInfo.h"
 #include "LEG.h"
+#include "LEGFrameLowering.h"
 #include "LEGInstrInfo.h"
 #include "LEGMachineFunctionInfo.h"
 #include "llvm/ADT/BitVector.h"
@@ -56,7 +57,8 @@ BitVector LEGRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-const uint32_t *LEGRegisterInfo::getCallPreservedMask(CallingConv::ID) const {
+const uint32_t *LEGRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
+                                                      CallingConv::ID) const {
   return CC_Save_RegMask;
 }
 

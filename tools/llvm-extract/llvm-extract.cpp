@@ -20,7 +20,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -89,6 +89,16 @@ ExtractRegExpGlobals("rglob", cl::desc("Specify global(s) to extract using a "
 static cl::opt<bool>
 OutputAssembly("S",
                cl::desc("Write output as LLVM assembly"), cl::Hidden);
+
+static cl::opt<bool> PreserveBitcodeUseListOrder(
+    "preserve-bc-uselistorder",
+    cl::desc("Preserve use-list order when writing LLVM bitcode."),
+    cl::init(true), cl::Hidden);
+
+static cl::opt<bool> PreserveAssemblyUseListOrder(
+    "preserve-ll-uselistorder",
+    cl::desc("Preserve use-list order when writing LLVM assembly."),
+    cl::init(false), cl::Hidden);
 
 int main(int argc, char **argv) {
   // Print a stack trace if we signal out.
@@ -216,31 +226,28 @@ int main(int argc, char **argv) {
   if (!DeleteFn)
     for (size_t i = 0, e = GVs.size(); i != e; ++i) {
       GlobalValue *GV = GVs[i];
-      if (GV->isMaterializable()) {
-        std::string ErrInfo;
-        if (GV->Materialize(&ErrInfo)) {
-          errs() << argv[0] << ": error reading input: " << ErrInfo << "\n";
-          return 1;
-        }
+      if (std::error_code EC = GV->materialize()) {
+        errs() << argv[0] << ": error reading input: " << EC.message() << "\n";
+        return 1;
       }
     }
   else {
     // Deleting. Materialize every GV that's *not* in GVs.
     SmallPtrSet<GlobalValue *, 8> GVSet(GVs.begin(), GVs.end());
     for (auto &G : M->globals()) {
-      if (!GVSet.count(&G) && G.isMaterializable()) {
-        std::string ErrInfo;
-        if (G.Materialize(&ErrInfo)) {
-          errs() << argv[0] << ": error reading input: " << ErrInfo << "\n";
+      if (!GVSet.count(&G)) {
+        if (std::error_code EC = G.materialize()) {
+          errs() << argv[0] << ": error reading input: " << EC.message()
+                 << "\n";
           return 1;
         }
       }
     }
     for (auto &F : *M) {
-      if (!GVSet.count(&F) && F.isMaterializable()) {
-        std::string ErrInfo;
-        if (F.Materialize(&ErrInfo)) {
-          errs() << argv[0] << ": error reading input: " << ErrInfo << "\n";
+      if (!GVSet.count(&F)) {
+        if (std::error_code EC = F.materialize()) {
+          errs() << argv[0] << ": error reading input: " << EC.message()
+                 << "\n";
           return 1;
         }
       }
@@ -249,8 +256,7 @@ int main(int argc, char **argv) {
 
   // In addition to deleting all other functions, we also want to spiff it
   // up a little bit.  Do this now.
-  PassManager Passes;
-  Passes.add(new DataLayoutPass()); // Use correct DataLayout
+  legacy::PassManager Passes;
 
   std::vector<GlobalValue*> Gvs(GVs.begin(), GVs.end());
 
@@ -268,9 +274,10 @@ int main(int argc, char **argv) {
   }
 
   if (OutputAssembly)
-    Passes.add(createPrintModulePass(Out.os()));
+    Passes.add(
+        createPrintModulePass(Out.os(), "", PreserveAssemblyUseListOrder));
   else if (Force || !CheckBitcodeOutputToConsole(Out.os(), true))
-    Passes.add(createBitcodeWriterPass(Out.os()));
+    Passes.add(createBitcodeWriterPass(Out.os(), PreserveBitcodeUseListOrder));
 
   Passes.run(*M.get());
 

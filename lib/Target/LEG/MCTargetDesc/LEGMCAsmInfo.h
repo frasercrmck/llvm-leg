@@ -19,12 +19,13 @@
 namespace llvm {
 class StringRef;
 class Target;
+class Triple;
 
 class LEGMCAsmInfo : public MCAsmInfoELF {
   virtual void anchor();
 
 public:
-  explicit LEGMCAsmInfo(StringRef TT);
+  explicit LEGMCAsmInfo(const Triple &TT);
 };
 
 } // namespace llvm

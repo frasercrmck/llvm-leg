@@ -64,7 +64,7 @@ private:
 
 public:
   RemoteMemoryManager() : Target(nullptr) {}
-  virtual ~RemoteMemoryManager();
+  ~RemoteMemoryManager() override;
 
   uint8_t *allocateCodeSection(uintptr_t Size, unsigned Alignment,
                                unsigned SectionID,
@@ -80,7 +80,8 @@ public:
   // symbols from Modules it contains.
   uint64_t getSymbolAddress(const std::string &Name) override { return 0; }
 
-  void notifyObjectLoaded(ExecutionEngine *EE, const ObjectImage *Obj) override;
+  void notifyObjectLoaded(ExecutionEngine *EE,
+                          const object::ObjectFile &Obj) override;
 
   bool finalizeMemory(std::string *ErrMsg) override;
 
