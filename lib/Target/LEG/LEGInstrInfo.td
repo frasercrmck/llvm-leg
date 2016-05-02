@@ -83,6 +83,9 @@ multiclass ShiftOp<bits<4> opcoder, bits<3> opcodei, string opstr, SDNode opnode
 
 defm ADD  : BinOp<0b0100, "add", add>;
 defm SUB  : BinOp<0b0010, "sub", sub>;
+defm AND  : BinOp<0b0000, "and", and>;
+defm EOR  : BinOp<0b0001, "eor", xor>;
+defm ORR  : BinOp<0b1100, "orr", or>;
 
 defm LSL  : ShiftOp<0b0001, 0b000, "lsl", shl>;
 defm LSR  : ShiftOp<0b0011, 0b010, "lsr", srl>;
