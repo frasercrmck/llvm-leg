@@ -48,8 +48,45 @@ multiclass BinOp<bits<4> opcode, string opstr, SDNode opnode> {
   }
 }
 
+multiclass ShiftOp<bits<4> opcoder, bits<3> opcodei, string opstr, SDNode opnode> {
+  def rr : ALUInst<0b1101, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, GRRegs:$src2),
+                   !strconcat(opstr, " $dst, $src1, $src2"),
+                   [(set i32:$dst, (opnode i32:$src1, i32:$src2))]> {
+    bits<4> dst;
+    bits<4> src1;
+    bits<4> src2;
+    let Inst{25}    = 0;
+    let Inst{20}    = 0;  // We never update flags
+    let Inst{19-16} = 0b0000;
+    let Inst{15-12} = dst;
+    let Inst{11-8}  = src2;
+    let Inst{7-4}   = opcoder;
+    let Inst{3-0}   = src1;
+  }
+  def ri : ALUInst<0b1101, (outs GRRegs:$dst),
+                   (ins GRRegs:$src1, i32imm:$imm),
+                   !strconcat(opstr, " $dst, $src1, $imm"),
+                   [(set i32:$dst, (opnode i32:$src1, LEGimm8:$imm))]> {
+    bits<4> dst;
+    bits<4> src1;
+    bits<5> imm;
+    let Inst{25}    = 0;
+    let Inst{20}    = 0;  // We never update flags
+    let Inst{19-16} = 0b0000;
+    let Inst{15-12} = dst;
+    let Inst{11-7}  = imm;
+    let Inst{6-4}   = opcodei;
+    let Inst{3-0}   = src1;
+  }
+}
+
 defm ADD  : BinOp<0b0100, "add", add>;
 defm SUB  : BinOp<0b0010, "sub", sub>;
+
+defm LSL  : ShiftOp<0b0001, 0b000, "lsl", shl>;
+defm LSR  : ShiftOp<0b0011, 0b010, "lsr", srl>;
+defm ASR  : ShiftOp<0b0101, 0b100, "asr", sra>;
 
 //===----------------------------------------------------------------------===//
 // Multiply Instructions
