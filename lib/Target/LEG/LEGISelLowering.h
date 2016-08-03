@@ -46,11 +46,11 @@ public:
   explicit LEGTargetLowering(LEGTargetMachine &TM);
 
   /// LowerOperation - Provide custom lowering hooks for some operations.
-  virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+  virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
   /// getTargetNodeName - This method returns the name of a target specific
   //  DAG node.
-  virtual const char *getTargetNodeName(unsigned Opcode) const;
+  virtual const char *getTargetNodeName(unsigned Opcode) const override;
 
 private:
   const LEGSubtarget &Subtarget;
@@ -78,7 +78,7 @@ private:
   bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
                       bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
-                      LLVMContext &Context) const;
+                      LLVMContext &Context) const override;
 
   // LowerGlobalAddress - Emit a constant load to the global address.
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;

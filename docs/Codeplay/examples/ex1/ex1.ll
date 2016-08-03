@@ -15,4 +15,4 @@ attributes #0 = { nounwind readonly "less-precise-fpmad"="false" "no-frame-point
 
 !llvm.ident = !{!0}
 
-!0 = metadata !{metadata !"clang version 3.5.0 "}
+!0 = !{!"clang version 3.8.0 "}

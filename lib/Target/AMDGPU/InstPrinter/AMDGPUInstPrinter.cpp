@@ -16,6 +16,7 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -283,8 +284,13 @@ void AMDGPUInstPrinter::printImmediate64(uint64_t Imm, raw_ostream &O) {
     O << "4.0";
   else if (Imm == DoubleToBits(-4.0))
     O << "-4.0";
-  else
-    llvm_unreachable("64-bit literal constants not supported");
+  else {
+    assert(isUInt<32>(Imm));
+
+    // In rare situations, we will have a 32-bit literal in a 64-bit
+    // operand. This is technically allowed for the encoding of s_mov_b64.
+    O << formatHex(static_cast<uint64_t>(Imm));
+  }
 }
 
 void AMDGPUInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
@@ -592,11 +598,11 @@ void AMDGPUInstPrinter::printSendMsg(const MCInst *MI, unsigned OpNo,
     } else {
       unsigned Stream = (SImm16 >> 8) & 0x3;
       if (Op == 1)
-	O << "cut";
+        O << "cut";
       else if (Op == 2)
-	O << "emit";
+        O << "emit";
       else if (Op == 3)
-	O << "emit-cut";
+        O << "emit-cut";
       O << " stream " << Stream;
     }
     O << "), [m0] ";
@@ -610,12 +616,9 @@ void AMDGPUInstPrinter::printSendMsg(const MCInst *MI, unsigned OpNo,
 
 void AMDGPUInstPrinter::printWaitFlag(const MCInst *MI, unsigned OpNo,
                                       raw_ostream &O) {
-  // Note: Mask values are taken from SIInsertWaits.cpp and not from ISA docs
-  // SIInsertWaits.cpp bits usage does not match ISA docs description but it
-  // works so it might be a misprint in docs.
   unsigned SImm16 = MI->getOperand(OpNo).getImm();
   unsigned Vmcnt = SImm16 & 0xF;
-  unsigned Expcnt = (SImm16 >> 4) & 0xF;
+  unsigned Expcnt = (SImm16 >> 4) & 0x7;
   unsigned Lgkmcnt = (SImm16 >> 8) & 0xF;
 
   bool NeedSpace = false;
@@ -632,7 +635,7 @@ void AMDGPUInstPrinter::printWaitFlag(const MCInst *MI, unsigned OpNo,
     NeedSpace = true;
   }
 
-  if (Lgkmcnt != 0x7) {
+  if (Lgkmcnt != 0xF) {
     if (NeedSpace)
       O << ' ';
     O << "lgkmcnt(" << Lgkmcnt << ')';

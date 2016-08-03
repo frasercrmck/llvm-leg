@@ -19,9 +19,10 @@
 #include "X86InstrInfo.h"
 #include "X86MachineFunctionInfo.h"
 #include "X86Subtarget.h"
-#include "llvm/CodeGen/Passes.h" // For IDs of passes that are preserved.
+#include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/Passes.h" // For IDs of passes that are preserved.
 #include "llvm/IR/GlobalValue.h"
 using namespace llvm;
 
@@ -139,6 +140,56 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
             TII->get(Uses64BitFramePtr ? X86::MOV64rr : X86::MOV32rr), StackPtr)
         .addReg(DestAddr.getReg());
     // The EH_RETURN pseudo is really removed during the MC Lowering.
+    return true;
+  }
+  case X86::IRET: {
+    // Adjust stack to erase error code
+    int64_t StackAdj = MBBI->getOperand(0).getImm();
+    X86FL->emitSPUpdate(MBB, MBBI, StackAdj, true);
+    // Replace pseudo with machine iret
+    BuildMI(MBB, MBBI, DL,
+            TII->get(STI->is64Bit() ? X86::IRET64 : X86::IRET32));
+    MBB.erase(MBBI);
+    return true;
+  }
+  case X86::EH_RESTORE: {
+    // Restore ESP and EBP, and optionally ESI if required.
+    bool IsSEH = isAsynchronousEHPersonality(classifyEHPersonality(
+        MBB.getParent()->getFunction()->getPersonalityFn()));
+    X86FL->restoreWin32EHStackPointers(MBB, MBBI, DL, /*RestoreSP=*/IsSEH);
+    MBBI->eraseFromParent();
+    return true;
+  }
+  case X86::LCMPXCHG8B_SAVE_EBX:
+  case X86::LCMPXCHG16B_SAVE_RBX: {
+    // Perform the following transformation.
+    // SaveRbx = pseudocmpxchg Addr, <4 opds for the address>, InArg, SaveRbx
+    // =>
+    // [E|R]BX = InArg
+    // actualcmpxchg Addr
+    // [E|R]BX = SaveRbx
+    const MachineOperand &InArg = MBBI->getOperand(6);
+    unsigned SaveRbx = MBBI->getOperand(7).getReg();
+
+    unsigned ActualInArg =
+        Opcode == X86::LCMPXCHG8B_SAVE_EBX ? X86::EBX : X86::RBX;
+    // Copy the input argument of the pseudo into the argument of the
+    // actual instruction.
+    TII->copyPhysReg(MBB, MBBI, DL, ActualInArg, InArg.getReg(),
+                     InArg.isKill());
+    // Create the actual instruction.
+    unsigned ActualOpc =
+        Opcode == X86::LCMPXCHG8B_SAVE_EBX ? X86::LCMPXCHG8B : X86::LCMPXCHG16B;
+    MachineInstr *NewInstr = BuildMI(MBB, MBBI, DL, TII->get(ActualOpc));
+    // Copy the operands related to the address.
+    for (unsigned Idx = 1; Idx < 6; ++Idx)
+      NewInstr->addOperand(MBBI->getOperand(Idx));
+    // Finally, restore the value of RBX.
+    TII->copyPhysReg(MBB, MBBI, DL, ActualInArg, SaveRbx,
+                     /*SrcIsKill*/ true);
+
+    // Delete the pseudo.
+    MBBI->eraseFromParent();
     return true;
   }
   }

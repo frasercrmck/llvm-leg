@@ -26,7 +26,6 @@
 ; X86:      calll   _g
 ; X86-NEXT: [[RETURN_STMT:.*]]:
 ; X86:      ret
-; X86-NEXT: L{{.*}}:
 ; X86-NEXT: [[END_OF_F:.*]]:
 ;
 ; X86-LABEL: .section        .debug$S,"dr"
@@ -66,7 +65,7 @@
 ; X86-NEXT: .long   1
 ; X86-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X86-NEXT: .long [[CALL_LINE_1]]-_f
-; X86-NEXT: .long   1
+; X86-NEXT: .long   -2147483647
 ; X86-NEXT: .short  0
 ; X86-NEXT: .short  0
 ; X86-NEXT: [[FILE_SEGMENT_END]]:
@@ -76,7 +75,7 @@
 ; X86-NEXT: .long   1
 ; X86-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X86-NEXT: .long [[CALL_LINE_2]]-_f
-; X86-NEXT: .long   2
+; X86-NEXT: .long   -2147483646
 ; X86-NEXT: .short  0
 ; X86-NEXT: .short  0
 ; X86-NEXT: [[FILE_SEGMENT_END]]:
@@ -86,9 +85,9 @@
 ; X86-NEXT: .long   2
 ; X86-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X86-NEXT: .long [[CALL_LINE_3]]-_f
-; X86-NEXT: .long   7
+; X86-NEXT: .long   -2147483641
 ; X86-NEXT: .long [[RETURN_STMT]]-_f
-; X86-NEXT: .long   8
+; X86-NEXT: .long   -2147483640
 ; X86-NEXT: .short  0
 ; X86-NEXT: .short  0
 ; X86-NEXT: .short  0
@@ -138,27 +137,42 @@
 ; OBJ32-NEXT:   CodeSize: 0x10
 ; OBJ32-NEXT:   FilenameSegment [
 ; OBJ32-NEXT:     Filename: D:\one.c
-; OBJ32-NEXT:     +0x0: 1
-; OBJ32-NEXT:     ColStart: 0
-; OBJ32-NEXT:     ColEnd: 0
+; OBJ32-NEXT:     +0x0 [
+; OBJ32-NEXT:       LineNumberStart: 1
+; OBJ32-NEXT:       LineNumberEndDelta: 0
+; OBJ32-NEXT:       IsStatement: Yes
+; OBJ32-NEXT:       ColStart: 0
+; OBJ32-NEXT:       ColEnd: 0
+; OBJ32-NEXT:     ]
 ; OBJ32-NEXT:   ]
 ; OBJ32-NEXT:   FilenameSegment [
 ; OBJ32-NEXT:     Filename: D:\two.c
-; OBJ32-NEXT:     +0x5: 2
-; OBJ32-NEXT:     ColStart: 0
-; OBJ32-NEXT:     ColEnd: 0
+; OBJ32-NEXT:     +0x5 [
+; OBJ32-NEXT:       LineNumberStart: 2
+; OBJ32-NEXT:       LineNumberEndDelta: 0
+; OBJ32-NEXT:       IsStatement: Yes
+; OBJ32-NEXT:       ColStart: 0
+; OBJ32-NEXT:       ColEnd: 0
+; OBJ32-NEXT:     ]
 ; OBJ32-NEXT:   ]
 ; OBJ32-NEXT:   FilenameSegment [
 ; OBJ32-NEXT:     Filename: D:\one.c
-; OBJ32-NEXT:     +0xA: 7
-; OBJ32-NEXT:     +0xF: 8
-; OBJ32-NEXT:     ColStart: 0
-; OBJ32-NEXT:     ColEnd: 0
-; OBJ32-NEXT:     ColStart: 0
-; OBJ32-NEXT:     ColEnd: 0
+; OBJ32-NEXT:     +0xA [
+; OBJ32-NEXT:       LineNumberStart: 7
+; OBJ32-NEXT:       LineNumberEndDelta: 0
+; OBJ32-NEXT:       IsStatement: Yes
+; OBJ32-NEXT:       ColStart: 0
+; OBJ32-NEXT:       ColEnd: 0
+; OBJ32-NEXT:     ]
+; OBJ32-NEXT:     +0xF [
+; OBJ32-NEXT:       LineNumberStart: 8
+; OBJ32-NEXT:       LineNumberEndDelta: 0
+; OBJ32-NEXT:       IsStatement: Yes
+; OBJ32-NEXT:       ColStart: 0
+; OBJ32-NEXT:       ColEnd: 0
+; OBJ32-NEXT:     ]
 ; OBJ32-NEXT:   ]
 ; OBJ32-NEXT: ]
-; OBJ32:    }
 
 ; X64-LABEL: f:
 ; X64-NEXT: .L{{.*}}:{{$}}
@@ -174,7 +188,6 @@
 ; X64-NEXT: [[EPILOG_AND_RET:.*]]:
 ; X64:      addq    $40, %rsp
 ; X64-NEXT: ret
-; X64-NEXT: .L{{.*}}:
 ; X64-NEXT: [[END_OF_F:.*]]:
 ;
 ; X64-LABEL: .section        .debug$S,"dr"
@@ -214,7 +227,7 @@
 ; X64-NEXT: .long   1
 ; X64-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X64-NEXT: .long [[START]]-f
-; X64-NEXT: .long   3
+; X64-NEXT: .long   -2147483645
 ; X64-NEXT: .short  0
 ; X64-NEXT: .short  0
 ; X64-NEXT: [[FILE_SEGMENT_END]]:
@@ -224,7 +237,7 @@
 ; X64-NEXT: .long   1
 ; X64-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X64-NEXT: .long [[CALL_LINE_1]]-f
-; X64-NEXT: .long   1
+; X64-NEXT: .long   -2147483647
 ; X64-NEXT: .short  0
 ; X64-NEXT: .short  0
 ; X64-NEXT: [[FILE_SEGMENT_END]]:
@@ -234,7 +247,7 @@
 ; X64-NEXT: .long   1
 ; X64-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X64-NEXT: .long [[CALL_LINE_2]]-f
-; X64-NEXT: .long   2
+; X64-NEXT: .long   -2147483646
 ; X64-NEXT: .short  0
 ; X64-NEXT: .short  0
 ; X64-NEXT: [[FILE_SEGMENT_END]]:
@@ -244,9 +257,9 @@
 ; X64-NEXT: .long   2
 ; X64-NEXT: .long [[FILE_SEGMENT_END:.*]]-[[FILE_SEGMENT_START]]
 ; X64-NEXT: .long [[CALL_LINE_3]]-f
-; X64-NEXT: .long   7
+; X64-NEXT: .long   -2147483641
 ; X64-NEXT: .long [[EPILOG_AND_RET]]-f
-; X64-NEXT: .long   8
+; X64-NEXT: .long   -2147483640
 ; X64-NEXT: .short  0
 ; X64-NEXT: .short  0
 ; X64-NEXT: .short  0
@@ -300,36 +313,55 @@
 ; OBJ64-NEXT:   CodeSize: 0x18
 ; OBJ64-NEXT:   FilenameSegment [
 ; OBJ64-NEXT:     Filename: D:\input.c
-; OBJ64-NEXT:     +0x0: 3
-; OBJ64-NEXT:     ColStart: 0
-; OBJ64-NEXT:     ColEnd: 0
+; OBJ64-NEXT:     +0x0 [
+; OBJ64-NEXT:       LineNumberStart: 3
+; OBJ64-NEXT:       LineNumberEndDelta: 0
+; OBJ64-NEXT:       IsStatement: Yes
+; OBJ64-NEXT:       ColStart: 0
+; OBJ64-NEXT:       ColEnd: 0
+; OBJ64-NEXT:     ]
 ; OBJ64-NEXT:   ]
 ; OBJ64-NEXT:   FilenameSegment [
 ; OBJ64-NEXT:     Filename: D:\one.c
-; OBJ64-NEXT:     +0x4: 1
-; OBJ64-NEXT:     ColStart: 0
-; OBJ64-NEXT:     ColEnd: 0
+; OBJ64-NEXT:     +0x4 [
+; OBJ64-NEXT:       LineNumberStart: 1
+; OBJ64-NEXT:       LineNumberEndDelta: 0
+; OBJ64-NEXT:       IsStatement: Yes
+; OBJ64-NEXT:       ColStart: 0
+; OBJ64-NEXT:       ColEnd: 0
+; OBJ64-NEXT:     ]
 ; OBJ64-NEXT:   ]
 ; OBJ64-NEXT:   FilenameSegment [
 ; OBJ64-NEXT:     Filename: D:\two.c
-; OBJ64-NEXT:     +0x9: 2
-; OBJ64-NEXT:     ColStart: 0
-; OBJ64-NEXT:     ColEnd: 0
+; OBJ64-NEXT:     +0x9 [
+; OBJ64-NEXT:       LineNumberStart: 2
+; OBJ64-NEXT:       LineNumberEndDelta: 0
+; OBJ64-NEXT:       IsStatement: Yes
+; OBJ64-NEXT:       ColStart: 0
+; OBJ64-NEXT:       ColEnd: 0
+; OBJ64-NEXT:     ]
 ; OBJ64-NEXT:   ]
 ; OBJ64-NEXT:   FilenameSegment [
 ; OBJ64-NEXT:     Filename: D:\one.c
-; OBJ64-NEXT:     +0xE: 7
-; OBJ64-NEXT:     +0x13: 8
-; OBJ64-NEXT:     ColStart: 0
-; OBJ64-NEXT:     ColEnd: 0
-; OBJ64-NEXT:     ColStart: 0
-; OBJ64-NEXT:     ColEnd: 0
+; OBJ64-NEXT:     +0xE [
+; OBJ64-NEXT:       LineNumberStart: 7
+; OBJ64-NEXT:       LineNumberEndDelta: 0
+; OBJ64-NEXT:       IsStatement: Yes
+; OBJ64-NEXT:       ColStart: 0
+; OBJ64-NEXT:       ColEnd: 0
+; OBJ64-NEXT:     ]
+; OBJ64-NEXT:     +0x13 [
+; OBJ64-NEXT:       LineNumberStart: 8
+; OBJ64-NEXT:       LineNumberEndDelta: 0
+; OBJ64-NEXT:       IsStatement: Yes
+; OBJ64-NEXT:       ColStart: 0
+; OBJ64-NEXT:       ColEnd: 0
+; OBJ64-NEXT:     ]
 ; OBJ64-NEXT:   ]
 ; OBJ64-NEXT: ]
-; OBJ64:    }
 
 ; Function Attrs: nounwind
-define void @f() #0 {
+define void @f() #0 !dbg !4 {
 entry:
   call void @g(), !dbg !12
   call void @g(), !dbg !15
@@ -346,16 +378,16 @@ attributes #1 = { "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "
 !llvm.module.flags = !{!9, !10}
 !llvm.ident = !{!11}
 
-!0 = !DICompileUnit(language: DW_LANG_C99, producer: "clang version 3.5 ", isOptimized: false, emissionKind: 0, file: !1, enums: !2, retainedTypes: !2, subprograms: !3, globals: !2, imports: !2)
+!0 = distinct !DICompileUnit(language: DW_LANG_C99, producer: "clang version 3.5 ", isOptimized: false, emissionKind: 0, file: !1, enums: !2, retainedTypes: !2, subprograms: !3, globals: !2, imports: !2)
 !1 = !DIFile(filename: "<unknown>", directory: "D:\5C")
 !2 = !{}
 !3 = !{!4}
-!4 = !DISubprogram(name: "f", line: 3, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, scopeLine: 3, file: !5, scope: !6, type: !7, function: void ()* @f, variables: !2)
+!4 = distinct !DISubprogram(name: "f", line: 3, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, scopeLine: 3, file: !5, scope: !6, type: !7, variables: !2)
 !5 = !DIFile(filename: "input.c", directory: "D:\5C")
 !6 = !DIFile(filename: "input.c", directory: "D:C")
 !7 = !DISubroutineType(types: !8)
 !8 = !{null}
-!9 = !{i32 2, !"Dwarf Version", i32 4}
+!9 = !{i32 2, !"CodeView", i32 1}
 !10 = !{i32 1, !"Debug Info Version", i32 3}
 !11 = !{!"clang version 3.5 "}
 !12 = !DILocation(line: 1, scope: !13)

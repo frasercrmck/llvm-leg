@@ -64,6 +64,10 @@
         ! CHECK-NEXT:         ! fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         bz .BB0
 
+        ! CHECK: be .BB0      ! encoding: [0x02,0b10AAAAAA,A,A]
+        ! CHECK-NEXT:         ! fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
+        beq .BB0
+
         ! CHECK: bg .BB0      ! encoding: [0x14,0b10AAAAAA,A,A]
         ! CHECK-NEXT:         ! fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         bg .BB0
@@ -120,6 +124,18 @@
         ! CHECK-NEXT:         ! fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         bvs .BB0
 
+        ! CHECK:             fba .BB0                        ! encoding: [0x11,0b10AAAAAA,A,A]
+        ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
+        fba .BB0
+
+        ! CHECK:             fba .BB0                        ! encoding: [0x11,0b10AAAAAA,A,A]
+        ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
+        fb .BB0
+
+        ! CHECK:             fbn .BB0                        ! encoding: [0x01,0b10AAAAAA,A,A]
+        ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
+        fbn .BB0
+
         ! CHECK:             fbu .BB0                        ! encoding: [0x0f,0b10AAAAAA,A,A]
         ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         fbu .BB0
@@ -127,6 +143,7 @@
         ! CHECK:             fbg .BB0                        ! encoding: [0x0d,0b10AAAAAA,A,A]
         ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         fbg .BB0
+
         ! CHECK:             fbug .BB0                       ! encoding: [0x0b,0b10AAAAAA,A,A]
         ! CHECK-NEXT:                                        !   fixup A - offset: 0, value: .BB0, kind: fixup_sparc_br22
         fbug .BB0
