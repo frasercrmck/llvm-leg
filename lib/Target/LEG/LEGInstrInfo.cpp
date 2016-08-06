@@ -46,7 +46,7 @@ LEGInstrInfo::LEGInstrInfo()
 /// not, return 0.  This predicate must return 0 if the instruction has
 /// any side effects other than loading from the stack slot.
 unsigned
-LEGInstrInfo::isLoadFromStackSlot(const MachineInstr *MI, int &FrameIndex) const{
+LEGInstrInfo::isLoadFromStackSlot(const MachineInstr &MI, int &FrameIndex) const{
   assert(0 && "Unimplemented");
   return 0;
 }
@@ -57,7 +57,7 @@ LEGInstrInfo::isLoadFromStackSlot(const MachineInstr *MI, int &FrameIndex) const
   /// not, return 0.  This predicate must return 0 if the instruction has
   /// any side effects other than storing to the stack slot.
 unsigned
-LEGInstrInfo::isStoreToStackSlot(const MachineInstr *MI,
+LEGInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                    int &FrameIndex) const {
   assert(0 && "Unimplemented");
   return 0;
@@ -67,7 +67,7 @@ LEGInstrInfo::isStoreToStackSlot(const MachineInstr *MI,
 // Branch Analysis
 //===----------------------------------------------------------------------===//
 //
-/// AnalyzeBranch - Analyze the branching code at the end of MBB, returning
+/// analyzeBranch - Analyze the branching code at the end of MBB, returning
 /// true if it cannot be understood (e.g. it's a switch dispatch or isn't
 /// implemented for a target).  Upon success, this returns false and returns
 /// with the following information in various cases:
@@ -91,7 +91,7 @@ LEGInstrInfo::isStoreToStackSlot(const MachineInstr *MI,
 /// cases where this method returns success.
 ///
 bool
-LEGInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+LEGInstrInfo::analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                             MachineBasicBlock *&FBB,
                             SmallVectorImpl<MachineOperand> &Cond,
                             bool AllowModify) const {
@@ -117,7 +117,7 @@ LEGInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
 }
 
 /// RemoveBranch - Remove the branching code at the end of the specific MBB.
-/// This is only invoked in cases where AnalyzeBranch returns success. It
+/// This is only invoked in cases where analyzeBranch returns success. It
 /// returns the number of instructions that were removed.
 unsigned
 LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
@@ -140,19 +140,19 @@ LEGInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
 
 /// InsertBranch - Insert branch code into the end of the specified
 /// MachineBasicBlock.  The operands to this method are the same as those
-/// returned by AnalyzeBranch.  This is only invoked in cases where
-/// AnalyzeBranch returns success. It returns the number of instructions
+/// returned by analyzeBranch.  This is only invoked in cases where
+/// analyzeBranch returns success. It returns the number of instructions
 /// inserted.
 ///
 /// It is also invoked by tail merging to add unconditional branches in
-/// cases where AnalyzeBranch doesn't apply because there was no original
+/// cases where analyzeBranch doesn't apply because there was no original
 /// branch to analyze.  At least this much must be implemented, else tail
 /// merging needs to be disabled.
 unsigned LEGInstrInfo::InsertBranch(MachineBasicBlock &MBB,
                                     MachineBasicBlock *TBB,
                                     MachineBasicBlock *FBB,
                                     ArrayRef<MachineOperand> Cond,
-                                    DebugLoc DL) const {
+                                    const DebugLoc &DL) const {
   unsigned NumInserted = 0;
   
   // Insert any conditional branch.
@@ -170,9 +170,9 @@ unsigned LEGInstrInfo::InsertBranch(MachineBasicBlock &MBB,
 }
 
 void LEGInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
-                                 MachineBasicBlock::iterator I, DebugLoc DL,
-                                 unsigned DestReg, unsigned SrcReg,
-                                 bool KillSrc) const {
+                               MachineBasicBlock::iterator I,
+                               const DebugLoc &DL, unsigned DestReg,
+                               unsigned SrcReg, bool KillSrc) const {
   BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
 }
@@ -199,20 +199,20 @@ void LEGInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
       .addFrameIndex(FrameIndex).addImm(0);
 }
 
-bool LEGInstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const
+bool LEGInstrInfo::expandPostRAPseudo(MachineInstr &MI) const
 {
-  switch (MI->getOpcode())
+  switch (MI.getOpcode())
   {
   default:
     return false;
   case LEG::MOVi32: {
-    DebugLoc DL = MI->getDebugLoc();
-    MachineBasicBlock &MBB = *MI->getParent();
+    DebugLoc DL = MI.getDebugLoc();
+    MachineBasicBlock &MBB = *MI.getParent();
 
-    const unsigned DstReg = MI->getOperand(0).getReg();
-    const bool DstIsDead = MI->getOperand(0).isDead();
+    const unsigned DstReg = MI.getOperand(0).getReg();
+    const bool DstIsDead = MI.getOperand(0).isDead();
 
-    const MachineOperand &MO = MI->getOperand(1);
+    const MachineOperand &MO = MI.getOperand(1);
 
     auto LO16 = BuildMI(MBB, MI, DL, get(LEG::MOVLOi16), DstReg);
     auto HI16 = BuildMI(MBB, MI, DL, get(LEG::MOVHIi16))

@@ -17,6 +17,7 @@
 #include "LEGISelLowering.h"
 #include "LEGSelectionDAGInfo.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
@@ -31,13 +32,26 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   return "e-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i64:32-f64:32-a:0:32-n32";
 }
 
+static Reloc::Model getEffectiveRelocModel(const Triple &TT,
+                                           Optional<Reloc::Model> RM) {
+  if (!RM.hasValue())
+    // Default relocation model on Darwin is PIC.
+    return TT.isOSBinFormatMachO() ? Reloc::PIC_ : Reloc::Static;
+
+  // DynamicNoPIC is only used on darwin.
+  if (*RM == Reloc::DynamicNoPIC && !TT.isOSDarwin())
+    return Reloc::Static;
+
+  return *RM;
+}
+
 LEGTargetMachine::LEGTargetMachine(const Target &T, const Triple &TT,
                                    StringRef CPU, StringRef FS,
                                    const TargetOptions &Options,
-                                   Reloc::Model RM, CodeModel::Model CM,
-                                   CodeGenOpt::Level OL)
+                                   Optional<Reloc::Model> RM,
+                                   CodeModel::Model CM, CodeGenOpt::Level OL)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
-                        Options, RM, CM, OL),
+                        Options, getEffectiveRelocModel(TT, RM), CM, OL),
       Subtarget(TT, CPU, FS, *this),
       TLOF(make_unique<TargetLoweringObjectFileELF>()) {
   initAsmInfo();

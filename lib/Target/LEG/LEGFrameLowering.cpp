@@ -48,7 +48,7 @@ uint64_t LEGFrameLowering::computeStackSize(MachineFunction &MF) const {
   uint64_t StackSize = MFI->getStackSize();
   unsigned StackAlign = getStackAlignment();
   if (StackAlign > 0) {
-    StackSize = RoundUpToAlignment(StackSize, StackAlign);
+    StackSize = alignTo(StackSize, StackAlign);
   }
   return StackSize;
 }
@@ -140,12 +140,12 @@ void LEGFrameLowering::emitEpilogue(MachineFunction &MF,
 
 // This function eliminates ADJCALLSTACKDOWN, ADJCALLSTACKUP pseudo
 // instructions
-void LEGFrameLowering::eliminateCallFramePseudoInstr(
+MachineBasicBlock::iterator LEGFrameLowering::eliminateCallFramePseudoInstr(
     MachineFunction &MF, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator I) const {
   if (I->getOpcode() == LEG::ADJCALLSTACKUP ||
       I->getOpcode() == LEG::ADJCALLSTACKDOWN) {
-    MBB.erase(I);
+    return MBB.erase(I);
   }
-  return;
+  return I;
 }

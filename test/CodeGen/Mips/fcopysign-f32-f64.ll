@@ -1,9 +1,9 @@
 ; RUN: llc  < %s -march=mips64el -mcpu=mips4 -target-abi=n64 | \
-; RUN:    FileCheck %s -check-prefix=ALL -check-prefix=64
+; RUN:    FileCheck %s -check-prefixes=ALL,64
 ; RUN: llc  < %s -march=mips64el -mcpu=mips64 -target-abi=n64 | \
-; RUN:    FileCheck %s -check-prefix=ALL -check-prefix=64
+; RUN:    FileCheck %s -check-prefixes=ALL,64
 ; RUN: llc  < %s -march=mips64el -mcpu=mips64r2 -target-abi=n64 | \
-; RUN:    FileCheck %s -check-prefix=ALL -check-prefix=64R2
+; RUN:    FileCheck %s -check-prefixes=ALL,64R2
 
 declare double @copysign(double, double) nounwind readnone
 
@@ -22,7 +22,7 @@ entry:
 ; 64:     or   $[[OR:[0-9]+]], $[[AND0]], $[[SLL1]]
 ; 64:     mtc1 $[[OR]], $f0
 
-; 64R2: dext ${{[0-9]+}}, ${{[0-9]+}}, 63, 1
+; 64R2: dextu ${{[0-9]+}}, ${{[0-9]+}}, 63, 1
 ; 64R2: ins  $[[INS:[0-9]+]], ${{[0-9]+}}, 31, 1
 ; 64R2: mtc1 $[[INS]], $f0
 

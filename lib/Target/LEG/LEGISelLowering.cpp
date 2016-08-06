@@ -148,7 +148,7 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset(), Loc);
     PtrOff = DAG.getNode(ISD::ADD, Loc, MVT::i32, StackPtr, PtrOff);
     MemOpChains.push_back(DAG.getStore(Chain, Loc, Arg, PtrOff,
-                                       MachinePointerInfo(), false, false, 0));
+                                       MachinePointerInfo()));
   }
 
   // Emit all stores, make sure they occur before the call.
@@ -213,7 +213,7 @@ SDValue LEGTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
 SDValue LEGTargetLowering::LowerCallResult(
     SDValue Chain, SDValue InGlue, CallingConv::ID CallConv, bool isVarArg,
-    const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl, SelectionDAG &DAG,
+    const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc &dl, SelectionDAG &DAG,
     SmallVectorImpl<SDValue> &InVals) const {
   assert(!isVarArg && "Unsupported");
 
@@ -242,8 +242,8 @@ SDValue LEGTargetLowering::LowerCallResult(
 /// LEG formal arguments implementation
 SDValue LEGTargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
-    const SmallVectorImpl<ISD::InputArg> &Ins, SDLoc dl, SelectionDAG &DAG,
-    SmallVectorImpl<SDValue> &InVals) const {
+    const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,
+    SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineRegisterInfo &RegInfo = MF.getRegInfo();
 
@@ -281,8 +281,8 @@ SDValue LEGTargetLowering::LowerFormalArguments(
 
     assert(VA.getValVT() == MVT::i32 &&
            "Only support passing arguments as i32");
-    SDValue Load = DAG.getLoad(VA.getValVT(), dl, Chain, FIPtr,
-                               MachinePointerInfo(), false, false, false, 0);
+    SDValue Load =
+        DAG.getLoad(VA.getValVT(), dl, Chain, FIPtr, MachinePointerInfo());
 
     InVals.push_back(Load);
   }
@@ -313,7 +313,7 @@ LEGTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                                bool isVarArg,
                                const SmallVectorImpl<ISD::OutputArg> &Outs,
                                const SmallVectorImpl<SDValue> &OutVals,
-                               SDLoc dl, SelectionDAG &DAG) const {
+                               const SDLoc &dl, SelectionDAG &DAG) const {
   if (isVarArg) {
     report_fatal_error("VarArg not supported");
   }
