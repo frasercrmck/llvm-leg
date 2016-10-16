@@ -14,11 +14,11 @@
 #ifndef LEGSELECTIONDAGINFO_H
 #define LEGSELECTIONDAGINFO_H
 
-#include "llvm/Target/TargetSelectionDAGInfo.h"
+#include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 
 namespace llvm {
 
-class LEGSelectionDAGInfo : public TargetSelectionDAGInfo {
+class LEGSelectionDAGInfo : public SelectionDAGTargetInfo {
 public:
   ~LEGSelectionDAGInfo();
 };

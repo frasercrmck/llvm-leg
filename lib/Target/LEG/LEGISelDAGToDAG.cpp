@@ -34,7 +34,7 @@ public:
   explicit LEGDAGToDAGISel(LEGTargetMachine &TM, CodeGenOpt::Level OptLevel)
       : SelectionDAGISel(TM, OptLevel), Subtarget(*TM.getSubtargetImpl()) {}
 
-  SDNode *Select(SDNode *N) override;
+  void Select(SDNode *N) override;
 
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
 
@@ -118,15 +118,17 @@ SDNode *LEGDAGToDAGISel::SelectConditionalBranch(SDNode *N) {
   return CurDAG->getMachineNode(LEG::Bcc, N, MVT::Other, BranchOps);
 }
 
-SDNode *LEGDAGToDAGISel::Select(SDNode *N) {
+void LEGDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   case ISD::Constant:
-    return SelectMoveImmediate(N);
+    SelectMoveImmediate(N);
+    return;
   case ISD::BR_CC:
-    return SelectConditionalBranch(N);
+    SelectConditionalBranch(N);
+    return;
   }
 
-  return SelectCode(N);
+  SelectCode(N);
 }
 
 /// createLEGISelDag - This pass converts a legalized DAG into a

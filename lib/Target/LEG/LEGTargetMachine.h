@@ -31,9 +31,10 @@ class LEGTargetMachine : public LLVMTargetMachine {
 
 public:
   LEGTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                   StringRef FS, const TargetOptions &Options, Reloc::Model RM,
-                   CodeModel::Model CM, CodeGenOpt::Level OL);
-  
+                   StringRef FS, const TargetOptions &Options,
+                   Optional<Reloc::Model> RM, CodeModel::Model CM,
+                   CodeGenOpt::Level OL);
+
   const LEGSubtarget * getSubtargetImpl() const {
     return &Subtarget;
   }
