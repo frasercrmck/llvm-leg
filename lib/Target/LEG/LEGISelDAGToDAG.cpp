@@ -34,11 +34,11 @@ public:
   explicit LEGDAGToDAGISel(LEGTargetMachine &TM, CodeGenOpt::Level OptLevel)
       : SelectionDAGISel(TM, OptLevel), Subtarget(*TM.getSubtargetImpl()) {}
 
-  SDNode *Select(SDNode *N);
+  SDNode *Select(SDNode *N) override;
 
   bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset);
 
-  virtual const char *getPassName() const {
+  virtual const char *getPassName() const override {
     return "LEG DAG->DAG Pattern Instruction Selection";
   }
 
@@ -53,7 +53,7 @@ private:
 
 bool LEGDAGToDAGISel::SelectAddr(SDValue Addr, SDValue &Base, SDValue &Offset) {
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-    EVT PtrVT = getTargetLowering()->getPointerTy(*TM.getDataLayout());
+    EVT PtrVT = getTargetLowering()->getPointerTy(CurDAG->getDataLayout());
     Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
     Offset = CurDAG->getTargetConstant(0, Addr, MVT::i32);
     return true;

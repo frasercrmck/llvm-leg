@@ -47,7 +47,7 @@ public:
       override;
 
   // Debug information queries.
-  unsigned getFrameRegister(const MachineFunction &MF) const;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 };
 
 } // end namespace llvm

@@ -1,4 +1,4 @@
-//===- MCJITTest.cpp - Unit tests for the MCJIT ---------------------------===//
+//===- MCJITTest.cpp - Unit tests for the MCJIT -----------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -88,8 +88,9 @@ public:
 
   bool needsToReserveAllocationSpace() override { return true; }
 
-  void reserveAllocationSpace(uintptr_t CodeSize, uintptr_t DataSizeRO,
-                              uintptr_t DataSizeRW) override {
+  void reserveAllocationSpace(uintptr_t CodeSize, uint32_t CodeAlign,
+			      uintptr_t DataSizeRO, uint32_t RODataAlign,
+                              uintptr_t DataSizeRW, uint32_t RWDataAlign) override {
     ReservedCodeSize = CodeSize;
     ReservedDataSizeRO = DataSizeRO;
     ReservedDataSizeRW = DataSizeRW;
@@ -479,14 +480,14 @@ TEST_F(MCJITCAPITest, addGlobalMapping) {
 
   Module = LLVMModuleCreateWithName("testModule");
   LLVMSetTarget(Module, HostTriple.c_str());
-  LLVMTypeRef FunctionType = LLVMFunctionType(LLVMInt32Type(), NULL, 0, 0);
+  LLVMTypeRef FunctionType = LLVMFunctionType(LLVMInt32Type(), nullptr, 0, 0);
   LLVMValueRef MappedFn = LLVMAddFunction(Module, "mapped_fn", FunctionType);
 
   Function = LLVMAddFunction(Module, "test_fn", FunctionType);
   LLVMBasicBlockRef Entry = LLVMAppendBasicBlock(Function, "");
   LLVMBuilderRef Builder = LLVMCreateBuilder();
   LLVMPositionBuilderAtEnd(Builder, Entry);
-  LLVMValueRef RetVal = LLVMBuildCall(Builder, MappedFn, NULL, 0, "");
+  LLVMValueRef RetVal = LLVMBuildCall(Builder, MappedFn, nullptr, 0, "");
   LLVMBuildRet(Builder, RetVal);
   LLVMDisposeBuilder(Builder);
 

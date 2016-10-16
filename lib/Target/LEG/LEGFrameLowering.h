@@ -36,7 +36,7 @@ public:
                                      MachineBasicBlock::iterator I)
                                      const override;
 
-  bool hasFP(const MachineFunction &MF) const;
+  bool hasFP(const MachineFunction &MF) const override;
 
   //! Stack slot size (4 bytes)
   static int stackSlotSize() { return 4; }
