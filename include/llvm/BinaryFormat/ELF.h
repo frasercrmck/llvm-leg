@@ -313,6 +313,8 @@ enum {
   EM_LANAI = 244,         // Lanai 32-bit processor
   EM_BPF = 247,           // Linux kernel bpf virtual machine
 
+  EM_LEG = 248,           // LEG backend
+
   // A request has been made to the maintainer of the official registry for
   // such numbers for an official value for WebAssembly. As soon as one is
   // allocated, this enum will be updated to use it.

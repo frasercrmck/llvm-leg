@@ -557,7 +557,6 @@ TEST(TripleTest, BitWidthPredicates) {
   T.setArch(Triple::msp430);
   EXPECT_TRUE(T.isArch16Bit());
   EXPECT_FALSE(T.isArch32Bit());
-  EXPECT_FALSE(T.isArch64Bit());
 
   T.setArch(Triple::ppc);
   EXPECT_FALSE(T.isArch16Bit());
@@ -653,6 +652,11 @@ TEST(TripleTest, BitWidthPredicates) {
   EXPECT_FALSE(T.isArch16Bit());
   EXPECT_FALSE(T.isArch32Bit());
   EXPECT_TRUE(T.isArch64Bit());
+
+  T.setArch(Triple::leg);
+  EXPECT_FALSE(T.isArch16Bit());
+  EXPECT_TRUE(T.isArch32Bit());
+  EXPECT_FALSE(T.isArch64Bit());
 }
 
 TEST(TripleTest, BitWidthArchVariants) {
