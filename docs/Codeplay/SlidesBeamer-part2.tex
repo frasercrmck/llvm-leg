@@ -1,0 +1,517 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Bits of your ISA you need to describe}
+
+\begin{itemize}
+    \item Target machine
+    \begin{itemize}
+        \item Registers, register classes
+        \item Calling conventions
+    \end{itemize}
+    \item Instruction set
+    \begin{itemize}
+        \item Operands and patterns
+        \item Assembly printing and/or instruction encoding
+        \item Schedule (not part of this talk)
+    \end{itemize}
+    \item ...
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talksection{Describing the target machine}
+
+\begin{frame}{TableGen}
+
+\begin{itemize}
+    \item C++-style syntax
+    \item Different set of backends
+    \begin{itemize}
+        \item RegisterInfo, InstrInfo, AsmWriter, ...
+    \end{itemize}
+    \item TableGen backends generate .inc files
+    \begin{itemize}
+        \item Included by your C++ files
+    \end{itemize}
+    \item More information:
+    \begin{itemize}
+        \item \url{llvm.org/docs/TableGen/index.html}
+        \item \url{llvm.org/docs/TableGen/BackEnds.html}
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Describing registers with TableGen}
+
+\begin{itemize}
+    \item TableGen provides the 'Register' class
+    \begin{itemize}
+        \item Can use the 'HWEncoding' field for encodings
+    \end{itemize}
+    \item Referenced as “LEG::R0” in C++
+\end{itemize}
+
+\begin{codebox}
+class LEGReg<bits<16> Enc, string n> : Register<n> {
+  Let HWEncoding = Enc;
+  let Namespace = "LEG";
+}
+
+def R0 : LEGReg< 0, "r0" >;
+...
+def SP : LEGReg< 10, "sp" >;
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Describing registers with TableGen}
+
+\begin{itemize}
+    \item Can automate trivial definitions
+\end{itemize}
+
+\begin{codebox}
+foreach i = 0-9 in {
+  def R#i : R<i, "r"#i>;
+}
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
+
+\begin{itemize}
+    \item Group registers into register classes
+\end{itemize}
+
+\begin{codebox}
+def GRRegs : RegisterClass<"LEG", [i32], 32,
+  (add SP, (sequence "R%i", 0, 9))>;
+\end{codebox}
+\codecaption{LEGRegisterInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Calling convention lowering: TableGen}
+
+\begin{codebox}
+def CC_LEG : CallingConv<[
+    // Promote i8/i16 arguments to i32
+    CCIfType<[i8, i16], CCPromoteToType<i32>>,
+
+    // The first 4 arguments are passed in registers
+    CCIfType<[i32], CCAssignToReg<[R0, R1, R2, R3]>>,
+
+    // Fall-back, and use the stack
+    CCIfType<[i32], CCAssignToStack<4, 4>>
+  ]>;
+\end{codebox}
+\codecaption{LEGCallingConv.td}
+
+\begin{itemize}
+    \item Generates functions used in ISelLowering via function pointers
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Calling convention lowering: The big picture}
+
+\begin{minipage}[t]{0.50\linewidth}
+    \begin{codebox}[commandchars=\\\[\]]
+define i32 @foo(i32 \codeempha[%a], i32 \codeemphb[%b]) {
+    \codeemphc[%c] = add i32 \codeempha[%a], \codeemphb[%b]
+    ret i32 \codeemphc[%c]
+}
+    \end{codebox}
+    \codecaption{ex1b.ll}
+
+    Two target hooks:
+    \begin{itemize}
+            \item LowerFormalArguments()
+            \item LowerReturn()
+    \end{itemize}
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
+    \begin{figure}
+        \vspace{-2.2ex}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel-lower-args-1.pdf}
+    \end{figure}
+\end{minipage}   
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Calling convention lowering: The big picture}
+
+\begin{minipage}[t]{0.50\linewidth}
+    LowerFormalArguments()
+    \begin{itemize}
+        \item Lowers incoming arguments into the DAG
+    \end{itemize}
+
+    LowerReturn()
+    \begin{itemize}
+        \item Lowers outgoing return values into the DAG
+    \end{itemize}
+    
+\end{minipage}
+\begin{minipage}[t]{0.49\linewidth}
+    % FIXME Add 'a', 'b', 'c' circles and arrows from Lower*() to white circles
+    \begin{figure}
+        \vspace{-2.2ex}
+        \includegraphics[width = 1.0\textwidth]{examples/ex1b/ex1b-pre-isel-lower-args-2.pdf}
+    \end{figure}
+\end{minipage}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Calling convention lowering: LowerFormalArguments()}
+
+\begin{itemize}
+    \item Assigns locations to arguments, according to the TableGen-defined calling convention
+    \item Creates DAG nodes for each location:
+    \begin{itemize}
+        \item Registers: CopyFromReg nodes
+        \item Stack: frame indices and stack loads
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\[\]]
+// LEGTargetLowering::LowerFormalArguments()
+SmallVector<CCValAssign, 16> ArgLocs;
+CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
+               getTargetMachine(), ArgLocs,
+               *DAG.getContext());
+CCInfo.AnalyzeFormalArguments(Ins, \codeempha[CC_LEG]);
+...
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Calling convention lowering: LowerReturn()}
+
+\begin{itemize}
+    \item Similar to \texttt{LowerFormalArguments()}, but the other way around
+    \item Define another, \texttt{RetCC\_LEG}, TableGen calling convention
+    \item Call 'AnalyzeReturn()' with it
+    \item Walk the return value locations and issue DAG nodes
+    \item Return \texttt{LEGISD::RET} instruction
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Calling convention lowering: LowerCall()}
+
+\begin{itemize}
+    \item Hybrid of \texttt{LowerFormalArguments()} and \texttt{LowerReturn()}
+    \item Not explicitly covered here
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talksection{Describing the instruction set}
+
+\begin{frame}{Describing instructions: Overview}
+
+\begin{itemize}
+    \item Let's start with a simple instruction: \texttt{ADDrr}
+    \begin{itemize}
+        \item Adds two registers together
+    \end{itemize}
+    \item We define it in lib/Target/LEG/LEGInstrInfo.td
+    \item What we need to specify:
+    \begin{itemize}
+        \item Operands
+        \item Assembly string
+        \item Instruction pattern
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Describing instructions: Operands}
+
+\begin{itemize}
+    \item List of definitions or outputs ('outs')
+    \item List of uses or inputs ('ins')
+    \item Operand class:
+    \begin{itemize}
+        \item Register class (e.g. GRRegs)
+        \item Immediate (e.g. i32imm)
+        \item More complex operands (e.g. reg + imm for load/store)
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\{\}]
+def ADDrr : InstLEG<\codeempha{(outs GRRegs:$dst)},
+                    \codeempha{(ins GRRegs:$src1, GRRegs:$src2)},
+                    "add $dst, $src1, $src2",
+                    [(set i32:$dst, (add i32:$src1, i32:$src2))]>;
+\end{codebox}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
+
+\vspace{5ex}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=4,lastline=4,gobble=1]{ex1/ex1-mi.txt}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Describing instructions: Selection Patterns}
+
+\begin{itemize}
+    \item Matches nodes in the SelectionDAG
+    \begin{itemize}
+        \item Nodes get turned into MachineInstrs during ISel
+        \item If pattern is omitted, selection needs to be done in C++
+    \end{itemize}
+    \item Syntax:
+    \begin{itemize}
+        \item One pair of parenthesis defines one node
+        \item Nodes have DAG operands, with 'MVT' type (e.g. i32)
+        \item Map DAG operands to MI operands
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\{\}]
+def ADDrr : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, GRRegs:$src2),
+                    "add $dst, $src1, $src2",
+                    \codeempha{[(set i32:$dst, (add i32:$src1, i32:$src2))]}>;
+\end{codebox}
+\codecaption[-10.2ex]{LEGInstrInfo.td}
+
+\vspace{5ex}
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=4,lastline=4,gobble=1]{ex1/ex1-mi.txt}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item Using constants in IR produces errors at this point
+    \item We need to specify how to generate ('materialize') constants
+    \item For example, with a 'move' instruction
+    \begin{itemize}
+        \item E.g. MOVLO for 16-bit constants
+    \end{itemize}
+\end{itemize}
+
+\begin{itemize}
+    \item Example:
+\end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
+
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\begin{codebox}
+LLVM ERROR: Cannot select: 0x29d4350: i32 = Constant<2> [ID=2]
+In function: main
+\end{codebox}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item Let's define this move instruction:
+\end{itemize}
+
+\begin{codebox}
+def MOVLOi16 : InstLEG<(outs GRRegs:$dst),
+                      (ins i32imm:$src),
+                      "movw $dst, $src",
+                      [(set i32:$dst, i32imm:$src)]> {
+  let isMoveImm = 1;
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\begin{itemize}
+    \item Example:
+\end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
+
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=6,lastline=7,gobble=1]{ex2/ex2-ADDrr-MOVLO-mi.txt}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Constants}
+
+\begin{itemize}
+    \item What if the instruction accepts an immediate operand?
+\end{itemize}
+
+\begin{codebox}[commandchars=\\¬|]
+def \codeempha¬LEGimm8| : Operand<i32>, ImmLeaf<i32, [{
+  return Imm >= 0 && Imm < 256;
+}]>;
+
+def ADDri : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, \codeempha¬i32imm|:$src2),
+                    "add $dst, $src1, $src2",
+                    [(set i32:$dst, (add i32:$src1, 
+                                     \codeempha¬LEGimm8|:$src2))]>;
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\begin{itemize}
+    \item Example:
+\end{itemize}
+\examplebox[firstline=8,lastline=8,gobble=4]{ex2/ex2.ll}
+
+\begin{itemize}
+    \item Result:
+\end{itemize}
+\examplebox[firstline=6,lastline=6,gobble=1]{ex2/ex2-ADDri-mi.txt}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Matching multiple DAG nodes}
+
+\begin{itemize}
+    \item DAG nodes can be nested inside selection patterns
+    \begin{itemize}
+        \item The output of one node is the input of another
+    \end{itemize}
+    \item Allows operations to be combined
+    \begin{itemize}
+        \item Reduces the number of generated instructions
+        \item Possibly improves performance or power consumption
+    \end{itemize}
+    \item Example: multiply and add instruction (ex3.ll)
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\{\}]
+def MLA : InstLEG<(outs GRRegs:$dst),
+                  (ins GRRegs:$src1, GRRegs:$src2, GRRegs:$src3),
+                  "mla $dst, $src1, $src2, $src3",
+                  [(set i32:$dst,
+                   \codeempha{(add \codeemphb{(mul i32:$src1, i32:$src2)}, i32:$src3))}]>;
+\end{codebox}
+\codecaption[-12.2ex]{LEGInstrInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Matching multiple DAG nodes}
+
+% FIXME center image
+\includegraphics[width = 0.80\textwidth]{examples/ex3/ex3-isel-comparison.pdf}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Frame lowering}
+
+\begin{itemize}
+    \item Hooks invoked when values are stored on the stack
+    \begin{itemize}
+        \item In debug builds (-O0), but not only
+    \end{itemize}
+    \item Used to reserve space in the stack
+    \begin{itemize}
+        \item Usually by increasing or decreasing the stack pointer (\texttt{SP})
+        \item May need to align the stack pointer too
+    \end{itemize}
+    \item Generate code at the beginning ('prologue') and end ('epilogue') of functions
+    \begin{itemize}
+        \item LEGFrameLowering::emitPrologue()
+        \item LEGFrameLowering::emitEpilogue()
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Frame lowering}
+
+\begin{itemize}
+    \item Example that uses the stack:
+\end{itemize}
+
+\examplebox[firstline=7,lastline=10]{ex4/ex4.ll}
+
+\begin{itemize}
+    \item Result when compiled with -O2:
+\end{itemize}
+
+\examplebox[firstline=8,lastline=14,gobble=1]{ex4/ex4-O2-mi.txt}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Frame lowering}
+
+\begin{itemize}
+    \item When compiling with  -O0, hooks need to be defined
+    \item Emit load/store instructions with frame indices
+    \item Minimal implementation:
+\end{itemize}
+
+\begin{codebox}
+// 'storeRegToStackSlot()' hook
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::STR))
+  .addReg(SrcReg, getKillRegState(KillSrc))
+  .addFrameIndex(FrameIndex).addImm(0);
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
+
+\begin{codebox}
+// 'loadRegFromStackSlot()' hook
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::LDR), DestReg)
+  .addFrameIndex(FrameIndex).addImm(0);
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
+
+\begin{codebox}
+// 'copyPhysReg()' hook
+BuildMI(MBB, I, I->getDebugLoc(), get(LEG::MOVrr), DestReg)
+  .addReg(SrcReg, getKillRegState(KillSrc));
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
+
+\end{frame}

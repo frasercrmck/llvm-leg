@@ -1,0 +1,38 @@
+% This program can be redistributed and/or modified under the terms
+% of the GNU Public License, version 3.
+
+\mode<presentation>
+
+\DeclareOptionBeamer{secheader}{\beamer@secheadertrue}
+\ProcessOptionsBeamer
+
+\useoutertheme{codeplay}
+
+% color definitions
+\definecolor{uidarkgray}{RGB}{24,24,25}
+\definecolor{uigray}{RGB}{51,51,51}
+\definecolor{uilightgray}{RGB}{123,123,123}
+\definecolor{uicyan}{RGB}{0,0,255}
+
+% set the title color
+\setbeamercolor{title}{fg=white}
+
+% set colors for specific elements
+\setbeamercolor{normal text}{fg=white}
+\setbeamercolor{background canvas}{bg=uidarkgray}
+\setbeamercolor{structure}{fg=uilightgray}
+\setbeamercolor{block}{fg=white}
+\setbeamercolor{block title}{fg=white}
+\setbeamercolor{block item}{fg=white}
+\setbeamercolor{section in toc}{fg=uiwhite}
+\setbeamercolor{subsection in toc}{fg=uiwhite}
+\setbeamercolor{section in toc shaded}{fg=uilightgray}
+\setbeamercolor{subsection in toc shaded}{fg=uilightgray}
+
+% frame title styling
+\setbeamertemplate{frametitle}{\vspace{0.4cm} \color{white}  \insertframetitle}
+
+\setbeamersize{text margin left=1em,text margin right=1em}
+
+\mode
+<all>

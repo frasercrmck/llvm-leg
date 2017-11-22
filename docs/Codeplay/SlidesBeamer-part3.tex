@@ -1,0 +1,580 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talksection{Instruction printing}
+
+\begin{frame}{Instruction printer}
+
+\begin{itemize}
+    \item New classes:
+    \begin{itemize}
+        \item LEGAsmPrinter
+        \item LEGMCInstLower
+        \item An MCAsmStreamer (usually stock)
+        \item LEGInstPrinter
+    \end{itemize}
+    \item LEGAsmPrinter works as a gateway to the streamers
+    \item This stages works with MCInsts, lowered from MachineInstrs by LEGMCInstLower
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction printer}
+
+\begin{itemize}
+    \item TableGen provides the 'AsmString' field:
+\end{itemize}
+
+\begin{codebox}
+class InstLEG<... , string asmstr> : Instruction {
+  let AsmString = asmstr;
+  ...
+}
+\end{codebox}
+\codecaption{LEGInstrFormats.td}
+
+\begin{codebox}[commandchars=\\\[\]]
+def ADDrr : InstLEG<(outs GRRegs:$dst),
+                    (ins GRRegs:$src1, GRRegs:$src2),
+                    \codeempha["add $dst, $src1, $src2"]> {
+  ...
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\begin{itemize}
+  \item \texttt{LEGInstPrinter::printOperand()} will be called on each operand.
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction printer}
+
+\begin{itemize}
+  \item \texttt{LEGInstPrinter::printOperand()} prints the assembly string of a given operand...
+\end{itemize}
+
+\begin{codebox}
+void LEGInstPrinter::printOperand(const MCInst *MI, unsigned No,
+                                  raw_ostream &O) {
+  const MCOperand &Op = MI->getOperand(No);
+  if (Op.isReg()) {
+    // TableGen generates this function for us from   
+    // LEGRegisterInfo.td
+    O << getRegisterName(Op.getReg());
+    return;
+  }
+  if (Op.isImm()) {
+    O << '#' << Op.getImm();
+    return;
+  }
+  /* ... */
+}
+\end{codebox}
+\codecaption{LEGInstPrinter.cpp}
+
+\begin{itemize}
+  \item ...and is given the stream to print it to
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Instruction printer}
+
+\begin{itemize}
+    \item That's it!
+    \item Directives and labels handled for us
+    \begin{itemize}
+        \item Can emit target-specific syntax if we wish
+    \end{itemize}
+\end{itemize}
+
+\examplebox[firstline=1,lastline=10]{ex1/ex1.s}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talksection{Instruction encoding}
+
+\begin{frame}{Instruction encoding}
+
+\begin{itemize}
+    \item A few new classes:
+    \begin{itemize}
+        \item An MCObjectStreamer (again, stock)
+        \item LEGMCCodeEmitter
+        \item LEGObjectWriter
+        \item LEGAsmBackend
+    \end{itemize}
+    \item You will also need your LEGAsmPrinter
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+Example encoding:
+
+\vspace{1ex}
+
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline 
+31...28 & 27...25 & 24...21 & 20 & 19...16 & 15...12 & 11...4 & 3...0\tabularnewline
+\hline 
+1110 & 000 & opcode & 0 & src1 & dst & 00000000 & src2\tabularnewline
+\hline 
+\end{tabular}
+
+\vspace{2ex}
+
+How can we achieve this?
+
+\vspace{1ex}
+
+\begin{codebox}[commandchars=\\\{\}]
+  \codeemphc{%R0}<def> = \codeemphd{ADDrr} \codeempha{%R0}<kill>, \codeemphb{%R1}<kill>
+\end{codebox}
+
+\vspace{1ex}
+
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+31...28 & 27...25 & 24...21 & 20 & 19...16 & 15...12 & 11...4 & 3...0\tabularnewline
+\hline
+1110 & 000 & \codeemphd{1100} & 0 & \codeempha{0000} & \codeemphc{0000} & 00000000 & \codeemphb{0001}\tabularnewline
+\hline
+\end{tabular}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item TableGen recognises the 'Inst' field:
+\end{itemize}
+
+\begin{codebox}
+class InstLEG< ... > : Instruction {
+  field bits<32> Inst;
+  ...
+}
+\end{codebox}
+\codecaption{LEGInstrFormats.td}
+
+\begin{itemize}
+    \item Used to define the binary encoding of each instruction in TableGen:
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\[\]]
+  def \codeemphd[ADDrr] : InstLEG< ... > {
+  let Inst{31-25} = 0b110000;
+  let Inst{24-21} = \codeemphd[0b1100];      // Opcode
+  let Inst{20}    = 0b0;
+  let Inst{11-4}  = 0b00000000;
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+    \item For operand-based encoding, need bit fields with the same names as the operands:
+\end{itemize}
+
+\begin{codebox}[commandchars=\\\[\]]
+  def \codeemphd[ADDrr] : InstLEG<(outs GRRegs:\codeemphc[$dst]),
+                    (ins GRRegs:\codeempha[$src1], GRRegs:\codeemphb[$src2]) ... > {
+  bits<4> \codeempha[src1]; bits<4> \codeemphb[src2]; bits<4> \codeemphc[dst];
+  let Inst{31-25} = 0b110000;
+  let Inst{24-21} = \codeemphd[0b1100];      // Opcode
+  let Inst{20}    = 0b0;
+  let Inst{19-16} = \codeempha[src1];        // Operand 1
+  let Inst{15-12} = \codeemphc[dst];         // Destination
+  let Inst{11-4}  = 0b00000000;
+  let Inst{3-0}   = \codeemphb[src2];        // Operand 2
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\begin{itemize}
+    \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} will be called on each operand
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Instruction encoding}
+
+\begin{itemize}
+  \item \texttt{LEGMCCodeEmitter::getMachineOpValue()} returns the binary encoding of a given operand...
+\end{itemize}
+
+\begin{codebox}
+unsigned LEGMCCodeEmitter::
+getMachineOpValue(const MCInst &MI, const MCOperand MO,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
+  if (MO.isReg()) {
+    return
+      CTX.getRegisterInfo()->getEncodingValue(MO.getReg());
+  } if (MO.isImm()) {
+    return static_cast<unsigned>(MO.getImm());
+  }
+  /* ... */
+}
+\end{codebox}
+\codecaption{LEGMCCodeEmitter.cpp}
+
+\begin{itemize}
+  \item ...which is placed, masked, and shifted into position by TableGen-erated code
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Relocations and fixups}
+
+\begin{itemize}
+    \item For values that need fixing up, record the relocation and return zero
+    \item LLVM will keep track of the relocation for us and help us fix it up later
+\end{itemize}
+
+\begin{codebox}
+unsigned LEGMCCodeEmitter::
+getMachineOpValue(const MCInst &MI, const MCOperand MO,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
+  /* ... */
+
+  assert(MO.isExpr()); // MO must be an expression
+  
+  const MCExpr *Expr = MO.getExpr();
+  const MCExpr::ExprKind Kind = Expr->getFixupKind();
+
+  Fixups.push_back(MCFixup::Create(0, Expr, Kind));
+  return 0;
+}
+\end{codebox}
+\codecaption{LEGMCCodeEmitter.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Relocations and fixups}
+
+\begin{itemize}
+    \item Defining a target-specific fixup:
+\end{itemize}
+
+\begin{codebox}
+enum Fixups {
+  fixup_leg_mov_hi16_pcrel = FirstTargetFixupKind,
+  fixup_leg_mov_lo16_pcrel,
+  
+  LastTargetFixupKind,
+  NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
+};
+\end{codebox}
+\codecaption{LEGFixups.h}
+
+\begin{codebox}
+const MCFixupKindInfo& getFixupKindInfo(MCFixupKind K) const {
+  const static MCFixupKindInfo I[LEG::NumTargetFixupKinds] = {
+    // Name          Offset Size Flags
+    { "fixup_leg_mov_hi16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+    { "fixup_leg_mov_lo16_pcrel", 0,  32, MCFixupKindInfo::FKF_IsPCRel },
+  };
+  /* ... */
+  return I[K - FirstTargetFixupKind];
+}
+\end{codebox}
+\codecaption{LEGAsmBackend.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Relocations and fixups}
+
+\begin{itemize}
+    \item We must then implement some hooks
+    \item These are called at the end once the section layouts have been finalized
+    \item \texttt{LEGAsmBackend::processFixupValue()}
+    \begin{itemize}
+        \item Adjusts the fixup value, e.g., splitting the value across non-contiguous fields
+    \end{itemize}
+    \item \texttt{LEGAsmBackend::applyFixup()}
+    \begin{itemize}
+        \item Patches the fixed-up value into the binary stream
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talksection{Selection DAG manipulation}
+
+\begin{frame}[fragile]{Custom SelectionDAG nodes}
+
+\begin{itemize}
+    \item To represent target-specific operations in the DAG
+    \begin{itemize}
+        \item Example: 32-bit immediate move
+    \end{itemize}
+    \item How?
+    \begin{itemize}
+        \item Add a value in the \texttt{LEGISD} enum
+        \item Update \texttt{LEGTargetLowering::getTargetNodeName()}
+        \item Add TableGen node definitions
+        \begin{itemize}
+            \item Type definition: number of inputs, outputs, constraints
+            \item Node definition: tablegen name, opcode, type
+        \end{itemize}
+    \end{itemize}
+    \item Custom nodes can be used in TableGen selection patterns
+\end{itemize}
+
+\begin{codebox}
+def MoveImm32Ty : SDTypeProfile<1, 1, [
+  SDTCisSameAs<0, 1>, SDTCisInt<0>
+]>;
+
+def movei32 : SDNode<"LEGISD::MOVi32", MoveImm32Ty>;
+\end{codebox}
+\codecaption{LEGOperators.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Custom DAG lowering}
+
+\begin{itemize}
+    \item To handle DAG nodes in a special way
+    \begin{itemize}
+        \item Replaces an existing node with one or more other DAG nodes
+        \item Matches nodes by opcode (e.g. \texttt{ISD::Constant})
+        \item Matches nodes by type (e.g. \texttt{i32})
+    \end{itemize}
+    \item How?
+    \begin{itemize}
+        \item Call \texttt{setOperationAction(\emph{nodeOpcode}, type, Custom)}
+        \item Create a function to handle it (e.g. \texttt{LowerOPCODE})
+        \item Update \texttt{LowerOperation} to call \texttt{LowerOPCODE}
+    \end{itemize}
+    \item This all hapens in \texttt{LEGTargetLowering} (\texttt{LEGISelLowering.cpp})
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Custom DAG lowering: \texttt{LowerOPCODE}}
+
+\begin{itemize}
+    \item \texttt{LowerOPCODE} takes a DAG node (\texttt{Op}) and returns a DAG node
+    \item You can:
+    \begin{itemize}
+        \item Return a different node
+        \item Return \texttt{Op} → no change
+        \item Return \texttt{SDValue()} → node not supported (LLVM will expand it)
+    \end{itemize}
+    \item All of the above can be done conditionally (e.g. depending on \texttt{VT})
+\end{itemize}
+
+\begin{codebox}
+SDValue LEGTargetLowering::LowerConstant(SDValue Op,
+                                         SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  ConstantSDNode *Val = cast<ConstantSDNode>(Op.getNode());
+  SDValue TargetVal = DAG.getTargetConstant(Val->getZExtVaue(),
+                                            MVT::i32);
+  return DAG.getNode(LEGISD::MOVi32, VT, TargetVal);
+}
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Creating SelectionDAG nodes}
+
+\begin{itemize}
+    \item Simply call \texttt{DAG.getNode()} with these arguments:
+    \begin{itemize}
+        \item Node opcode (e.g. \texttt{LEGISD::MOVi32}), type, operand(s)
+    \end{itemize}
+    \item Nodes are target-independent (\texttt{ISD}) or not (\texttt{LEGISD})
+    \item Use \texttt{DAG.getMachineNode()} in LEGISelDAGToDAG
+\end{itemize}
+
+\begin{codebox}
+SDValue LEGTargetLowering::LowerConstant(SDValue Op,
+                                         SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  ConstantSDNode *Val = cast<ConstantSDNode>(Op.getNode());
+  SDValue TargetVal = DAG.getTargetConstant(Val->getZExtVaue(),
+                                            MVT::i32);
+  return DAG.getNode(LEGISD::MOVi32, VT, TargetVal);
+}
+\end{codebox}
+\codecaption{LEGISelLowering.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
+
+\begin{minipage}[t]{0.58\linewidth}
+    \begin{itemize}
+        \item Example: 32-bit immediate load
+        \begin{itemize}
+            \item MOVLO: loads 16-bit 'low' part
+            \item MOVHI: loads 16-bit 'high' part
+        \end{itemize}
+        
+        \item The two instructions must be ordered
+        \begin{itemize}
+            \item \texttt{MOVLO} clears the 'high' part
+            \item \texttt{MOVHI, MOVLO} gives the wrong result
+            \item Make \texttt{MOVHI} read the output of \texttt{MOVLO}
+        \end{itemize}
+        \item Example: \texttt{0x00010002}
+    \end{itemize}
+\end{minipage}
+\begin{minipage}[t]{0.41\linewidth}
+    \begin{figure}
+        \vspace{-3.5ex}
+        \includegraphics[width = 1.00\textwidth]{examples/ex5/ex5-post-isel.pdf}
+    \end{figure}
+\end{minipage}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item To define MOVHI, we need an extra operand ('\texttt{fakesrc}')
+    \begin{itemize}
+        \item Source and destination registers must be the same
+        \item Use '\texttt{Constraints}' in Tablegen
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}[commandchars=\\¬|]
+def MOVHIi16 : InstLEG<(outs GRRegs:$dst),
+                      (ins \codeempha¬GRRegs:$fakesrc|, i32imm:$src),
+                      "movt $dst, $src",
+                      [/* No pattern */]> {
+  let Constraints = "$fakesrc = $dst";
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Different ways to emit multiple instructions from one DAG node
+    \begin{itemize}
+        \item Using custom C++ instruction selection code
+            \begin{itemize}
+                \item Not covered here
+            \end{itemize}
+        \item Using a pseudo-instruction as a placeholder
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item Using a pseudo instruction
+    \begin{itemize}
+        \item Behaves like a placeholder for 'real' machine instruction(s)
+        \item Lowered by a target hook into these instruction instructions
+        \item Can be selected from the custom DAG node we previously defined
+    \end{itemize}
+\end{itemize}
+
+\begin{codebox}
+def MOVi32 : InstLEG<(outs GRRegs:$dst), (ins i32imm:$src), "",
+                     [(set i32:$dst, (movei32 i32imm:$src))]> {
+  let isPseudo = 1;
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.td}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}[fragile]{Lowering to multiple instructions}
+
+\begin{itemize}
+    \item The pseudo is lowered by a target hook
+\end{itemize}
+
+
+\begin{codebox}
+bool LEGInstrInfo::expandPostRAPseudo(MachineInstr *MI) {
+  if (MI->getOpcode() != LEG::MOVi32)
+    return false;
+    
+  DebugLoc DL = MI->getDebugLoc();
+  MachineBasicBlock &MBB = *MI->getParent();
+  unsigned Dst = MI->getOperand(0).getReg();
+  unsigned Imm = MI->getOperand(1).getImm();
+  unsigned Lo16 = Imm & 0xffff;
+  unsigned Hi16 = (Imm >> 16) & 0xffff;
+
+  BuildMI(MBB, MI, DL, get(LEG::MOVLOi16), Dst).addImm(Lo16);
+  BuildMI(MBB, MI, DL, get(LEG::MOVHIi16), Dst).addReg(Dst).addImm(Hi16);
+   
+  MBB.erase(MI);
+  
+  return true;
+}
+\end{codebox}
+\codecaption{LEGInstrInfo.cpp}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Lowering to multiple instructions}
+
+Example IR:
+\examplebox[firstline=6,lastline=9]{ex5/ex5.ll}
+
+Resulting assembly:
+\examplebox[firstline=7,lastline=11,gobble=1]{ex5/ex5.s}
+
+\end{frame}

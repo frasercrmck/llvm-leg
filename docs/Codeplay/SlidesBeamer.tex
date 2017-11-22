@@ -1,0 +1,231 @@
+% This presentation is based on a Beamer theme from Seth Brown, distributed
+% under the following license:
+%
+% ----------------------------------------------------------------------------
+% This program can be redistributed and/or modified under the terms
+% of the GNU Public License, version 3.
+%
+% Seth Brown, Ph.D.
+% sethbrown@drbunsen.org
+
+\documentclass[t]{beamer}
+
+\usepackage{hyperref} % urls
+\usepackage{graphicx} % graphics
+\usepackage[utf8x]{inputenc}
+\usepackage{fancyvrb}
+\usepackage{tcolorbox}
+
+% suppress navigation bar
+\beamertemplatenavigationsymbolsempty
+
+\mode<presentation>
+{
+  \usetheme{codeplay}
+  \setbeamercovered{transparent}
+  \setbeamertemplate{itemize item}[circle]
+  \setbeamertemplate{itemize subitem}{\tiny\raise1.5pt\hbox{\donotcoloroutermaths$\blacktriangleright$}}
+  \setbeamertemplate{section in toc shaded}[default][100]
+  \setbeamertemplate{subsection in toc shaded}[default][100]
+
+\setbeamertemplate{subsection in toc}{%
+\leavevmode\leftskip=4.00ex%
+  \llap{\raisebox{0.15ex}{\textcolor{structure}{\small$\bullet$}}\kern1ex}%
+  \inserttocsubsection\par%
+}
+}
+
+% set fonts
+\usepackage{fontspec}
+\setsansfont{Calibri}
+\setmonofont{Consolas}
+\setbeamerfont{frametitle}{size=\LARGE,series=\bfseries}
+
+% color definitions
+\usepackage{color}
+\definecolor{uiwhite}{RGB}{255, 255, 255}
+\definecolor{uidarkgray}{RGB}{24,24,25}
+\definecolor{uigray}{RGB}{51,51,51}
+\definecolor{uilightgray}{RGB}{123,123,123}
+\definecolor{uicyan}{RGB}{0,255,255}
+\definecolor{uipink}{RGB}{255,153,255}
+\definecolor{uipalegreen}{RGB}{153,255,153}
+\definecolor{uiorange}{RGB}{237,175,28}
+\hypersetup{colorlinks,urlcolor=uicyan,linkcolor=uiwhite}
+
+% title slide definition
+\title{Building an LLVM Backend}
+\subtitle{LLVM 2014 tutorial}
+\author{Fraser Cormack \\ Pierre-André Saulais}
+\institute{Codeplay Software \\ @codeplaysoft}
+
+\date{\today}
+
+% Code box formatting
+\fvset{fontsize=\scriptsize,tabsize=4}
+\tcbset{colback=uigray,colframe=uilightgray,colupper=uiwhite,
+        left=1pt,right=1pt,top=1pt,bottom=1pt,arc=0pt,
+        toprule=1pt,bottomrule=1pt,leftrule=1pt,rightrule=1pt}
+
+\newenvironment{codebox}
+ {\VerbatimEnvironment
+  \begin{tcolorbox}%
+  \begin{Verbatim}}
+ {\end{Verbatim}\end{tcolorbox}}
+
+% Code caption that comes after the code box.
+\newcommand{\codecaption}[2][-4.4ex]{%
+  \vspace{#1}
+  \hfill\mbox{\footnotesize{\textcolor{uicyan}{#2}}\hspace{0.5em}}
+  \vspace*{2ex}}
+
+\newcommand{\sourcebox}[3][firstline=1]{%
+  \begin{tcolorbox}\VerbatimInput[#1]{#2}\end{tcolorbox}
+  \codecaption{#3}}
+
+\newcommand{\examplebox}[2][firstline=1]{\sourcebox[#1]{examples/#2}{#2}}
+
+\newcommand{\codeempha}[1]{\textcolor{uipink}{#1}}
+\newcommand{\codeemphb}[1]{\textcolor{uicyan}{#1}}
+\newcommand{\codeemphc}[1]{\textcolor{uipalegreen}{#1}}
+\newcommand{\codeemphd}[1]{\textcolor{uiorange}{#1}}
+
+% FIXME: vfill doesn't work here!
+\newcommand{\pipelinemap}[2]{\vspace{#2} #1}
+
+% Create a slide for a part.
+\newcommand{\talkpart}[2]{%
+\section{Part #1: #2}
+
+\begin{frame}[c]{Part #1}
+
+\vspace{1cm}
+\centerline{\LARGE{#2}}
+
+\end{frame}}
+
+% Create a slide for a part section.
+\newcommand{\talksection}[1]{%
+\subsection{#1}
+\begin{frame}{\insertsectionhead}
+\vspace{2ex}
+\begin{NoHyper}
+\tableofcontents[sectionstyle=hide,subsectionstyle=show/shaded/hide]
+\end{NoHyper}
+\end{frame}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\setbeamertemplate{background}
+{\includegraphics[width=\paperwidth,height=\paperheight]{dark_background_title.png}}
+\setbeamertemplate{footline}[default]
+
+\begin{frame}
+  \vspace{4ex}
+  \titlepage
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Set the background for the rest of the slides.
+%\setbeamertemplate{background}
+% {\includegraphics[width=\paperwidth,height=\paperheight]{dark_background.png}}
+\setbeamertemplate{background}{}
+\setbeamertemplate{footline}[codeplaytheme]
+
+\section*{Introduction}
+
+\begin{frame}{Introduction}
+
+\begin{itemize}
+    \item LLVM backend crash course, for beginners
+    \begin{itemize}
+        \item How-tos and tips
+        \item Solution to common problems
+    \end{itemize}  
+    \item Simple target created for this tutorial
+    \begin{itemize}
+        \item Can be used to see how LLVM works
+        \item Can be used as a skeleton to bootstrap new target
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{What you need to start}
+
+\begin{itemize}
+    \item Know a little bit about LLVM IR: \\ \url{llvm.org/docs/LangRef.html}
+    \item xdot.py to visualize graphs when debugging: \\ \url{github.com/jrfonseca/xdot.py}
+    \item Check out and build our LLVM repo from GitHub: \\ \url{github.com/codeplaysoftware/llvm-leg}
+    \item Slides from this informative and well-presented talk!
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Overview}
+\tableofcontents
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\talkpart{1}{Background}
+\include{SlidesBeamer-part1}
+
+\talkpart{2}{Creating your own target}
+\include{SlidesBeamer-part2}
+
+\talkpart{3}{How-tos for specific tasks}
+\include{SlidesBeamer-part3}
+
+\talkpart{4}{Troubleshooting and resources}
+\include{SlidesBeamer-part4}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Conclusion}
+
+\begin{frame}{Summary}
+
+\begin{itemize}
+    \item Should be enough to create a very simple target!
+    \item Many things were not covered in this talk:
+    \begin{itemize}
+        \item Using different types and legalization
+        \item Scheduling
+        \item Intrinsics
+        \item ...
+    \end{itemize}
+    \item Introduced resources to go further
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}{Thank you!}
+
+\begin{itemize}
+    \item Q\&A
+    \item Happy to answer questions by email too:
+    \begin{itemize}
+        \item \url{fraser@codeplay.com}
+        \item \url{pierre-andre@codeplay.com}
+    \end{itemize}
+    \item Check out our code from GitHub:
+    \begin{itemize}
+        \item \url{github.com/codeplaysoftware/llvm-leg}
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
